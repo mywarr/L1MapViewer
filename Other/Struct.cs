@@ -140,6 +140,7 @@ namespace L1MapViewer.Other {
             public void addZoneArea(string szName, int left, int top, int right, int bottom) {
                 L1ZoneArea desc = new L1ZoneArea();
                 desc.szName = szName;
+                desc.szName = szName;
                 desc.left = left;
                 desc.top = top;
                 desc.right = right;
