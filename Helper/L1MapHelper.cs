@@ -17,7 +17,7 @@ using L1FlyMapViewer;
 using static L1MapViewer.Other.Struct;
 
 namespace L1MapViewer.Helper {
-    class L1MapHelper {
+    public class L1MapHelper {
         public static readonly int BMP_W = 64 * 24 * 2;        //地圖區塊尺寸
         public static readonly int BMP_H = 64 * 12 * 2;        //地圖區塊尺寸
         public static readonly int BMP_R_W = 64 * 48 * 2;      //R版的地圖區塊尺寸

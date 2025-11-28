@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace L1MapViewer.Other {
-    class Struct {
+    public class Struct {
         public enum IdxType {
             OLD,
             EXT,
