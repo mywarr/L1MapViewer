@@ -68,6 +68,10 @@ namespace L1FlyMapViewer
         private int highlightedCellX = -1;
         private int highlightedCellY = -1;
 
+        // 當前選中格子的遊戲座標（用於複製移動指令）
+        private int selectedGameX = -1;
+        private int selectedGameY = -1;
+
         // Layer4 群組篩選（勾選的 GroupId 才會渲染）
         private HashSet<int> selectedLayer4Groups = new HashSet<int>();
         private bool isFilteringLayer4Groups = false;
@@ -694,6 +698,8 @@ namespace L1FlyMapViewer
         private void CancelLayer4CopyPaste()
         {
             isLayer4CopyMode = false;
+            // 恢復顯示全部群組
+            UpdateGroupThumbnailsList();
             selectedRegion = new Rectangle();
             copyRegionBounds = new Rectangle();
             currentSelectedCells.Clear();
@@ -2620,6 +2626,9 @@ namespace L1FlyMapViewer
                         RenderS32Map();
                         UpdateTileList();
 
+                        // 更新群組縮圖列表（載入時執行一次）
+                        UpdateGroupThumbnailsList();
+
                         // 捲動到地圖中間
                         ScrollToMapCenter();
                     }
@@ -4034,8 +4043,17 @@ namespace L1FlyMapViewer
             }
         }
 
+        // 快取聚合的 Tile 資料（避免每次搜尋都重新計算）
+        private Dictionary<int, TileInfo> cachedAggregatedTiles = new Dictionary<int, TileInfo>();
+
         // 更新 Tile 清單顯示 - 統計所有 S32 檔案的 tiles
         private void UpdateTileList()
+        {
+            UpdateTileList(null);  // 不帶搜尋條件
+        }
+
+        // 更新 Tile 清單顯示（支援搜尋過濾）
+        private void UpdateTileList(string searchText)
         {
             lvTiles.Items.Clear();
             lvTiles.View = View.LargeIcon;
@@ -4052,37 +4070,83 @@ namespace L1FlyMapViewer
                 return;
             }
 
-            // 聚合所有 S32 檔案的 UsedTiles
-            Dictionary<int, TileInfo> aggregatedTiles = new Dictionary<int, TileInfo>();
-
-            foreach (var s32Data in allS32DataDict.Values)
+            // 如果快取為空，重新聚合所有 S32 檔案的 UsedTiles
+            if (cachedAggregatedTiles.Count == 0 || string.IsNullOrEmpty(searchText))
             {
-                foreach (var tileKvp in s32Data.UsedTiles)
-                {
-                    int tileId = tileKvp.Key;
-                    var tileInfo = tileKvp.Value;
+                cachedAggregatedTiles.Clear();
 
-                    if (aggregatedTiles.ContainsKey(tileId))
+                foreach (var s32Data in allS32DataDict.Values)
+                {
+                    foreach (var tileKvp in s32Data.UsedTiles)
                     {
-                        // 累加使用次數
-                        aggregatedTiles[tileId].UsageCount += tileInfo.UsageCount;
-                    }
-                    else
-                    {
-                        // 新增 tile
-                        aggregatedTiles[tileId] = new TileInfo
+                        int tileId = tileKvp.Key;
+                        var tileInfo = tileKvp.Value;
+
+                        if (cachedAggregatedTiles.ContainsKey(tileId))
                         {
-                            TileId = tileInfo.TileId,
-                            IndexId = tileInfo.IndexId,
-                            UsageCount = tileInfo.UsageCount,
-                            Thumbnail = null
-                        };
+                            // 累加使用次數
+                            cachedAggregatedTiles[tileId].UsageCount += tileInfo.UsageCount;
+                        }
+                        else
+                        {
+                            // 新增 tile
+                            cachedAggregatedTiles[tileId] = new TileInfo
+                            {
+                                TileId = tileInfo.TileId,
+                                IndexId = tileInfo.IndexId,
+                                UsageCount = tileInfo.UsageCount,
+                                Thumbnail = null
+                            };
+                        }
                     }
                 }
             }
 
+            // 過濾 tiles
+            var filteredTiles = cachedAggregatedTiles.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(searchText))
+            {
+                searchText = searchText.Trim();
+                // 支援多種搜尋方式：
+                // 1. 精確 ID 搜尋（輸入數字）
+                // 2. 範圍搜尋（如 "100-200"）
+                // 3. 多個 ID 搜尋（如 "100,200,300"）
+                if (searchText.Contains("-"))
+                {
+                    // 範圍搜尋
+                    var parts = searchText.Split('-');
+                    if (parts.Length == 2 &&
+                        int.TryParse(parts[0].Trim(), out int minId) &&
+                        int.TryParse(parts[1].Trim(), out int maxId))
+                    {
+                        filteredTiles = filteredTiles.Where(t => t.Key >= minId && t.Key <= maxId);
+                    }
+                }
+                else if (searchText.Contains(","))
+                {
+                    // 多個 ID 搜尋
+                    var ids = searchText.Split(',')
+                        .Select(s => s.Trim())
+                        .Where(s => int.TryParse(s, out _))
+                        .Select(s => int.Parse(s))
+                        .ToHashSet();
+                    filteredTiles = filteredTiles.Where(t => ids.Contains(t.Key));
+                }
+                else if (int.TryParse(searchText, out int exactId))
+                {
+                    // 精確 ID 或前綴搜尋
+                    filteredTiles = filteredTiles.Where(t => t.Key.ToString().StartsWith(searchText));
+                }
+                else
+                {
+                    // 文字搜尋（ID 包含此文字）
+                    filteredTiles = filteredTiles.Where(t => t.Key.ToString().Contains(searchText));
+                }
+            }
+
             int index = 0;
-            foreach (var tileKvp in aggregatedTiles.OrderBy(t => t.Key))
+            int totalCount = cachedAggregatedTiles.Count;
+            foreach (var tileKvp in filteredTiles.OrderBy(t => t.Key))
             {
                 var tile = tileKvp.Value;
 
@@ -4107,7 +4171,16 @@ namespace L1FlyMapViewer
                 }
             }
 
-            this.toolStripStatusLabel1.Text = $"顯示 {lvTiles.Items.Count} 個 Tile (來自 {allS32DataDict.Count} 個 S32 檔案)";
+            string statusText = string.IsNullOrWhiteSpace(searchText)
+                ? $"顯示 {lvTiles.Items.Count} 個 Tile (來自 {allS32DataDict.Count} 個 S32 檔案)"
+                : $"搜尋結果: {lvTiles.Items.Count}/{totalCount} 個 Tile";
+            lblTileList.Text = statusText;
+        }
+
+        // Tile 搜尋框文字變更事件
+        private void txtTileSearch_TextChanged(object sender, EventArgs e)
+        {
+            UpdateTileList(txtTileSearch.Text);
         }
 
         // 載入 Tile 縮圖
@@ -4356,9 +4429,15 @@ namespace L1FlyMapViewer
             int layer3X = cellX / 2;
             if (layer3X >= 64) layer3X = 63;
 
-            // 計算遊戲座標
-            int gameX = s32Data.SegInfo.nLinBeginX + cellX;
+            // 計算遊戲座標（基於 Layer3 的 64x64 座標系統）
+            int gameX = s32Data.SegInfo.nLinBeginX + layer3X;
             int gameY = s32Data.SegInfo.nLinBeginY + cellY;
+
+            // 更新選中的遊戲座標（用於複製移動指令）
+            selectedGameX = gameX;
+            selectedGameY = gameY;
+            toolStripCopyMoveCmd.Enabled = true;
+            toolStripCopyMoveCmd.Text = $".移動 {gameX} {gameY} {currentMapId}";
 
             // 取得 S32 檔名
             string s32FileName = Path.GetFileName(s32Data.FilePath);
@@ -4616,6 +4695,10 @@ namespace L1FlyMapViewer
                     {
                         this.toolStripStatusLabel1.Text = $"已選取區域 (原點: {globalX}, {globalY})，選中 {currentSelectedCells.Count} 格，按 Ctrl+C 複製";
                     }
+
+                    // 更新群組縮圖列表，顯示選取區域內的群組
+                    UpdateGroupThumbnailsList(currentSelectedCells);
+
                     // 保留選取框顯示
                     s32PictureBox.Invalidate();
                     return;
@@ -4935,9 +5018,33 @@ namespace L1FlyMapViewer
                 }
 
                 // Layer4 物件統計
+                // 注意：Layer4 的 obj.X 是 Layer1 座標 (0-127)，obj.Y 是 Layer3 座標 (0-63)
+                // cell.LocalX 是 Layer1 座標 (0-127)，cell.LocalY 是 Layer3 座標 (0-63)
                 if (deleteLayer4)
                 {
-                    var objectsAtCell = cell.S32Data.Layer4.Where(o => (o.X / 2) == layer3X && o.Y == cell.LocalY).ToList();
+                    // 比對方式1：obj.X/2 == cell.LocalX/2 (都轉成 Layer3 座標) 且 obj.Y == cell.LocalY
+                    // 比對方式2：大型物件可能座標在選取範圍外但視覺上覆蓋選取區域
+                    //            物件從座標點往上方繪製，所以要檢查座標點在選取格子右下方的物件
+                    int searchRadius = 5;  // 搜尋半徑（格子數）
+
+                    var objectsAtCell = cell.S32Data.Layer4.Where(o =>
+                    {
+                        int objLayer3X = o.X / 2;
+                        int objLayer3Y = o.Y;
+
+                        // 精確匹配
+                        if (objLayer3X == layer3X && objLayer3Y == cell.LocalY)
+                            return true;
+
+                        // 擴展匹配：物件座標在選取格子的左上方（因為物件從座標點往上繪製）
+                        // 如果物件座標在 (layer3X - searchRadius, layer3Y - searchRadius) 到 (layer3X, layer3Y) 範圍內
+                        if (objLayer3X >= layer3X - searchRadius && objLayer3X <= layer3X &&
+                            objLayer3Y >= cell.LocalY - searchRadius && objLayer3Y <= cell.LocalY)
+                            return true;
+
+                        return false;
+                    }).ToList();
+
                     if (isFilteringLayer4Groups && selectedLayer4Groups.Count > 0)
                     {
                         objectsAtCell = objectsAtCell.Where(o => selectedLayer4Groups.Contains(o.GroupId)).ToList();
@@ -4948,8 +5055,15 @@ namespace L1FlyMapViewer
                         {
                             objectsToDeleteByS32[cell.S32Data] = new List<ObjectTile>();
                         }
-                        objectsToDeleteByS32[cell.S32Data].AddRange(objectsAtCell);
-                        layer4Count += objectsAtCell.Count;
+                        // 避免重複加入相同物件
+                        foreach (var obj in objectsAtCell)
+                        {
+                            if (!objectsToDeleteByS32[cell.S32Data].Contains(obj))
+                            {
+                                objectsToDeleteByS32[cell.S32Data].Add(obj);
+                                layer4Count++;
+                            }
+                        }
                     }
                 }
 
@@ -5769,7 +5883,7 @@ namespace L1FlyMapViewer
             return panel;
         }
 
-        // Tile 雙擊事件 - 顯示放大視窗
+        // Tile 雙擊事件 - 顯示預覽+詳細資料
         private void lvTiles_DoubleClick(object sender, EventArgs e)
         {
             if (lvTiles.SelectedItems.Count == 0)
@@ -5780,30 +5894,757 @@ namespace L1FlyMapViewer
             if (tileInfo == null)
                 return;
 
-            // 創建放大的 Tile 圖片（192x192，是原來的4倍）
-            Bitmap enlargedTile = LoadTileEnlarged(tileInfo.TileId, tileInfo.IndexId, 192);
-            if (enlargedTile == null)
+            // 顯示詳細資料視窗（含預覽）
+            ShowTileInfoWithPreview(tileInfo);
+        }
+
+        // 顯示 Tile 預覽+詳細資料整合視窗
+        private void ShowTileInfoWithPreview(TileInfo tileInfo)
+        {
+            // 收集所有使用此 TileId 的位置
+            List<(int globalX, int globalY, string layer, int groupId, S32Data s32, int l4X, int l4Y)> locations =
+                new List<(int, int, string, int, S32Data, int, int)>();
+
+            foreach (var s32Data in allS32DataDict.Values)
+            {
+                int segStartX = s32Data.SegInfo.nLinBeginX;
+                int segStartY = s32Data.SegInfo.nLinBeginY;
+
+                // Layer1
+                for (int y = 0; y < 64; y++)
+                {
+                    for (int x = 0; x < 128; x++)
+                    {
+                        var cell = s32Data.Layer1[y, x];
+                        if (cell != null && cell.TileId == tileInfo.TileId)
+                        {
+                            int layer3X = x / 2;
+                            int globalX = segStartX + layer3X;
+                            int globalY = segStartY + y;
+                            locations.Add((globalX, globalY, "L1", 0, s32Data, -1, -1));
+                        }
+                    }
+                }
+
+                // Layer4
+                foreach (var obj in s32Data.Layer4)
+                {
+                    if (obj.TileId == tileInfo.TileId)
+                    {
+                        int layer3X = obj.X / 2;
+                        int globalX = segStartX + layer3X;
+                        int globalY = segStartY + obj.Y;
+                        locations.Add((globalX, globalY, "L4", obj.GroupId, s32Data, obj.X, obj.Y));
+                    }
+                }
+            }
+
+            // 建立視窗
+            Form infoForm = new Form
+            {
+                Text = $"Tile {tileInfo.TileId} 詳細資訊",
+                Size = new Size(680, 480),
+                StartPosition = FormStartPosition.CenterParent,
+                FormBorderStyle = FormBorderStyle.Sizable,
+                MinimizeBox = false
+            };
+
+            // 左側預覽區
+            Panel previewPanel = new Panel
+            {
+                Location = new Point(10, 10),
+                Size = new Size(150, 180),
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            Bitmap enlargedTile = LoadTileEnlarged(tileInfo.TileId, tileInfo.IndexId, 144);
+            PictureBox pbPreview = new PictureBox
+            {
+                Image = enlargedTile,
+                SizeMode = PictureBoxSizeMode.Zoom,
+                Dock = DockStyle.Fill,
+                BackColor = Color.Black
+            };
+            previewPanel.Controls.Add(pbPreview);
+
+            // 基本資訊
+            Label lblBasicInfo = new Label
+            {
+                Text = $"TileId: {tileInfo.TileId}\nIndexId: {tileInfo.IndexId}\n使用次數: {tileInfo.UsageCount}\n總共 {locations.Count} 個位置",
+                Location = new Point(10, 195),
+                Size = new Size(150, 80),
+                Font = new Font(Font.FontFamily, 9, FontStyle.Regular)
+            };
+
+            // 右側區域 - 跳轉座標
+            Label lblJump = new Label
+            {
+                Text = "跳轉座標:",
+                Location = new Point(170, 10),
+                Size = new Size(70, 23),
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+
+            TextBox txtJumpCoord = new TextBox
+            {
+                Location = new Point(240, 10),
+                Size = new Size(120, 23),
+                PlaceholderText = "輸入 X,Y"
+            };
+
+            Button btnJump = new Button
+            {
+                Text = "跳轉",
+                Location = new Point(365, 9),
+                Size = new Size(50, 25)
+            };
+
+            // 座標列表
+            ListView lvLocations = new ListView
+            {
+                Location = new Point(170, 40),
+                Size = new Size(480, 340),
+                View = View.Details,
+                FullRowSelect = true,
+                GridLines = true,
+                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+            };
+            lvLocations.Columns.Add("X", 55);
+            lvLocations.Columns.Add("Y", 55);
+            lvLocations.Columns.Add("圖層", 40);
+            lvLocations.Columns.Add("GroupId", 55);
+            lvLocations.Columns.Add("L4座標", 70);
+            lvLocations.Columns.Add("S32檔案", 180);
+
+            // 右鍵選單 - 複製整行
+            ContextMenuStrip lvContextMenu = new ContextMenuStrip();
+            ToolStripMenuItem copyRowItem = new ToolStripMenuItem("複製整行");
+            copyRowItem.Click += (s, ev) =>
+            {
+                if (lvLocations.SelectedItems.Count > 0)
+                {
+                    var item = lvLocations.SelectedItems[0];
+                    string rowText = $"{item.SubItems[0].Text},{item.SubItems[1].Text},{item.SubItems[2].Text},{item.SubItems[3].Text},{item.SubItems[4].Text},{item.SubItems[5].Text}";
+                    Clipboard.SetText(rowText);
+                    this.toolStripStatusLabel1.Text = "已複製整行";
+                }
+            };
+            lvContextMenu.Items.Add(copyRowItem);
+            lvLocations.ContextMenuStrip = lvContextMenu;
+
+            // 填充列表
+            foreach (var loc in locations.OrderBy(l => l.globalX).ThenBy(l => l.globalY))
+            {
+                string s32FileName = Path.GetFileName(loc.s32.FilePath);
+                var item = new ListViewItem(loc.globalX.ToString());
+                item.SubItems.Add(loc.globalY.ToString());
+                item.SubItems.Add(loc.layer);
+                item.SubItems.Add(loc.groupId > 0 ? loc.groupId.ToString() : "-");
+                item.SubItems.Add(loc.l4X >= 0 ? $"({loc.l4X},{loc.l4Y})" : "-");
+                item.SubItems.Add(s32FileName);
+                item.Tag = loc;
+                lvLocations.Items.Add(item);
+            }
+
+            // 底部按鈕
+            Button btnCopyAll = new Button
+            {
+                Text = "複製全部座標",
+                Location = new Point(170, 390),
+                Size = new Size(100, 28),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
+            };
+
+            Button btnCopySelected = new Button
+            {
+                Text = "複製選中",
+                Location = new Point(275, 390),
+                Size = new Size(80, 28),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
+            };
+
+            Button btnClose = new Button
+            {
+                Text = "關閉",
+                Location = new Point(570, 390),
+                Size = new Size(80, 28),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Right
+            };
+
+            // 事件處理
+            btnJump.Click += (s, ev) =>
+            {
+                string input = txtJumpCoord.Text.Trim();
+                if (TryParseCoordinate(input, out int x, out int y))
+                {
+                    JumpToGameCoordinate(x, y);
+                    this.toolStripStatusLabel1.Text = $"已跳轉到座標 ({x}, {y})";
+                }
+                else
+                {
+                    MessageBox.Show("請輸入正確的座標格式，例如: 32800,32700", "格式錯誤", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            };
+
+            txtJumpCoord.KeyDown += (s, ev) =>
+            {
+                if (ev.KeyCode == Keys.Enter)
+                {
+                    btnJump.PerformClick();
+                    ev.Handled = true;
+                    ev.SuppressKeyPress = true;
+                }
+            };
+
+            // 單擊列表項目跳轉並高亮
+            lvLocations.SelectedIndexChanged += (s, ev) =>
+            {
+                if (lvLocations.SelectedItems.Count > 0)
+                {
+                    var loc = ((int globalX, int globalY, string layer, int groupId, S32Data s32, int l4X, int l4Y))lvLocations.SelectedItems[0].Tag;
+                    JumpToGameCoordinate(loc.globalX, loc.globalY);
+                    string l4Info = loc.l4X >= 0 ? $" L4座標:({loc.l4X},{loc.l4Y})" : "";
+                    this.toolStripStatusLabel1.Text = $"已跳轉到座標 ({loc.globalX}, {loc.globalY}) - {loc.layer}" +
+                        (loc.groupId > 0 ? $" GroupId:{loc.groupId}" : "") + l4Info;
+                }
+            };
+
+            btnCopyAll.Click += (s, ev) =>
+            {
+                var coords = locations.Select(l => $"{l.globalX},{l.globalY}");
+                string text = string.Join("\n", coords);
+                Clipboard.SetText(text);
+                MessageBox.Show($"已複製 {locations.Count} 個座標到剪貼簿", "複製成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            };
+
+            btnCopySelected.Click += (s, ev) =>
+            {
+                if (lvLocations.SelectedItems.Count == 0)
+                {
+                    MessageBox.Show("請先選取要複製的座標", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+                var selectedCoords = new List<string>();
+                foreach (ListViewItem item in lvLocations.SelectedItems)
+                {
+                    selectedCoords.Add($"{item.SubItems[0].Text},{item.SubItems[1].Text}");
+                }
+                Clipboard.SetText(string.Join("\n", selectedCoords));
+                MessageBox.Show($"已複製 {selectedCoords.Count} 個座標到剪貼簿", "複製成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            };
+
+            btnClose.Click += (s, ev) => infoForm.Close();
+
+            infoForm.FormClosed += (s, ev) =>
+            {
+                enlargedTile?.Dispose();
+            };
+
+            // 加入控制項
+            infoForm.Controls.Add(previewPanel);
+            infoForm.Controls.Add(lblBasicInfo);
+            infoForm.Controls.Add(lblJump);
+            infoForm.Controls.Add(txtJumpCoord);
+            infoForm.Controls.Add(btnJump);
+            infoForm.Controls.Add(lvLocations);
+            infoForm.Controls.Add(btnCopyAll);
+            infoForm.Controls.Add(btnCopySelected);
+            infoForm.Controls.Add(btnClose);
+
+            // 使用 Show 而非 ShowDialog，讓主視窗可以即時更新
+            infoForm.Show(this);
+        }
+
+        // Tile 右鍵選單
+        private void lvTiles_MouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Right)
                 return;
 
-            // 創建並顯示放大視窗
-            Form zoomForm = new Form();
-            zoomForm.Text = $"Tile ID: {tileInfo.TileId} (Index: {tileInfo.IndexId}) - 使用次數: {tileInfo.UsageCount}";
-            zoomForm.Size = new Size(250, 280);
-            zoomForm.FormBorderStyle = FormBorderStyle.FixedDialog;
-            zoomForm.MaximizeBox = false;
-            zoomForm.MinimizeBox = false;
-            zoomForm.StartPosition = FormStartPosition.CenterParent;
+            if (lvTiles.SelectedItems.Count == 0)
+                return;
 
-            PictureBox pb = new PictureBox();
-            pb.Image = enlargedTile;
-            pb.SizeMode = PictureBoxSizeMode.Zoom;
-            pb.Dock = DockStyle.Fill;
-            pb.BackColor = Color.Black;
+            var selectedItem = lvTiles.SelectedItems[0];
+            var tileInfo = selectedItem.Tag as TileInfo;
+            if (tileInfo == null)
+                return;
 
-            zoomForm.Controls.Add(pb);
-            zoomForm.ShowDialog();
+            // 計算使用此 TileId 的 Layer4 物件數量
+            int layer4Count = 0;
+            foreach (var s32Data in allS32DataDict.Values)
+            {
+                layer4Count += s32Data.Layer4.Count(o => o.TileId == tileInfo.TileId);
+            }
 
-            enlargedTile.Dispose();
+            // 建立右鍵選單
+            ContextMenuStrip menu = new ContextMenuStrip();
+
+            // 刪除所有使用此 TileId 的 Layer4 物件
+            ToolStripMenuItem deleteLayer4Item = new ToolStripMenuItem($"刪除所有 Layer4 物件 ({layer4Count} 個)");
+            deleteLayer4Item.Enabled = layer4Count > 0;
+            deleteLayer4Item.Click += (s, ev) =>
+            {
+                DeleteAllLayer4ByTileId(tileInfo.TileId);
+            };
+
+            // 高亮顯示使用此 TileId 的物件
+            ToolStripMenuItem highlightItem = new ToolStripMenuItem("在地圖上高亮顯示");
+            highlightItem.Click += (s, ev) =>
+            {
+                HighlightTileOnMap(tileInfo.TileId);
+            };
+
+            // 查看 Tile 詳細資訊
+            ToolStripMenuItem infoItem = new ToolStripMenuItem("查看詳細資訊");
+            infoItem.Click += (s, ev) =>
+            {
+                ShowTileInfoWithPreview(tileInfo);
+            };
+
+            menu.Items.Add(infoItem);
+            menu.Items.Add(highlightItem);
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(deleteLayer4Item);
+
+            menu.Show(lvTiles, e.Location);
+        }
+
+        // 刪除所有使用指定 TileId 的 Layer4 物件
+        private void DeleteAllLayer4ByTileId(int tileId)
+        {
+            // 計算要刪除的數量
+            int totalCount = 0;
+            foreach (var s32Data in allS32DataDict.Values)
+            {
+                totalCount += s32Data.Layer4.Count(o => o.TileId == tileId);
+            }
+
+            if (totalCount == 0)
+            {
+                MessageBox.Show($"沒有找到使用 TileId {tileId} 的 Layer4 物件。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 確認刪除
+            DialogResult result = MessageBox.Show(
+                $"確定要刪除所有使用 TileId {tileId} 的 Layer4 物件嗎？\n" +
+                $"這將移除 {totalCount} 個物件。",
+                "確認刪除",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+
+            if (result != DialogResult.Yes)
+                return;
+
+            // 執行刪除
+            int deletedCount = 0;
+            foreach (var s32Data in allS32DataDict.Values)
+            {
+                int beforeCount = s32Data.Layer4.Count;
+                s32Data.Layer4.RemoveAll(o => o.TileId == tileId);
+                int removed = beforeCount - s32Data.Layer4.Count;
+                if (removed > 0)
+                {
+                    deletedCount += removed;
+                    s32Data.IsModified = true;
+                }
+            }
+
+            // 重新渲染
+            RenderS32Map();
+
+            // 更新 Tile 清單和群組縮圖
+            cachedAggregatedTiles.Clear();
+            UpdateTileList(txtTileSearch.Text);
+            UpdateGroupThumbnailsList();
+
+            this.toolStripStatusLabel1.Text = $"已刪除 TileId {tileId} 的所有 Layer4 物件，共 {deletedCount} 個";
+        }
+
+        // 在地圖上高亮顯示使用指定 TileId 的物件
+        private void HighlightTileOnMap(int tileId)
+        {
+            // 找到第一個使用此 TileId 的物件並跳轉
+            foreach (var s32Data in allS32DataDict.Values)
+            {
+                var obj = s32Data.Layer4.FirstOrDefault(o => o.TileId == tileId);
+                if (obj != null)
+                {
+                    // 計算全域座標並跳轉
+                    int globalX = s32Data.SegInfo.nLinBeginX * 2 + obj.X;
+                    int globalY = s32Data.SegInfo.nLinBeginY + obj.Y;
+
+                    // 跳轉到該位置
+                    JumpToGameCoordinate(globalX, globalY);
+
+                    this.toolStripStatusLabel1.Text = $"跳轉到 TileId {tileId} 的物件位置 ({globalX}, {globalY})";
+                    return;
+                }
+            }
+
+            MessageBox.Show($"沒有找到使用 TileId {tileId} 的 Layer4 物件。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // 顯示 Tile 詳細資訊（含座標列表和跳轉功能）
+        private void ShowTileInfo(TileInfo tileInfo)
+        {
+            // 收集所有使用此 TileId 的位置 (增加 l4X, l4Y 儲存 Layer4 原始座標)
+            List<(int globalX, int globalY, string layer, int groupId, S32Data s32, int l4X, int l4Y)> locations =
+                new List<(int, int, string, int, S32Data, int, int)>();
+
+            foreach (var s32Data in allS32DataDict.Values)
+            {
+                int segStartX = s32Data.SegInfo.nLinBeginX;
+                int segStartY = s32Data.SegInfo.nLinBeginY;
+
+                // Layer1 (64x128，但遊戲座標用 Layer3 的 64x64)
+                for (int y = 0; y < 64; y++)
+                {
+                    for (int x = 0; x < 128; x++)
+                    {
+                        var cell = s32Data.Layer1[y, x];
+                        if (cell != null && cell.TileId == tileInfo.TileId)
+                        {
+                            // Layer1 的 x 要除以 2 來對應 Layer3 座標
+                            int layer3X = x / 2;
+                            int globalX = segStartX + layer3X;
+                            int globalY = segStartY + y;
+                            locations.Add((globalX, globalY, "L1", 0, s32Data, -1, -1));
+                        }
+                    }
+                }
+
+                // Layer4 (obj.X 是 Layer1 座標 0-127，obj.Y 是 Layer3 座標 0-63)
+                foreach (var obj in s32Data.Layer4)
+                {
+                    if (obj.TileId == tileInfo.TileId)
+                    {
+                        // Layer4 的 X 也要除以 2 來對應 Layer3 座標
+                        int layer3X = obj.X / 2;
+                        int globalX = segStartX + layer3X;
+                        int globalY = segStartY + obj.Y;
+                        locations.Add((globalX, globalY, "L4", obj.GroupId, s32Data, obj.X, obj.Y));
+                    }
+                }
+            }
+
+            // 建立詳細資訊視窗
+            Form infoForm = new Form
+            {
+                Text = $"Tile {tileInfo.TileId} 詳細資訊",
+                Size = new Size(500, 450),
+                StartPosition = FormStartPosition.CenterParent,
+                FormBorderStyle = FormBorderStyle.Sizable,
+                MinimizeBox = false
+            };
+
+            // 基本資訊標籤
+            Label lblBasicInfo = new Label
+            {
+                Text = $"TileId: {tileInfo.TileId}  |  IndexId: {tileInfo.IndexId}  |  總共 {locations.Count} 個位置",
+                Location = new Point(10, 10),
+                Size = new Size(460, 20),
+                Font = new Font(Font.FontFamily, 9, FontStyle.Bold)
+            };
+
+            // 座標跳轉輸入框
+            Label lblJump = new Label
+            {
+                Text = "跳轉座標:",
+                Location = new Point(10, 38),
+                Size = new Size(70, 23),
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+
+            TextBox txtJumpCoord = new TextBox
+            {
+                Location = new Point(80, 38),
+                Size = new Size(150, 23),
+                PlaceholderText = "輸入 X,Y 座標"
+            };
+
+            Button btnJump = new Button
+            {
+                Text = "跳轉",
+                Location = new Point(235, 37),
+                Size = new Size(60, 25)
+            };
+
+            // 座標列表
+            ListView lvLocations = new ListView
+            {
+                Location = new Point(10, 70),
+                Size = new Size(460, 280),
+                View = View.Details,
+                FullRowSelect = true,
+                GridLines = true,
+                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+            };
+            lvLocations.Columns.Add("X", 55);
+            lvLocations.Columns.Add("Y", 55);
+            lvLocations.Columns.Add("圖層", 40);
+            lvLocations.Columns.Add("GroupId", 55);
+            lvLocations.Columns.Add("L4座標", 70);
+            lvLocations.Columns.Add("S32檔案", 130);
+
+            // 右鍵選單 - 複製整行
+            ContextMenuStrip lvContextMenu = new ContextMenuStrip();
+            ToolStripMenuItem copyRowItem = new ToolStripMenuItem("複製整行");
+            copyRowItem.Click += (s, ev) =>
+            {
+                if (lvLocations.SelectedItems.Count > 0)
+                {
+                    var item = lvLocations.SelectedItems[0];
+                    string rowText = $"{item.SubItems[0].Text},{item.SubItems[1].Text},{item.SubItems[2].Text},{item.SubItems[3].Text},{item.SubItems[4].Text},{item.SubItems[5].Text}";
+                    Clipboard.SetText(rowText);
+                    this.toolStripStatusLabel1.Text = "已複製整行";
+                }
+            };
+            lvContextMenu.Items.Add(copyRowItem);
+            lvLocations.ContextMenuStrip = lvContextMenu;
+
+            // 填充座標列表
+            foreach (var loc in locations.OrderBy(l => l.globalX).ThenBy(l => l.globalY))
+            {
+                string s32FileName = Path.GetFileName(loc.s32.FilePath);
+                var item = new ListViewItem(loc.globalX.ToString());
+                item.SubItems.Add(loc.globalY.ToString());
+                item.SubItems.Add(loc.layer);
+                item.SubItems.Add(loc.groupId > 0 ? loc.groupId.ToString() : "-");
+                item.SubItems.Add(loc.l4X >= 0 ? $"({loc.l4X},{loc.l4Y})" : "-");
+                item.SubItems.Add(s32FileName);
+                item.Tag = loc;
+                lvLocations.Items.Add(item);
+            }
+
+            // 複製按鈕
+            Button btnCopyAll = new Button
+            {
+                Text = "複製全部座標",
+                Location = new Point(10, 360),
+                Size = new Size(100, 28),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
+            };
+
+            Button btnCopySelected = new Button
+            {
+                Text = "複製選中",
+                Location = new Point(115, 360),
+                Size = new Size(80, 28),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
+            };
+
+            Button btnClose = new Button
+            {
+                Text = "關閉",
+                Location = new Point(390, 360),
+                Size = new Size(80, 28),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Right
+            };
+
+            // 事件處理
+            btnJump.Click += (s, ev) =>
+            {
+                string input = txtJumpCoord.Text.Trim();
+                if (TryParseCoordinate(input, out int x, out int y))
+                {
+                    JumpToGameCoordinate(x, y);
+                    this.toolStripStatusLabel1.Text = $"已跳轉到座標 ({x}, {y})";
+                }
+                else
+                {
+                    MessageBox.Show("請輸入正確的座標格式，例如: 32800,32700", "格式錯誤", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            };
+
+            txtJumpCoord.KeyDown += (s, ev) =>
+            {
+                if (ev.KeyCode == Keys.Enter)
+                {
+                    btnJump.PerformClick();
+                    ev.Handled = true;
+                    ev.SuppressKeyPress = true;
+                }
+            };
+
+            // 單擊列表項目跳轉並高亮
+            lvLocations.SelectedIndexChanged += (s, ev) =>
+            {
+                if (lvLocations.SelectedItems.Count > 0)
+                {
+                    var loc = ((int globalX, int globalY, string layer, int groupId, S32Data s32, int l4X, int l4Y))lvLocations.SelectedItems[0].Tag;
+                    JumpToGameCoordinate(loc.globalX, loc.globalY);
+                    string l4Info = loc.l4X >= 0 ? $" L4座標:({loc.l4X},{loc.l4Y})" : "";
+                    this.toolStripStatusLabel1.Text = $"已跳轉到座標 ({loc.globalX}, {loc.globalY}) - {loc.layer}" +
+                        (loc.groupId > 0 ? $" GroupId:{loc.groupId}" : "") + l4Info;
+                }
+            };
+
+            btnCopyAll.Click += (s, ev) =>
+            {
+                var coords = locations.Select(l => $"{l.globalX},{l.globalY}");
+                string text = string.Join("\n", coords);
+                Clipboard.SetText(text);
+                MessageBox.Show($"已複製 {locations.Count} 個座標到剪貼簿", "複製成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            };
+
+            btnCopySelected.Click += (s, ev) =>
+            {
+                if (lvLocations.SelectedItems.Count == 0)
+                {
+                    MessageBox.Show("請先選取要複製的座標", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+                var selectedCoords = new List<string>();
+                foreach (ListViewItem item in lvLocations.SelectedItems)
+                {
+                    selectedCoords.Add(item.SubItems[4].Text);
+                }
+                Clipboard.SetText(string.Join("\n", selectedCoords));
+                MessageBox.Show($"已複製 {selectedCoords.Count} 個座標到剪貼簿", "複製成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            };
+
+            btnClose.Click += (s, ev) => infoForm.Close();
+
+            // 加入控制項
+            infoForm.Controls.Add(lblBasicInfo);
+            infoForm.Controls.Add(lblJump);
+            infoForm.Controls.Add(txtJumpCoord);
+            infoForm.Controls.Add(btnJump);
+            infoForm.Controls.Add(lvLocations);
+            infoForm.Controls.Add(btnCopyAll);
+            infoForm.Controls.Add(btnCopySelected);
+            infoForm.Controls.Add(btnClose);
+
+            infoForm.ShowDialog(this);
+        }
+
+        // 解析座標字串 (支援 "X,Y" 或 "X Y" 格式)
+        private bool TryParseCoordinate(string input, out int x, out int y)
+        {
+            x = 0;
+            y = 0;
+            if (string.IsNullOrWhiteSpace(input))
+                return false;
+
+            // 支援逗號或空格分隔
+            string[] parts = input.Split(new char[] { ',', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2 &&
+                int.TryParse(parts[0].Trim(), out x) &&
+                int.TryParse(parts[1].Trim(), out y))
+            {
+                return true;
+            }
+            return false;
+        }
+
+        // 狀態列座標跳轉按鈕點擊事件
+        private void toolStripJumpButton_Click(object sender, EventArgs e)
+        {
+            PerformCoordinateJump();
+        }
+
+        // 狀態列座標輸入框按鍵事件
+        private void toolStripJumpTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                PerformCoordinateJump();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+        }
+
+        // 複製移動指令按鈕點擊事件
+        private void toolStripCopyMoveCmd_Click(object sender, EventArgs e)
+        {
+            if (selectedGameX >= 0 && selectedGameY >= 0 && !string.IsNullOrEmpty(currentMapId))
+            {
+                string moveCmd = $".移動 {selectedGameX} {selectedGameY} {currentMapId}";
+                Clipboard.SetText(moveCmd);
+                this.toolStripStatusLabel1.Text = $"已複製: {moveCmd}";
+            }
+        }
+
+        // 執行座標跳轉
+        private void PerformCoordinateJump()
+        {
+            string input = toolStripJumpTextBox.Text.Trim();
+            if (string.IsNullOrEmpty(input))
+            {
+                this.toolStripStatusLabel1.Text = "請輸入座標，格式: X,Y";
+                return;
+            }
+
+            if (TryParseCoordinate(input, out int x, out int y))
+            {
+                JumpToGameCoordinate(x, y);
+                this.toolStripStatusLabel1.Text = $"已跳轉到座標 ({x}, {y})";
+            }
+            else
+            {
+                this.toolStripStatusLabel1.Text = "座標格式錯誤，請使用格式: X,Y (例如: 32800,32700)";
+            }
+        }
+
+        // 跳轉到指定的遊戲座標 (Layer3 座標系：64x64)
+        private void JumpToGameCoordinate(int globalX, int globalY)
+        {
+            if (!Share.MapDataList.ContainsKey(currentMapId))
+                return;
+
+            Struct.L1Map currentMap = Share.MapDataList[currentMapId];
+
+            // 找到包含此座標的 S32 (使用 Layer3 座標系：64x64)
+            foreach (var s32Data in allS32DataDict.Values)
+            {
+                int segStartX = s32Data.SegInfo.nLinBeginX;
+                int segStartY = s32Data.SegInfo.nLinBeginY;
+                int segEndX = segStartX + 64;
+                int segEndY = segStartY + 64;
+
+                if (globalX >= segStartX && globalX < segEndX &&
+                    globalY >= segStartY && globalY < segEndY)
+                {
+                    // Layer3 的本地座標
+                    int layer3LocalX = globalX - segStartX;
+                    int localY = globalY - segStartY;
+
+                    // 轉換為 Layer1 座標 (用於高亮和螢幕座標計算)
+                    int localX = layer3LocalX * 2;
+
+                    // 計算螢幕座標
+                    int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                    int mx = loc[0];
+                    int my = loc[1];
+
+                    int localBaseX = 0;
+                    int localBaseY = 63 * 12;
+                    localBaseX -= 24 * (localX / 2);
+                    localBaseY -= 12 * (localX / 2);
+
+                    int screenX = mx + localBaseX + localX * 24 + localY * 24;
+                    int screenY = my + localBaseY + localY * 12;
+
+                    // 捲動到該位置
+                    int scrollX = screenX - s32MapPanel.Width / 2;
+                    int scrollY = screenY - s32MapPanel.Height / 2;
+
+                    scrollX = Math.Max(0, Math.Min(scrollX, s32PictureBox.Width - s32MapPanel.Width));
+                    scrollY = Math.Max(0, Math.Min(scrollY, s32PictureBox.Height - s32MapPanel.Height));
+
+                    s32MapPanel.AutoScrollPosition = new Point(scrollX, scrollY);
+
+                    // 設定高亮 (使用 Layer1 座標)
+                    highlightedS32Data = s32Data;
+                    highlightedCellX = localX;
+                    highlightedCellY = localY;
+
+                    s32PictureBox.Invalidate();
+                    UpdateMiniMap();
+                    return;
+                }
+            }
         }
 
         // 載入放大的 Tile
@@ -6528,6 +7369,727 @@ namespace L1FlyMapViewer
 
             // 重新渲染地圖
             RenderS32Map();
+        }
+
+        // 更新群組縮圖列表（顯示所有已載入 S32 的群組）
+        private void UpdateGroupThumbnailsList()
+        {
+            UpdateGroupThumbnailsList(null);  // 不帶選取區域時顯示全部
+        }
+
+        // 更新群組縮圖列表（可指定只顯示選取區域內的群組）
+        private void UpdateGroupThumbnailsList(List<SelectedCell> selectedCells)
+        {
+            lvGroupThumbnails.Items.Clear();
+
+            if (lvGroupThumbnails.LargeImageList != null)
+            {
+                lvGroupThumbnails.LargeImageList.Dispose();
+            }
+
+            if (allS32DataDict.Count == 0)
+            {
+                lblGroupThumbnails.Text = "群組縮圖列表";
+                return;
+            }
+
+            // 收集群組（根據是否有選取區域決定範圍）
+            var allGroupsDict = new Dictionary<int, List<(S32Data s32, ObjectTile obj)>>();
+
+            if (selectedCells != null && selectedCells.Count > 0)
+            {
+                // 只收集選取區域內的群組（包含視覺上覆蓋選取區域的大型物件）
+                // 建立選取區域的快速查找表 (S32FilePath -> Set of (Layer3X, Layer3Y))
+                var selectedCellsLookup = new Dictionary<string, HashSet<(int, int)>>();
+                // 同時記錄選取區域的邊界（用於大型物件的視覺覆蓋檢查）
+                var selectedBoundsLookup = new Dictionary<string, (int minX, int maxX, int minY, int maxY)>();
+
+                foreach (var cell in selectedCells)
+                {
+                    if (!selectedCellsLookup.ContainsKey(cell.S32Data.FilePath))
+                    {
+                        selectedCellsLookup[cell.S32Data.FilePath] = new HashSet<(int, int)>();
+                        selectedBoundsLookup[cell.S32Data.FilePath] = (int.MaxValue, int.MinValue, int.MaxValue, int.MinValue);
+                    }
+                    // 轉換成 Layer3 座標 (與複製邏輯一致)
+                    int layer3X = cell.LocalX / 2;
+                    int layer3Y = cell.LocalY;
+                    selectedCellsLookup[cell.S32Data.FilePath].Add((layer3X, layer3Y));
+
+                    // 更新邊界
+                    var bounds = selectedBoundsLookup[cell.S32Data.FilePath];
+                    selectedBoundsLookup[cell.S32Data.FilePath] = (
+                        Math.Min(bounds.minX, layer3X),
+                        Math.Max(bounds.maxX, layer3X),
+                        Math.Min(bounds.minY, layer3Y),
+                        Math.Max(bounds.maxY, layer3Y)
+                    );
+                }
+
+                // 已處理過的群組 ID（避免重複加入）
+                HashSet<int> processedGroups = new HashSet<int>();
+
+                // 遍歷所有 S32，找出在選取範圍內的 Layer4 物件
+                foreach (var kvp in selectedCellsLookup)
+                {
+                    string filePath = kvp.Key;
+                    var cellSet = kvp.Value;
+                    var bounds = selectedBoundsLookup[filePath];
+
+                    if (!allS32DataDict.ContainsKey(filePath)) continue;
+                    var s32Data = allS32DataDict[filePath];
+
+                    foreach (var obj in s32Data.Layer4)
+                    {
+                        // Layer4 物件的座標：obj.X 是 Layer1 座標（0-127），obj.Y 是 Layer3 座標（0-63）
+                        int objLayer3X = obj.X / 2;
+                        int objLayer3Y = obj.Y;
+
+                        // 檢查方式1：物件座標點在選取的格子中
+                        bool isInSelection = cellSet.Contains((objLayer3X, objLayer3Y));
+
+                        // 檢查方式2：大型物件可能覆蓋選取區域
+                        // 物件可能從它的座標點往左上方延伸（等距投影中，物件從底部中心點往上繪製）
+                        // 擴大搜尋範圍：如果物件在選取邊界附近，也納入考慮
+                        if (!isInSelection)
+                        {
+                            // 考慮物件可能往左上方延伸最多 5 格（大型建築物）
+                            int searchRadius = 5;
+                            bool nearSelection = objLayer3X >= bounds.minX - searchRadius &&
+                                                 objLayer3X <= bounds.maxX + searchRadius &&
+                                                 objLayer3Y >= bounds.minY - searchRadius &&
+                                                 objLayer3Y <= bounds.maxY + searchRadius;
+
+                            if (nearSelection)
+                            {
+                                // 檢查這個物件是否視覺上與選取區域有交集
+                                // 由於等距投影，物件從 (objLayer3X, objLayer3Y) 往上繪製
+                                // 簡化判斷：物件座標在選取邊界的擴展範圍內
+                                for (int dx = 0; dx <= searchRadius && !isInSelection; dx++)
+                                {
+                                    for (int dy = 0; dy <= searchRadius && !isInSelection; dy++)
+                                    {
+                                        if (cellSet.Contains((objLayer3X + dx, objLayer3Y + dy)))
+                                        {
+                                            isInSelection = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (isInSelection)
+                        {
+                            // 避免重複處理同一群組
+                            if (processedGroups.Contains(obj.GroupId))
+                                continue;
+                            processedGroups.Add(obj.GroupId);
+
+                            if (!allGroupsDict.ContainsKey(obj.GroupId))
+                            {
+                                allGroupsDict[obj.GroupId] = new List<(S32Data, ObjectTile)>();
+                            }
+
+                            // 找出這個群組的所有物件（整個地圖範圍）
+                            foreach (var s32 in allS32DataDict.Values)
+                            {
+                                foreach (var o in s32.Layer4)
+                                {
+                                    if (o.GroupId == obj.GroupId)
+                                    {
+                                        allGroupsDict[obj.GroupId].Add((s32, o));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // 收集所有 S32 中的群組
+                foreach (var s32Data in allS32DataDict.Values)
+                {
+                    foreach (var obj in s32Data.Layer4)
+                    {
+                        if (!allGroupsDict.ContainsKey(obj.GroupId))
+                        {
+                            allGroupsDict[obj.GroupId] = new List<(S32Data, ObjectTile)>();
+                        }
+                        allGroupsDict[obj.GroupId].Add((s32Data, obj));
+                    }
+                }
+            }
+
+            if (allGroupsDict.Count == 0)
+            {
+                string label = selectedCells != null && selectedCells.Count > 0 ? "選取區域群組 (0)" : "群組縮圖列表 (0)";
+                lblGroupThumbnails.Text = label;
+                return;
+            }
+
+            // 建立 ImageList
+            ImageList imageList = new ImageList();
+            imageList.ImageSize = new Size(80, 80);
+            imageList.ColorDepth = ColorDepth.Depth32Bit;
+
+            int thumbnailIndex = 0;
+            foreach (var kvp in allGroupsDict.OrderBy(k => k.Key))
+            {
+                int groupId = kvp.Key;
+                var objects = kvp.Value;
+
+                // 生成群組縮圖
+                Bitmap thumbnail = GenerateGroupThumbnail(objects, 80);
+                if (thumbnail != null)
+                {
+                    imageList.Images.Add(thumbnail);
+
+                    ListViewItem item = new ListViewItem($"G{groupId} ({objects.Count})");
+                    item.ImageIndex = thumbnailIndex;
+                    item.Tag = new GroupThumbnailInfo { GroupId = groupId, Objects = objects };
+                    lvGroupThumbnails.Items.Add(item);
+
+                    thumbnailIndex++;
+                }
+            }
+
+            lvGroupThumbnails.LargeImageList = imageList;
+            string labelText = selectedCells != null && selectedCells.Count > 0
+                ? $"選取區域群組 ({allGroupsDict.Count})"
+                : $"群組縮圖列表 ({allGroupsDict.Count})";
+            lblGroupThumbnails.Text = labelText;
+        }
+
+        // 群組縮圖資訊
+        private class GroupThumbnailInfo
+        {
+            public int GroupId { get; set; }
+            public List<(S32Data s32, ObjectTile obj)> Objects { get; set; }
+        }
+
+        // 「全部」按鈕點擊事件 - 顯示全部群組
+        private void btnShowAllGroups_Click(object sender, EventArgs e)
+        {
+            UpdateGroupThumbnailsList(null);  // 傳入 null 顯示全部
+        }
+
+        // 生成群組縮圖（將同 GroupId 的物件按相對位置組裝，使用與主畫布相同的繪製方式）
+        private Bitmap GenerateGroupThumbnail(List<(S32Data s32, ObjectTile obj)> objects, int thumbnailSize)
+        {
+            if (objects == null || objects.Count == 0)
+                return null;
+
+            try
+            {
+                // 計算物件的邊界範圍
+                int minX = objects.Min(o => o.obj.X);
+                int maxX = objects.Max(o => o.obj.X);
+                int minY = objects.Min(o => o.obj.Y);
+                int maxY = objects.Max(o => o.obj.Y);
+
+                int rangeX = maxX - minX + 1;
+                int rangeY = maxY - minY + 1;
+
+                // 使用與主畫布相同的座標公式計算邊界
+                // baseX = 0, baseY = 63 * 12 (對於完整 S32 區塊)
+                // pixelX = baseX + x * 24 + y * 24 - 24 * (x / 2)
+                // pixelY = baseY + y * 12 - 12 * (x / 2)
+                // 簡化後: pixelX = x * 12 + y * 24, pixelY = 63*12 + y * 12 - x * 6
+
+                // 計算所有物件的像素邊界
+                int pixelMinX = int.MaxValue, pixelMaxX = int.MinValue;
+                int pixelMinY = int.MaxValue, pixelMaxY = int.MinValue;
+
+                foreach (var item in objects)
+                {
+                    var obj = item.obj;
+                    // 使用與 RenderS32Block 相同的座標計算
+                    int baseX = 0;
+                    int baseY = 63 * 12;
+                    baseX -= 24 * (obj.X / 2);
+                    baseY -= 12 * (obj.X / 2);
+                    int px = baseX + obj.X * 24 + obj.Y * 24;
+                    int py = baseY + obj.Y * 12;
+
+                    pixelMinX = Math.Min(pixelMinX, px);
+                    pixelMaxX = Math.Max(pixelMaxX, px + 48);  // tile 寬度約 48
+                    pixelMinY = Math.Min(pixelMinY, py);
+                    pixelMaxY = Math.Max(pixelMaxY, py + 48);  // tile 高度預留空間
+                }
+
+                // 計算實際所需的圖片大小
+                int actualWidth = pixelMaxX - pixelMinX + 48;
+                int actualHeight = pixelMaxY - pixelMinY + 48;
+
+                // 建立暫存圖片
+                int tempWidth = Math.Max(actualWidth, 96);
+                int tempHeight = Math.Max(actualHeight, 96);
+                if (tempWidth > 2048) tempWidth = 2048;
+                if (tempHeight > 2048) tempHeight = 2048;
+
+                // 使用 16bpp 格式與主畫布相同
+                Bitmap tempBitmap = new Bitmap(tempWidth, tempHeight, PixelFormat.Format16bppRgb555);
+
+                Rectangle rect = new Rectangle(0, 0, tempBitmap.Width, tempBitmap.Height);
+                BitmapData bmpData = tempBitmap.LockBits(rect, ImageLockMode.ReadWrite, tempBitmap.PixelFormat);
+                int rowpix = bmpData.Stride;
+
+                unsafe
+                {
+                    byte* ptr = (byte*)bmpData.Scan0;
+
+                    // 填充白色背景 (RGB555: 0x7FFF = 白色)
+                    for (int y = 0; y < tempHeight; y++)
+                    {
+                        for (int x = 0; x < tempWidth; x++)
+                        {
+                            int v = y * rowpix + (x * 2);
+                            *(ptr + v) = 0xFF;
+                            *(ptr + v + 1) = 0x7F;
+                        }
+                    }
+
+                    // 計算偏移量，讓圖片置中
+                    int offsetX = (tempWidth - actualWidth) / 2 - pixelMinX + 24;
+                    int offsetY = (tempHeight - actualHeight) / 2 - pixelMinY + 24;
+
+                    // 按 Layer 排序後繪製（使用與主畫布完全相同的繪製方式）
+                    foreach (var item in objects.OrderBy(o => o.obj.Layer))
+                    {
+                        var obj = item.obj;
+
+                        // 使用與 RenderS32Block 相同的座標計算
+                        int baseX = 0;
+                        int baseY = 63 * 12;
+                        baseX -= 24 * (obj.X / 2);
+                        baseY -= 12 * (obj.X / 2);
+
+                        int pixelX = offsetX + baseX + obj.X * 24 + obj.Y * 24;
+                        int pixelY = offsetY + baseY + obj.Y * 12;
+
+                        // 使用與主畫布相同的繪製函數
+                        DrawTilToBufferDirect(pixelX, pixelY, obj.TileId, obj.IndexId, rowpix, ptr, tempWidth, tempHeight);
+                    }
+                }
+
+                tempBitmap.UnlockBits(bmpData);
+
+                // 縮放到目標大小（白底）
+                Bitmap result = new Bitmap(thumbnailSize, thumbnailSize, PixelFormat.Format32bppArgb);
+                using (Graphics g = Graphics.FromImage(result))
+                {
+                    // 白色底
+                    g.Clear(Color.White);
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+
+                    // 保持比例縮放
+                    float scaleX = (float)(thumbnailSize - 4) / tempWidth;
+                    float scaleY = (float)(thumbnailSize - 4) / tempHeight;
+                    float scale = Math.Min(scaleX, scaleY);
+                    int scaledWidth = (int)(tempWidth * scale);
+                    int scaledHeight = (int)(tempHeight * scale);
+                    int drawX = (thumbnailSize - scaledWidth) / 2;
+                    int drawY = (thumbnailSize - scaledHeight) / 2;
+
+                    g.DrawImage(tempBitmap, drawX, drawY, scaledWidth, scaledHeight);
+
+                    // 加邊框
+                    using (Pen borderPen = new Pen(Color.LightGray, 1))
+                    {
+                        g.DrawRectangle(borderPen, 0, 0, thumbnailSize - 1, thumbnailSize - 1);
+                    }
+                }
+
+                tempBitmap.Dispose();
+                return result;
+            }
+            catch
+            {
+                // 如果生成失敗，返回一個帶文字的預設圖片
+                Bitmap fallback = new Bitmap(thumbnailSize, thumbnailSize);
+                using (Graphics g = Graphics.FromImage(fallback))
+                {
+                    g.Clear(Color.White);
+                    using (Font font = new Font("Arial", 10))
+                    {
+                        string text = $"G{objects[0].obj.GroupId}";
+                        SizeF textSize = g.MeasureString(text, font);
+                        g.DrawString(text, font, Brushes.Gray,
+                            (thumbnailSize - textSize.Width) / 2,
+                            (thumbnailSize - textSize.Height) / 2);
+                    }
+                }
+                return fallback;
+            }
+        }
+
+        // 群組縮圖單擊事件 - 左鍵顯示放大預覽
+        private void lvGroupThumbnails_MouseClick(object sender, MouseEventArgs e)
+        {
+            // 只處理左鍵點擊（右鍵由 MouseUp 處理顯示 context menu）
+            if (e.Button != MouseButtons.Left)
+                return;
+
+            if (lvGroupThumbnails.SelectedItems.Count == 0)
+                return;
+
+            var item = lvGroupThumbnails.SelectedItems[0];
+            if (item.Tag is GroupThumbnailInfo info && info.Objects.Count > 0)
+            {
+                ShowGroupPreviewDialog(info);
+            }
+        }
+
+        // 顯示群組預覽對話框（可縮放）
+        private void ShowGroupPreviewDialog(GroupThumbnailInfo info)
+        {
+            // 生成高解析度預覽圖（800x800）
+            int baseSize = 800;
+            Bitmap previewImage = GenerateGroupThumbnail(info.Objects, baseSize);
+
+            if (previewImage == null)
+                return;
+
+            // 縮放狀態
+            float currentZoom = 1.0f;
+            float minZoom = 0.25f;
+            float maxZoom = 4.0f;
+            Point dragStart = Point.Empty;
+            Point scrollOffset = Point.Empty;
+            bool isDragging = false;
+
+            // 建立預覽對話框
+            Form previewForm = new Form
+            {
+                Text = $"群組 {info.GroupId} - {info.Objects.Count} 個物件 (滾輪縮放, 拖曳平移)",
+                Size = new Size(520, 600),
+                StartPosition = FormStartPosition.CenterParent,
+                FormBorderStyle = FormBorderStyle.Sizable,
+                MaximizeBox = true,
+                MinimizeBox = false
+            };
+
+            // 使用 Panel 作為容器，支援滾動
+            Panel container = new Panel
+            {
+                Location = new Point(10, 10),
+                Size = new Size(480, 480),
+                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
+                BorderStyle = BorderStyle.FixedSingle,
+                BackColor = Color.White,
+                AutoScroll = true
+            };
+
+            PictureBox pb = new PictureBox
+            {
+                Image = previewImage,
+                Size = previewImage.Size,
+                Location = new Point(0, 0),
+                SizeMode = PictureBoxSizeMode.Zoom,
+                BackColor = Color.White
+            };
+
+            // 更新 PictureBox 大小的函數
+            Action updateZoom = () =>
+            {
+                int newWidth = (int)(baseSize * currentZoom);
+                int newHeight = (int)(baseSize * currentZoom);
+                pb.Size = new Size(newWidth, newHeight);
+                previewForm.Text = $"群組 {info.GroupId} - {info.Objects.Count} 個物件 ({(int)(currentZoom * 100)}%)";
+            };
+
+            // 滾輪縮放
+            pb.MouseWheel += (s, ev) =>
+            {
+                float oldZoom = currentZoom;
+                if (ev.Delta > 0)
+                    currentZoom = Math.Min(currentZoom * 1.2f, maxZoom);
+                else
+                    currentZoom = Math.Max(currentZoom / 1.2f, minZoom);
+
+                if (Math.Abs(oldZoom - currentZoom) > 0.001f)
+                    updateZoom();
+            };
+
+            container.MouseWheel += (s, ev) =>
+            {
+                float oldZoom = currentZoom;
+                if (ev.Delta > 0)
+                    currentZoom = Math.Min(currentZoom * 1.2f, maxZoom);
+                else
+                    currentZoom = Math.Max(currentZoom / 1.2f, minZoom);
+
+                if (Math.Abs(oldZoom - currentZoom) > 0.001f)
+                    updateZoom();
+            };
+
+            // 拖曳平移
+            pb.MouseDown += (s, ev) =>
+            {
+                if (ev.Button == MouseButtons.Left)
+                {
+                    isDragging = true;
+                    dragStart = ev.Location;
+                    pb.Cursor = Cursors.Hand;
+                }
+            };
+
+            pb.MouseMove += (s, ev) =>
+            {
+                if (isDragging)
+                {
+                    int dx = ev.X - dragStart.X;
+                    int dy = ev.Y - dragStart.Y;
+                    container.AutoScrollPosition = new Point(
+                        -container.AutoScrollPosition.X - dx,
+                        -container.AutoScrollPosition.Y - dy);
+                }
+            };
+
+            pb.MouseUp += (s, ev) =>
+            {
+                isDragging = false;
+                pb.Cursor = Cursors.Default;
+            };
+
+            container.Controls.Add(pb);
+
+            // 縮放按鈕
+            Button btnZoomIn = new Button
+            {
+                Text = "+",
+                Size = new Size(40, 30),
+                Location = new Point(10, 500),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
+            };
+            btnZoomIn.Click += (s, ev) =>
+            {
+                currentZoom = Math.Min(currentZoom * 1.5f, maxZoom);
+                updateZoom();
+            };
+
+            Button btnZoomOut = new Button
+            {
+                Text = "-",
+                Size = new Size(40, 30),
+                Location = new Point(55, 500),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
+            };
+            btnZoomOut.Click += (s, ev) =>
+            {
+                currentZoom = Math.Max(currentZoom / 1.5f, minZoom);
+                updateZoom();
+            };
+
+            Button btnZoomReset = new Button
+            {
+                Text = "1:1",
+                Size = new Size(40, 30),
+                Location = new Point(100, 500),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
+            };
+            btnZoomReset.Click += (s, ev) =>
+            {
+                currentZoom = 1.0f;
+                updateZoom();
+                container.AutoScrollPosition = Point.Empty;
+            };
+
+            Button btnGoto = new Button
+            {
+                Text = "跳轉到位置",
+                Size = new Size(100, 30),
+                Location = new Point(160, 500),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
+            };
+            btnGoto.Click += (s, ev) =>
+            {
+                previewForm.Close();
+                JumpToGroupLocation(info);
+            };
+
+            Button btnClose = new Button
+            {
+                Text = "關閉",
+                Size = new Size(80, 30),
+                Location = new Point(420, 500),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Right
+            };
+            btnClose.Click += (s, ev) => previewForm.Close();
+
+            // 顯示物件資訊
+            Label lblInfo = new Label
+            {
+                Text = $"GroupId: {info.GroupId} | 物件數: {info.Objects.Count}",
+                Location = new Point(270, 505),
+                Size = new Size(140, 20),
+                ForeColor = Color.Gray,
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
+            };
+
+            previewForm.Controls.Add(container);
+            previewForm.Controls.Add(btnZoomIn);
+            previewForm.Controls.Add(btnZoomOut);
+            previewForm.Controls.Add(btnZoomReset);
+            previewForm.Controls.Add(btnGoto);
+            previewForm.Controls.Add(btnClose);
+            previewForm.Controls.Add(lblInfo);
+
+            previewForm.FormClosed += (s, ev) =>
+            {
+                previewImage.Dispose();
+            };
+
+            // 設定焦點讓滾輪可用
+            previewForm.Shown += (s, ev) => container.Focus();
+
+            previewForm.ShowDialog(this);
+        }
+
+        // 跳轉到群組位置
+        private void JumpToGroupLocation(GroupThumbnailInfo info)
+        {
+            if (info.Objects.Count == 0)
+                return;
+
+            var firstObj = info.Objects[0];
+            var s32Data = firstObj.s32;
+            var obj = firstObj.obj;
+
+            // 計算螢幕座標
+            int[] loc = s32Data.SegInfo.GetLoc(1.0);
+            int mx = loc[0];
+            int my = loc[1];
+
+            int localBaseX = 0;
+            int localBaseY = 63 * 12;
+            localBaseX -= 24 * (obj.X / 2);
+            localBaseY -= 12 * (obj.X / 2);
+
+            int screenX = mx + localBaseX + obj.X * 24 + obj.Y * 24;
+            int screenY = my + localBaseY + obj.Y * 12;
+
+            // 捲動到該位置
+            int scrollX = screenX - s32MapPanel.Width / 2;
+            int scrollY = screenY - s32MapPanel.Height / 2;
+
+            if (scrollX < 0) scrollX = 0;
+            if (scrollY < 0) scrollY = 0;
+            if (scrollX > s32MapPanel.HorizontalScroll.Maximum) scrollX = s32MapPanel.HorizontalScroll.Maximum;
+            if (scrollY > s32MapPanel.VerticalScroll.Maximum) scrollY = s32MapPanel.VerticalScroll.Maximum;
+
+            s32MapPanel.AutoScrollPosition = new Point(scrollX, scrollY);
+
+            // 高亮顯示該格子
+            highlightedS32Data = s32Data;
+            highlightedCellX = obj.X;
+            highlightedCellY = obj.Y;
+
+            s32PictureBox.Invalidate();
+            UpdateMiniMap();
+
+            this.toolStripStatusLabel1.Text = $"跳轉到群組 {info.GroupId}，位置 ({obj.X}, {obj.Y})，共 {info.Objects.Count} 個物件";
+        }
+
+        // 群組縮圖雙擊事件 - 跳轉到該群組位置
+        private void lvGroupThumbnails_DoubleClick(object sender, EventArgs e)
+        {
+            if (lvGroupThumbnails.SelectedItems.Count == 0)
+                return;
+
+            var item = lvGroupThumbnails.SelectedItems[0];
+            if (item.Tag is GroupThumbnailInfo info && info.Objects.Count > 0)
+            {
+                JumpToGroupLocation(info);
+            }
+        }
+
+        // 群組縮圖右鍵刪除
+        private void lvGroupThumbnails_MouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Right)
+                return;
+
+            if (lvGroupThumbnails.SelectedItems.Count == 0)
+                return;
+
+            var item = lvGroupThumbnails.SelectedItems[0];
+            if (!(item.Tag is GroupThumbnailInfo info) || info.Objects.Count == 0)
+                return;
+
+            // 建立右鍵選單
+            ContextMenuStrip menu = new ContextMenuStrip();
+
+            ToolStripMenuItem deleteItem = new ToolStripMenuItem($"刪除群組 {info.GroupId} ({info.Objects.Count} 個物件)");
+            deleteItem.Click += (s, ev) =>
+            {
+                DeleteGroupFromMap(info);
+            };
+
+            ToolStripMenuItem gotoItem = new ToolStripMenuItem("跳轉到位置");
+            gotoItem.Click += (s, ev) =>
+            {
+                JumpToGroupLocation(info);
+            };
+
+            menu.Items.Add(gotoItem);
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(deleteItem);
+
+            menu.Show(lvGroupThumbnails, e.Location);
+        }
+
+        // 從地圖刪除群組
+        private void DeleteGroupFromMap(GroupThumbnailInfo info)
+        {
+            int groupId = info.GroupId;
+
+            // 先計算實際要刪除的物件數量（從當前 S32 資料中重新查找）
+            int totalCount = 0;
+            foreach (var s32Data in allS32DataDict.Values)
+            {
+                totalCount += s32Data.Layer4.Count(o => o.GroupId == groupId);
+            }
+
+            if (totalCount == 0)
+            {
+                MessageBox.Show($"群組 {groupId} 已不存在任何物件。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 確認刪除
+            DialogResult result = MessageBox.Show(
+                $"確定要刪除群組 {groupId} 嗎？\n" +
+                $"這將移除 {totalCount} 個 Layer4 物件。",
+                "確認刪除群組",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+
+            if (result != DialogResult.Yes)
+                return;
+
+            // 遍歷所有 S32，刪除該群組的所有物件
+            int deletedCount = 0;
+            foreach (var s32Data in allS32DataDict.Values)
+            {
+                int beforeCount = s32Data.Layer4.Count;
+                s32Data.Layer4.RemoveAll(o => o.GroupId == groupId);
+                int removed = beforeCount - s32Data.Layer4.Count;
+                if (removed > 0)
+                {
+                    deletedCount += removed;
+                    s32Data.IsModified = true;
+                }
+            }
+
+            // 重新渲染
+            RenderS32Map();
+
+            // 更新群組縮圖列表
+            UpdateGroupThumbnailsList();
+
+            this.toolStripStatusLabel1.Text = $"已刪除群組 {groupId}，共 {deletedCount} 個物件";
         }
 
         // ===== 工具列按鈕事件處理 =====
