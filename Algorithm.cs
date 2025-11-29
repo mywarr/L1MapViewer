@@ -19,7 +19,9 @@ namespace L1MapViewer {
             if (destination.Length < 0x08) {
                 return destination;
             }
-            DESCryptoServiceProvider des = new DESCryptoServiceProvider();
+#pragma warning disable SYSLIB0021 // DES is obsolete but required for legacy file format compatibility
+            using var des = DES.Create();
+#pragma warning restore SYSLIB0021
             des.Key = new byte[] { 0x7e, 0x21, 0x40, 0x23, 0x25, 0x5e, 0x24, 0x3c };//~!@#$%^&<
             des.Mode = CipherMode.ECB;
             des.Padding = PaddingMode.None;
@@ -32,7 +34,9 @@ namespace L1MapViewer {
         public static byte[] EncodeDes(byte[] src) {
             byte[] destination = new byte[src.Length];
 
-            DESCryptoServiceProvider des = new DESCryptoServiceProvider();
+#pragma warning disable SYSLIB0021 // DES is obsolete but required for legacy file format compatibility
+            using var des = DES.Create();
+#pragma warning restore SYSLIB0021
             des.Key = new byte[] { 0x7e, 0x21, 0x40, 0x23, 0x25, 0x5e, 0x24, 0x3c };//~!@#$%^&<
             des.Mode = CipherMode.ECB;
             des.Padding = PaddingMode.None;
@@ -59,13 +63,13 @@ namespace L1MapViewer {
                 _encodeData = b;
             }
             //AES...(他AES是CBC加密模式 搭配 NO PADDING)
-            RijndaelManaged provider_AES = new RijndaelManaged();
-            provider_AES.Padding = PaddingMode.None;
+            using var aes = Aes.Create();
+            aes.Padding = PaddingMode.None;
 
             byte[] key = { 0xDC, 0x84, 0x01, 0x21, 0x2A, 0x40, 0x20, 0x0A, 0xDD, 0x25, 0xB9, 0xA7, 0x0D, 0xB9, 0xC9, 0x4E };
             byte[] iv = { 0x3E, 0x09, 0x78, 0xAA, 0xC4, 0xD5, 0x30, 0x63, 0x30, 0x0C, 0x5F, 0x9A, 0x80, 0x7F, 0x22, 0x46 };
 
-            ICryptoTransform decrypt_AES = provider_AES.CreateEncryptor(key, iv);
+            ICryptoTransform decrypt_AES = aes.CreateEncryptor(key, iv);
             byte[] encodeData = decrypt_AES.TransformFinalBlock(_encodeData, 0, _encodeData.Length);
 
 
@@ -104,13 +108,13 @@ namespace L1MapViewer {
                 }
             }
             //AES...(他AES是CBC加密模式 搭配 NO PADDING)
-            RijndaelManaged provider_AES = new RijndaelManaged();
-            provider_AES.Padding = PaddingMode.None;
+            using var aes = Aes.Create();
+            aes.Padding = PaddingMode.None;
 
             byte[] key = { 0xDC, 0x84, 0x01, 0x21, 0x2A, 0x40, 0x20, 0x0A, 0xDD, 0x25, 0xB9, 0xA7, 0x0D, 0xB9, 0xC9, 0x4E };
             byte[] iv = { 0x3E, 0x09, 0x78, 0xAA, 0xC4, 0xD5, 0x30, 0x63, 0x30, 0x0C, 0x5F, 0x9A, 0x80, 0x7F, 0x22, 0x46 };
 
-            ICryptoTransform decrypt_AES = provider_AES.CreateDecryptor(key, iv);
+            ICryptoTransform decrypt_AES = aes.CreateDecryptor(key, iv);
             byte[] encodeData = decrypt_AES.TransformFinalBlock(_encodeData, 0, _encodeData.Length);
 
             //將本體跟餘數合併

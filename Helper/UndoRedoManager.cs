@@ -61,7 +61,7 @@ namespace L1MapViewer.Helper
             // 還原刪除的物件（重新新增）
             foreach (var objInfo in action.RemovedObjects)
             {
-                if (allS32DataDict.TryGetValue(objInfo.S32FilePath, out S32Data targetS32))
+                if (allS32DataDict.TryGetValue(objInfo.S32FilePath, out S32Data? targetS32))
                 {
                     var newObj = new ObjectTile
                     {
@@ -80,7 +80,7 @@ namespace L1MapViewer.Helper
             // 還原新增的物件（刪除）
             foreach (var objInfo in action.AddedObjects)
             {
-                if (allS32DataDict.TryGetValue(objInfo.S32FilePath, out S32Data targetS32))
+                if (allS32DataDict.TryGetValue(objInfo.S32FilePath, out S32Data? targetS32))
                 {
                     var objToRemove = targetS32.Layer4.FirstOrDefault(o =>
                         o.X == objInfo.LocalX &&
@@ -125,7 +125,7 @@ namespace L1MapViewer.Helper
             // 重做新增的物件（重新新增）
             foreach (var objInfo in action.AddedObjects)
             {
-                if (allS32DataDict.TryGetValue(objInfo.S32FilePath, out S32Data targetS32))
+                if (allS32DataDict.TryGetValue(objInfo.S32FilePath, out S32Data? targetS32))
                 {
                     var newObj = new ObjectTile
                     {
@@ -144,7 +144,7 @@ namespace L1MapViewer.Helper
             // 重做刪除的物件（重新刪除）
             foreach (var objInfo in action.RemovedObjects)
             {
-                if (allS32DataDict.TryGetValue(objInfo.S32FilePath, out S32Data targetS32))
+                if (allS32DataDict.TryGetValue(objInfo.S32FilePath, out S32Data? targetS32))
                 {
                     var objToRemove = targetS32.Layer4.FirstOrDefault(o =>
                         o.X == objInfo.LocalX &&
@@ -186,7 +186,7 @@ namespace L1MapViewer.Helper
     public class UndoRedoResult
     {
         public bool Success { get; set; }
-        public string Message { get; set; }
-        public string ActionDescription { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public string ActionDescription { get; set; } = string.Empty;
     }
 }

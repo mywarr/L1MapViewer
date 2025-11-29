@@ -9,12 +9,12 @@ namespace L1FlyMapViewer
 {
     public class DatabaseConnection
     {
-        public string Name { get; set; }
-        public string Server { get; set; }
-        public string Port { get; set; }
-        public string Database { get; set; }
-        public string Username { get; set; }
-        public string Password { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Server { get; set; } = string.Empty;
+        public string Port { get; set; } = "3306";
+        public string Database { get; set; } = string.Empty;
+        public string Username { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
 
         public override string ToString()
         {
@@ -29,26 +29,26 @@ namespace L1FlyMapViewer
 
     public partial class DatabaseConnectionForm : Form
     {
-        private ListBox listConnections;
-        private Button btnNew;
-        private Button btnEdit;
-        private Button btnDelete;
-        private Button btnConnect;
-        private Button btnClose;
-        private GroupBox grpConnectionInfo;
-        private TextBox txtName;
-        private TextBox txtServer;
-        private TextBox txtPort;
-        private TextBox txtDatabase;
-        private TextBox txtUsername;
-        private TextBox txtPassword;
-        private Button btnTestConnection;
-        private Button btnSave;
-        private Button btnCancel;
-        private Label lblStatus;
+        private ListBox listConnections = null!;
+        private Button btnNew = null!;
+        private Button btnEdit = null!;
+        private Button btnDelete = null!;
+        private Button btnConnect = null!;
+        private Button btnClose = null!;
+        private GroupBox grpConnectionInfo = null!;
+        private TextBox txtName = null!;
+        private TextBox txtServer = null!;
+        private TextBox txtPort = null!;
+        private TextBox txtDatabase = null!;
+        private TextBox txtUsername = null!;
+        private TextBox txtPassword = null!;
+        private Button btnTestConnection = null!;
+        private Button btnSave = null!;
+        private Button btnCancel = null!;
+        private Label lblStatus = null!;
 
-        private List<DatabaseConnection> connections;
-        private DatabaseConnection selectedConnection;
+        private List<DatabaseConnection> connections = new List<DatabaseConnection>();
+        private DatabaseConnection? selectedConnection;
         private bool isEditing = false;
 
         public DatabaseConnectionForm()
@@ -285,7 +285,7 @@ namespace L1FlyMapViewer
             }
         }
 
-        private void ListConnections_SelectedIndexChanged(object sender, EventArgs e)
+        private void ListConnections_SelectedIndexChanged(object? sender, EventArgs e)
         {
             if (!isEditing && listConnections.SelectedIndex >= 0)
             {
@@ -317,14 +317,14 @@ namespace L1FlyMapViewer
             lblStatus.Text = "";
         }
 
-        private void BtnNew_Click(object sender, EventArgs e)
+        private void BtnNew_Click(object? sender, EventArgs e)
         {
             selectedConnection = null;
             ClearInputs();
             SetEditMode(true);
         }
 
-        private void BtnEdit_Click(object sender, EventArgs e)
+        private void BtnEdit_Click(object? sender, EventArgs e)
         {
             if (listConnections.SelectedIndex < 0)
             {
@@ -334,7 +334,7 @@ namespace L1FlyMapViewer
             SetEditMode(true);
         }
 
-        private void BtnDelete_Click(object sender, EventArgs e)
+        private void BtnDelete_Click(object? sender, EventArgs e)
         {
             if (listConnections.SelectedIndex < 0)
             {
@@ -352,7 +352,7 @@ namespace L1FlyMapViewer
             }
         }
 
-        private void BtnTestConnection_Click(object sender, EventArgs e)
+        private void BtnTestConnection_Click(object? sender, EventArgs e)
         {
             if (!ValidateInputs())
                 return;
@@ -389,7 +389,7 @@ namespace L1FlyMapViewer
             }
         }
 
-        private void BtnSave_Click(object sender, EventArgs e)
+        private void BtnSave_Click(object? sender, EventArgs e)
         {
             if (!ValidateInputs())
                 return;
@@ -427,7 +427,7 @@ namespace L1FlyMapViewer
             MessageBox.Show("儲存成功", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
-        private void BtnCancel_Click(object sender, EventArgs e)
+        private void BtnCancel_Click(object? sender, EventArgs e)
         {
             if (listConnections.SelectedIndex >= 0)
             {
@@ -440,7 +440,7 @@ namespace L1FlyMapViewer
             SetEditMode(false);
         }
 
-        private void BtnConnect_Click(object sender, EventArgs e)
+        private void BtnConnect_Click(object? sender, EventArgs e)
         {
             if (listConnections.SelectedIndex < 0)
             {

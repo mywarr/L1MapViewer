@@ -53,8 +53,8 @@ echo     }
 echo }
 ) > "%PROGRAM_FILE%"
 
-REM Build single-file exe (requires .NET Runtime)
-dotnet publish "%PROJECT_FILE%" -c Release -r win-x64 --self-contained false -o "%TEMP_DIR%\L1MapEditor" /p:Version=%VERSION% /p:AssemblyVersion=%VERSION% /p:FileVersion=%VERSION% /p:PublishSingleFile=true
+REM Build single-file exe with compression (requires .NET Runtime)
+dotnet publish "%PROJECT_FILE%" -c Release -r win-x64 --self-contained false -o "%TEMP_DIR%\L1MapEditor" /p:Version=%VERSION% /p:AssemblyVersion=%VERSION% /p:FileVersion=%VERSION% /p:PublishSingleFile=true /p:EnableCompressionInSingleFile=true
 
 if %ERRORLEVEL% neq 0 (
     echo Build failed!
@@ -67,8 +67,7 @@ if exist "%TEMP_DIR%\L1MapEditor\L1MapViewerCore.exe" (
 )
 
 REM Delete pdb file
-if exist "%TEMP_DIR%\L1MapEditor\L1MapViewerCore.pdb" del "%TEMP_DIR%\L1MapEditor\L1MapViewerCore.pdb"
-if exist "%TEMP_DIR%\L1MapEditor\L1MapEditor.pdb" del "%TEMP_DIR%\L1MapEditor\L1MapEditor.pdb"
+if exist "%TEMP_DIR%\L1MapEditor\*.pdb" del "%TEMP_DIR%\L1MapEditor\*.pdb"
 
 REM Create zip using PowerShell
 set ZIP_NAME=L1MapEditor_v%VERSION%.zip
@@ -108,8 +107,8 @@ echo     }
 echo }
 ) > "%PROGRAM_FILE%"
 
-REM Build single-file exe (requires .NET Runtime)
-dotnet publish "%PROJECT_FILE%" -c Release -r win-x64 --self-contained false -o "%TEMP_DIR%\L1MonsterEditor" /p:Version=%VERSION% /p:AssemblyVersion=%VERSION% /p:FileVersion=%VERSION% /p:PublishSingleFile=true
+REM Build single-file exe with compression (requires .NET Runtime)
+dotnet publish "%PROJECT_FILE%" -c Release -r win-x64 --self-contained false -o "%TEMP_DIR%\L1MonsterEditor" /p:Version=%VERSION% /p:AssemblyVersion=%VERSION% /p:FileVersion=%VERSION% /p:PublishSingleFile=true /p:EnableCompressionInSingleFile=true
 
 if %ERRORLEVEL% neq 0 (
     echo Build failed!
@@ -122,8 +121,7 @@ if exist "%TEMP_DIR%\L1MonsterEditor\L1MapViewerCore.exe" (
 )
 
 REM Delete pdb file
-if exist "%TEMP_DIR%\L1MonsterEditor\L1MapViewerCore.pdb" del "%TEMP_DIR%\L1MonsterEditor\L1MapViewerCore.pdb"
-if exist "%TEMP_DIR%\L1MonsterEditor\L1MonsterEditor.pdb" del "%TEMP_DIR%\L1MonsterEditor\L1MonsterEditor.pdb"
+if exist "%TEMP_DIR%\L1MonsterEditor\*.pdb" del "%TEMP_DIR%\L1MonsterEditor\*.pdb"
 
 REM Create zip using PowerShell
 set ZIP_NAME=L1MonsterEditor_v%VERSION%.zip
@@ -167,14 +165,13 @@ echo     }
 echo }
 ) > "%PROGRAM_FILE%"
 
-dotnet publish "%PROJECT_FILE%" -c Release -r win-x64 --self-contained false -o "%TEMP_DIR%\L1MapEditor" /p:Version=%VERSION% /p:AssemblyVersion=%VERSION% /p:FileVersion=%VERSION% /p:PublishSingleFile=true
+dotnet publish "%PROJECT_FILE%" -c Release -r win-x64 --self-contained false -o "%TEMP_DIR%\L1MapEditor" /p:Version=%VERSION% /p:AssemblyVersion=%VERSION% /p:FileVersion=%VERSION% /p:PublishSingleFile=true /p:EnableCompressionInSingleFile=true
 
 if exist "%TEMP_DIR%\L1MapEditor\L1MapViewerCore.exe" (
     move /Y "%TEMP_DIR%\L1MapEditor\L1MapViewerCore.exe" "%TEMP_DIR%\L1MapEditor\L1MapEditor.exe" >nul
 )
 
-if exist "%TEMP_DIR%\L1MapEditor\L1MapViewerCore.pdb" del "%TEMP_DIR%\L1MapEditor\L1MapViewerCore.pdb"
-if exist "%TEMP_DIR%\L1MapEditor\L1MapEditor.pdb" del "%TEMP_DIR%\L1MapEditor\L1MapEditor.pdb"
+if exist "%TEMP_DIR%\L1MapEditor\*.pdb" del "%TEMP_DIR%\L1MapEditor\*.pdb"
 
 set ZIP_NAME=L1MapEditor_v%VERSION%.zip
 echo Creating %ZIP_NAME%...
@@ -208,7 +205,7 @@ echo     }
 echo }
 ) > "%PROGRAM_FILE%"
 
-dotnet publish "%PROJECT_FILE%" -c Release -r win-x64 --self-contained false -o "%TEMP_DIR%\L1MonsterEditor" /p:Version=%VERSION% /p:AssemblyVersion=%VERSION% /p:FileVersion=%VERSION% /p:PublishSingleFile=true
+dotnet publish "%PROJECT_FILE%" -c Release -r win-x64 --self-contained false -o "%TEMP_DIR%\L1MonsterEditor" /p:Version=%VERSION% /p:AssemblyVersion=%VERSION% /p:FileVersion=%VERSION% /p:PublishSingleFile=true /p:EnableCompressionInSingleFile=true
 
 if exist "%TEMP_DIR%\L1MonsterEditor\L1MapViewerCore.exe" (
     move /Y "%TEMP_DIR%\L1MonsterEditor\L1MapViewerCore.exe" "%TEMP_DIR%\L1MonsterEditor\L1MonsterEditor.exe" >nul

@@ -51,7 +51,7 @@ namespace L1MapViewer.Other {
         /// for extending its usage into the Properties window.
         /// Developers can use it where possible.
         /// </summary>
-        internal IWindowsFormsEditorService editorService;
+        internal IWindowsFormsEditorService? editorService;
 
         #endregion
 
@@ -248,13 +248,13 @@ namespace L1MapViewer.Other {
 [DebuggerStepThrough]
 [EditorBrowsable(EditorBrowsableState.Never)]
 public class SelectedPathEditor : UITypeEditor {
-    public override UITypeEditorEditStyle GetEditStyle(ITypeDescriptorContext context) {
+    public override UITypeEditorEditStyle GetEditStyle(ITypeDescriptorContext? context) {
         return UITypeEditorEditStyle.Modal;
     }
 
-    public override object EditValue(ITypeDescriptorContext context,
-                            IServiceProvider provider, object value) {
-        IWindowsFormsEditorService editorService =
+    public override object? EditValue(ITypeDescriptorContext? context,
+                            IServiceProvider provider, object? value) {
+        IWindowsFormsEditorService? editorService =
            provider.GetService(typeof(IWindowsFormsEditorService)) as
            IWindowsFormsEditorService;
 
@@ -287,13 +287,13 @@ public class SelectedPathEditor : UITypeEditor {
 [DebuggerStepThrough]
 [EditorBrowsable(EditorBrowsableState.Never)]
 public class SelectedPathsEditor : UITypeEditor {
-    public override UITypeEditorEditStyle GetEditStyle(ITypeDescriptorContext context) {
+    public override UITypeEditorEditStyle GetEditStyle(ITypeDescriptorContext? context) {
         return UITypeEditorEditStyle.Modal;
     }
 
-    public override object EditValue(ITypeDescriptorContext context,
-                            IServiceProvider provider, object value) {
-        IWindowsFormsEditorService editorService =
+    public override object? EditValue(ITypeDescriptorContext? context,
+                            IServiceProvider provider, object? value) {
+        IWindowsFormsEditorService? editorService =
            provider.GetService(typeof(IWindowsFormsEditorService)) as
            IWindowsFormsEditorService;
 
@@ -337,7 +337,7 @@ public class BetterFolderBrowserDialog {
     #region Fields
 
     private bool allow_multiselect = false;
-    private OpenFileDialog ofd = null;
+    private OpenFileDialog ofd = null!;
 
     #endregion
 
@@ -511,7 +511,7 @@ public class WindowWrapper : IWin32Window {
         #region Fields
 
         private string m_ns;
-        private Assembly m_asmb;
+        private Assembly? m_asmb;
 
         #endregion
 

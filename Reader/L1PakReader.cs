@@ -6,9 +6,9 @@ using static L1MapViewer.Other.Struct;
 namespace L1MapViewer.Reader {
     class L1PakReader {
 
-        public static byte[] UnPack(string szIdxType, string szFileName) {
+        public static byte[]? UnPack(string szIdxType, string szFileName) {
 
-            L1Idx pIdx = L1IdxReader.Find(szIdxType, szFileName);
+            L1Idx? pIdx = L1IdxReader.Find(szIdxType, szFileName);
 
             if (pIdx == null) {
                 return null;

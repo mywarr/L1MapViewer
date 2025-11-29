@@ -8,6 +8,8 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <EnableWindowsTargeting>true</EnableWindowsTargeting>
+        <!-- 抑制部分 nullable 和過時 API 警告 -->
+        <NoWarn>CS8600;CS8601;CS8602;CS8603;CS8604;CS8605;CS8618;CS8619;CS8622;CS8625;CS0162;CS0168;CS0169;CS0219;CS0414;CA2022;SYSLIB0021</NoWarn>
 
         <!-- Enable auto-generation of version attributes for build script -->
         <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
@@ -21,7 +23,14 @@
 
     <ItemGroup>
       <PackageReference Include="MySql.Data" Version="9.5.0" />
-      <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.0" />
+    </ItemGroup>
+
+    <!-- 排除 tests 資料夾不發布 -->
+    <ItemGroup>
+      <Content Remove="tests\**" />
+      <Content Include="tests\assets\8100\7fff8000.s32" />
+      <None Remove="tests\**" />
+      <Compile Remove="tests\**" />
     </ItemGroup>
 
 </Project>

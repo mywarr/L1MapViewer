@@ -9,8 +9,8 @@ namespace L1MapViewer.Models
     /// </summary>
     public class S32FileItem
     {
-        public string FilePath { get; set; }
-        public string DisplayName { get; set; }
+        public string FilePath { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
         public Struct.L1MapSeg SegInfo { get; set; }
         public bool IsChecked { get; set; } = true;
 
@@ -38,7 +38,7 @@ namespace L1MapViewer.Models
         public Dictionary<int, TileInfo> UsedTiles { get; set; } = new Dictionary<int, TileInfo>();
 
         // 保存原始文件內容，用於安全保存
-        public byte[] OriginalFileData { get; set; }
+        public byte[] OriginalFileData { get; set; } = Array.Empty<byte>();
 
         // 記錄各層在文件中的位置
         public int Layer1Offset { get; set; }
@@ -48,7 +48,7 @@ namespace L1MapViewer.Models
         public int Layer4EndOffset { get; set; }
 
         // 第5-8層的原始資料（未解析）
-        public byte[] Layer5to8Data { get; set; }
+        public byte[] Layer5to8Data { get; set; } = Array.Empty<byte>();
 
         // 第5層 - 可透明化的圖塊 (X, Y, R, G, B)
         public List<Layer5Item> Layer5 { get; set; } = new List<Layer5Item>();
@@ -63,7 +63,7 @@ namespace L1MapViewer.Models
         public List<Layer8Item> Layer8 { get; set; } = new List<Layer8Item>();
 
         // 檔案路徑和 SegInfo
-        public string FilePath { get; set; }
+        public string FilePath { get; set; } = string.Empty;
         public Struct.L1MapSeg SegInfo { get; set; }
 
         // 是否已修改
@@ -119,7 +119,7 @@ namespace L1MapViewer.Models
     /// </summary>
     public class Layer7Item
     {
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
         public byte X { get; set; }
         public byte Y { get; set; }
         public ushort TargetMapId { get; set; }
@@ -156,7 +156,7 @@ namespace L1MapViewer.Models
     {
         public int TileId { get; set; }
         public int IndexId { get; set; }
-        public System.Drawing.Bitmap Thumbnail { get; set; }
+        public System.Drawing.Bitmap? Thumbnail { get; set; }
         public int UsageCount { get; set; }
     }
 
@@ -165,7 +165,7 @@ namespace L1MapViewer.Models
     /// </summary>
     public class SelectedCell
     {
-        public S32Data S32Data { get; set; }
+        public S32Data S32Data { get; set; } = null!;
         public int LocalX { get; set; }
         public int LocalY { get; set; }
     }
@@ -177,9 +177,9 @@ namespace L1MapViewer.Models
     {
         public int RelativeX { get; set; }
         public int RelativeY { get; set; }
-        public TileCell Layer1Cell1 { get; set; }
-        public TileCell Layer1Cell2 { get; set; }
-        public MapAttribute Layer3Attr { get; set; }
+        public TileCell? Layer1Cell1 { get; set; }
+        public TileCell? Layer1Cell2 { get; set; }
+        public MapAttribute? Layer3Attr { get; set; }
         public List<CopiedObjectTile> Layer4Objects { get; set; } = new List<CopiedObjectTile>();
     }
 
@@ -202,7 +202,7 @@ namespace L1MapViewer.Models
     /// </summary>
     public class UndoAction
     {
-        public string Description { get; set; }
+        public string Description { get; set; } = string.Empty;
         public List<UndoObjectInfo> AddedObjects { get; set; } = new List<UndoObjectInfo>();
         public List<UndoObjectInfo> RemovedObjects { get; set; } = new List<UndoObjectInfo>();
         public List<UndoLayer7Info> RemovedLayer7Items { get; set; } = new List<UndoLayer7Info>();
@@ -213,7 +213,7 @@ namespace L1MapViewer.Models
     /// </summary>
     public class UndoObjectInfo
     {
-        public string S32FilePath { get; set; }
+        public string S32FilePath { get; set; } = string.Empty;
         public int LocalX { get; set; }
         public int LocalY { get; set; }
         public int GroupId { get; set; }
@@ -227,8 +227,8 @@ namespace L1MapViewer.Models
     /// </summary>
     public class UndoLayer7Info
     {
-        public string S32FilePath { get; set; }
-        public string Name { get; set; }
+        public string S32FilePath { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
         public byte X { get; set; }
         public byte Y { get; set; }
         public ushort TargetMapId { get; set; }

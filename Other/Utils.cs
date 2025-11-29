@@ -47,8 +47,9 @@ namespace L1MapViewer.Other {
         public static string GetParentDirectoryPath(string folderPath, int levels) {
             string result = folderPath;
             for (int i = 0; i < levels; i++) {
-                if (Directory.GetParent(result) != null) {
-                    result = Directory.GetParent(result).FullName;
+                var parent = Directory.GetParent(result);
+                if (parent != null) {
+                    result = parent.FullName;
                 } else {
                     return result;
                 }
@@ -64,7 +65,7 @@ namespace L1MapViewer.Other {
             } catch {
                 arrayList.Sort();
             }
-            return arrayList.ToArray();
+            return arrayList.ToArray()!;
         }
         //排序 (由大到小)
         public static object[] SortDesc(ICollection collection) {
@@ -74,11 +75,11 @@ namespace L1MapViewer.Other {
             } catch {
                 arrayList.Sort();
             }
-            return arrayList.ToArray();
+            return arrayList.ToArray()!;
         }
         //網路上找的
         private class TeamNameComparer : IComparer {
-            public int Compare(object x, object y) {
+            public int Compare(object? x, object? y) {
 
                 if (x == null || y == null) {
                     throw new ArgumentException("Parameters can't be null");
@@ -145,7 +146,7 @@ namespace L1MapViewer.Other {
 
         //網路上找的
         private class TeamNameComparer2 : IComparer {
-            public int Compare(object x, object y) {
+            public int Compare(object? x, object? y) {
 
                 if (x == null || y == null) {
                     throw new ArgumentException("Parameters can't be null");

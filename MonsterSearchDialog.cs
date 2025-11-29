@@ -7,13 +7,13 @@ namespace L1FlyMapViewer
 {
     public class MonsterSearchDialog : Form
     {
-        private TextBox txtSearch;
-        private ListBox lstMonsters;
-        private Button btnConfirm;
-        private Button btnCancel;
+        private TextBox txtSearch = null!;
+        private ListBox lstMonsters = null!;
+        private Button btnConfirm = null!;
+        private Button btnCancel = null!;
 
         public int SelectedMonsterId { get; private set; }
-        public string SelectedMonsterName { get; private set; }
+        public string SelectedMonsterName { get; private set; } = string.Empty;
 
         public MonsterSearchDialog()
         {
@@ -106,7 +106,7 @@ namespace L1FlyMapViewer
             }
         }
 
-        private void TxtSearch_TextChanged(object sender, EventArgs e)
+        private void TxtSearch_TextChanged(object? sender, EventArgs e)
         {
             LoadMonsters(txtSearch.Text);
         }
@@ -125,7 +125,7 @@ namespace L1FlyMapViewer
         private class MonsterItem
         {
             public int Id { get; set; }
-            public string Name { get; set; }
+            public string Name { get; set; } = string.Empty;
 
             public override string ToString()
             {

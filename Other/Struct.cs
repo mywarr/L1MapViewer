@@ -20,12 +20,12 @@ namespace L1MapViewer.Other {
             }
             public IdxType nType;      //idx檔案的結構類型
             public int nPosition;            //在pak檔的開始位置
-            public string szFileName;        //檔案名
+            public string szFileName = string.Empty;        //檔案名
             public int nSize;                //檔案大小
             public int nCompressSize;        //壓縮後大小
             public int nCompressType;        //壓縮方式
-            public string szIdxFullName;     //idx檔案的完整路徑
-            public string szPakFullName;     //pak檔案的完整路徑
+            public string szIdxFullName = string.Empty;     //idx檔案的完整路徑
+            public string szPakFullName = string.Empty;     //pak檔案的完整路徑
             public bool isDesEncode;         //是否有DES加密(通常只有text有加密)
         }
 
@@ -36,7 +36,7 @@ namespace L1MapViewer.Other {
                 szFullDirName = fullDirName;
             }
             public string szMapId;               //地圖編號
-            public string szName;                //地圖名稱
+            public string szName = string.Empty;                //地圖名稱
             public string szFullDirName;         //地圖檔資料夾的路徑
             public int nMinBlockX = 0xFFFF;      //最小地圖檔區塊座標X
             public int nMinBlockY = 0xFFFF;      //最小地圖檔區塊座標Y

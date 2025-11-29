@@ -10,7 +10,7 @@ namespace L1MapViewer.Reader {
     class L1IdxReader {
 
         //讀取指定檔案的idx資料
-        public static L1Idx Find(string szIdxType, string szFileName) {
+        public static L1Idx? Find(string szIdxType, string szFileName) {
             if (string.IsNullOrEmpty(szFileName)) {
                 return null;
             }

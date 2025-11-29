@@ -10,8 +10,8 @@ namespace L1MapViewer.Helper
 {
     public static class DatabaseHelper
     {
-        private static MySqlConnection currentConnection;
-        private static string connectionString;
+        private static MySqlConnection? currentConnection;
+        private static string? connectionString;
         private static string jsonFilePath = Path.Combine(Path.GetTempPath(), "mapviewer_db_connections.json");
         private static string lastUsedFilePath = Path.Combine(Path.GetTempPath(), "mapviewer_last_connection.txt");
 
@@ -28,7 +28,7 @@ namespace L1MapViewer.Helper
         // 取得目前的連線
         public static MySqlConnection GetConnection()
         {
-            if (!IsConnected)
+            if (!IsConnected || currentConnection == null)
             {
                 throw new InvalidOperationException("資料庫未連線");
             }
@@ -248,7 +248,7 @@ namespace L1MapViewer.Helper
         }
 
         // 讀取最後使用的連線名稱
-        public static string LoadLastUsedConnection()
+        public static string? LoadLastUsedConnection()
         {
             try
             {

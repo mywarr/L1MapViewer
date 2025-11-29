@@ -6,14 +6,14 @@ namespace L1FlyMapViewer
 {
     public class CopySettingsDialog : Form
     {
-        private CheckBox chkLayer1;
-        private CheckBox chkLayer2;
-        private CheckBox chkLayer3;
-        private CheckBox chkLayer4;
-        private CheckBox chkLayer5to8;
-        private Button btnOK;
-        private Button btnCancel;
-        private Label lblDescription;
+        private CheckBox chkLayer1 = null!;
+        private CheckBox chkLayer2 = null!;
+        private CheckBox chkLayer3 = null!;
+        private CheckBox chkLayer4 = null!;
+        private CheckBox chkLayer5to8 = null!;
+        private Button btnOK = null!;
+        private Button btnCancel = null!;
+        private Label lblDescription = null!;
 
         public bool CopyLayer1 { get; private set; }
         public bool CopyLayer2 { get; private set; }
@@ -128,7 +128,7 @@ namespace L1FlyMapViewer
             });
         }
 
-        private void BtnOK_Click(object sender, EventArgs e)
+        private void BtnOK_Click(object? sender, EventArgs e)
         {
             if (!chkLayer1.Checked && !chkLayer2.Checked && !chkLayer3.Checked && !chkLayer4.Checked && !chkLayer5to8.Checked)
             {

@@ -14,7 +14,7 @@ namespace L1MapViewer.Helper
         /// <summary>
         /// 根據遊戲座標找到對應的 S32Data
         /// </summary>
-        public static S32Data GetS32DataByGameCoords(int gameX, int gameY, Dictionary<string, S32Data> allS32DataDict)
+        public static S32Data? GetS32DataByGameCoords(int gameX, int gameY, Dictionary<string, S32Data> allS32DataDict)
         {
             foreach (var s32Data in allS32DataDict.Values)
             {
@@ -30,7 +30,7 @@ namespace L1MapViewer.Helper
         /// <summary>
         /// 螢幕座標轉換為遊戲座標
         /// </summary>
-        public static (int gameX, int gameY, S32Data s32Data, int localX, int localY) ScreenToGameCoords(
+        public static (int gameX, int gameY, S32Data? s32Data, int localX, int localY) ScreenToGameCoords(
             int screenX, int screenY,
             Dictionary<string, S32Data> allS32DataDict)
         {

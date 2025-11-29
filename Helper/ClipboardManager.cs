@@ -22,7 +22,7 @@ namespace L1MapViewer.Helper
 
         // 狀態
         public bool HasClipboardData => CellClipboard.Count > 0;
-        public string SourceMapId { get; private set; }
+        public string SourceMapId { get; private set; } = string.Empty;
 
         // 複製設定
         public bool CopyLayer1 { get; set; } = true;
@@ -42,7 +42,7 @@ namespace L1MapViewer.Helper
             Layer6Clipboard.Clear();
             Layer7Clipboard.Clear();
             Layer8Clipboard.Clear();
-            SourceMapId = null;
+            SourceMapId = null!;
         }
 
         /// <summary>
@@ -467,9 +467,9 @@ namespace L1MapViewer.Helper
     public class CopyResult
     {
         public bool Success { get; set; }
-        public string Message { get; set; }
+        public string Message { get; set; } = string.Empty;
         public int CellCount { get; set; }
-        public string LayerInfo { get; set; }
+        public string LayerInfo { get; set; } = string.Empty;
     }
 
     /// <summary>
@@ -478,10 +478,10 @@ namespace L1MapViewer.Helper
     public class PasteResult
     {
         public bool Success { get; set; }
-        public string Message { get; set; }
+        public string Message { get; set; } = string.Empty;
         public int CellCount { get; set; }
         public int SkippedCount { get; set; }
         public bool IsCrossMap { get; set; }
-        public string SourceMapId { get; set; }
+        public string SourceMapId { get; set; } = string.Empty;
     }
 }

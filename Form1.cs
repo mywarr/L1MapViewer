@@ -57,7 +57,7 @@ namespace L1FlyMapViewer
         {
             public int Id { get; set; }
             public int NpcTemplateId { get; set; }
-            public string Name { get; set; }
+            public string Name { get; set; } = string.Empty;
             public int Count { get; set; }
             public int LocX { get; set; }
             public int LocY { get; set; }
@@ -76,7 +76,7 @@ namespace L1FlyMapViewer
         private const double ZOOM_MIN = 0.1;  // 最小縮放
         private const double ZOOM_MAX = 5.0;  // 最大縮放
         private const double ZOOM_STEP = 0.2;  // 縮放步進（增大以提升性能）
-        private Image originalMapImage;  // 原始地圖圖片
+        private Image? originalMapImage;  // 原始地圖圖片
 
         public static Form1 Get() => Form1.instance;
 
@@ -86,10 +86,10 @@ namespace L1FlyMapViewer
             Form1.instance = this;
 
             // 启动时自动加载上次的资料夹
-            this.Load += Form1_Load;
+            this.Load += Form1_Load!;
 
             // 註冊滑鼠滾輪事件用於縮放
-            this.panel1.MouseWheel += Panel1_MouseWheel;
+            this.panel1.MouseWheel += Panel1_MouseWheel!;
 
             // 確保 panel1 可以接收焦點
             this.panel1.TabStop = true;
@@ -104,10 +104,10 @@ namespace L1FlyMapViewer
             this.pictureBox4.SizeMode = PictureBoxSizeMode.StretchImage;
 
             // 註冊 DataGridView 的 CellFormatting 事件，確保顏色格保持原色
-            this.dataGridViewMonsters.CellFormatting += DataGridViewMonsters_CellFormatting;
+            this.dataGridViewMonsters.CellFormatting += DataGridViewMonsters_CellFormatting!;
         }
 
-        private void Form1_Load(object sender, EventArgs e)
+        private void Form1_Load(object? sender, EventArgs e)
         {
             string iniPath = Path.GetTempPath() + "mapviewer.ini";
             if (File.Exists(iniPath))
@@ -387,7 +387,7 @@ namespace L1FlyMapViewer
         }
 
         // 滑鼠滾輪縮放地圖（需按住 Ctrl 鍵）
-        private void Panel1_MouseWheel(object sender, MouseEventArgs e)
+        private void Panel1_MouseWheel(object? sender, MouseEventArgs e)
         {
             // 檢查是否按住 Ctrl 鍵
             if (Control.ModifierKeys != Keys.Control)
@@ -1479,7 +1479,7 @@ namespace L1FlyMapViewer
         }
 
         // DataGridView 格式化事件 - 確保顏色格保持原色
-        private void DataGridViewMonsters_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        private void DataGridViewMonsters_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
         {
             // 只處理顏色列
             if (dataGridViewMonsters.Columns[e.ColumnIndex].Name == "color")
