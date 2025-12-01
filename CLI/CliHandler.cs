@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using L1MapViewer.Helper;
 using L1MapViewer.Models;
 
 namespace L1MapViewer.CLI
@@ -44,6 +45,8 @@ namespace L1MapViewer.CLI
                         return CmdLayer4(cmdArgs);
                     case "l5":
                         return CmdLayer5(cmdArgs);
+                    case "l5check":
+                        return CmdLayer5Check(cmdArgs);
                     case "l6":
                         return CmdLayer6(cmdArgs);
                     case "l7":
@@ -91,6 +94,7 @@ L1MapViewer CLI - S32 檔案解析工具
   l3 <s32檔案> [x] [y]        顯示第三層（屬性）資訊
   l4 <s32檔案> [--groups]     顯示第四層（物件）資訊
   l5 <s32檔案>                顯示第五層（透明圖塊）資訊
+  l5check <s32檔案或資料夾> [-r N]  檢查 Layer5 異常（-r 指定檢查半徑，預設1）
   l6 <s32檔案>                顯示第六層（使用的 TileId）
   l7 <s32檔案>                顯示第七層（傳送點）資訊
   l8 <s32檔案>                顯示第八層（特效）資訊
@@ -410,6 +414,94 @@ L1MapViewer CLI - S32 檔案解析工具
             }
 
             return 0;
+        }
+
+        /// <summary>
+        /// l5check 命令 - 檢查 Layer5 異常
+        /// </summary>
+        private static int CmdLayer5Check(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.WriteLine("用法: -cli l5check <s32檔案或資料夾> [-r N]");
+                Console.WriteLine("  檢查 Layer5 的 ObjectIndex 是否有對應的 Layer4 GroupId");
+                Console.WriteLine("  以及該格周圍 N 格內是否有對應 GroupId 的物件");
+                Console.WriteLine("  -r N: 檢查半徑，預設為 1（周圍一格）");
+                return 1;
+            }
+
+            string path = args[0];
+            int radius = 1;
+
+            // 解析 -r 參數
+            for (int i = 1; i < args.Length - 1; i++)
+            {
+                if (args[i] == "-r" && int.TryParse(args[i + 1], out int r))
+                {
+                    radius = r;
+                    break;
+                }
+            }
+
+            List<string> s32FilePaths = new List<string>();
+
+            if (File.Exists(path))
+            {
+                s32FilePaths.Add(path);
+            }
+            else if (Directory.Exists(path))
+            {
+                s32FilePaths.AddRange(Directory.GetFiles(path, "*.s32"));
+            }
+            else
+            {
+                Console.WriteLine($"檔案或資料夾不存在: {path}");
+                return 1;
+            }
+
+            if (s32FilePaths.Count == 0)
+            {
+                Console.WriteLine($"找不到 S32 檔案");
+                return 1;
+            }
+
+            Console.WriteLine($"=== Layer5 異常檢查 ===");
+            Console.WriteLine($"檔案數: {s32FilePaths.Count}");
+            Console.WriteLine($"檢查半徑: {radius} 格");
+            Console.WriteLine();
+
+            // 載入所有 S32 檔案
+            var allS32 = new Dictionary<string, S32Data>();
+            foreach (var file in s32FilePaths)
+            {
+                allS32[file] = S32Parser.ParseFile(file);
+            }
+
+            // 使用共用檢查邏輯
+            var invalidItems = Layer5Checker.Check(allS32, radius);
+
+            // 按檔案分組輸出
+            var groupedByFile = invalidItems.GroupBy(x => x.FilePath);
+            foreach (var group in groupedByFile)
+            {
+                Console.WriteLine($"[{Path.GetFileName(group.Key)}] 發現 {group.Count()} 個異常:");
+                foreach (var result in group)
+                {
+                    Console.WriteLine($"  [{result.ItemIndex}] X={result.Item.X}, Y={result.Item.Y}, ObjIdx={result.Item.ObjectIndex}, Type={result.Item.Type} - {result.Reason}");
+                }
+                Console.WriteLine();
+            }
+
+            if (invalidItems.Count == 0)
+            {
+                Console.WriteLine("沒有發現 Layer5 異常！");
+            }
+            else
+            {
+                Console.WriteLine($"總計: {invalidItems.Count} 個異常");
+            }
+
+            return invalidItems.Count > 0 ? 1 : 0;
         }
 
         /// <summary>
