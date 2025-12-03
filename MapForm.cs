@@ -553,11 +553,6 @@ namespace L1FlyMapViewer
                         // 精確檢查是否在選取的格子內
                         if (selectedGlobalCells.Contains((objGlobalL1X, objGlobalL3Y)))
                         {
-                            // 檢查群組篩選
-                            if (_editState.IsFilteringLayer4Groups && _editState.SelectedLayer4Groups.Count > 0 &&
-                                !_editState.SelectedLayer4Groups.Contains(obj.GroupId))
-                                continue;
-
                             // obj.X 本身就是 Layer1 局部座標 (0-127)
                             int objGlobalLayer1X = segStartX * 2 + obj.X;
                             int objGlobalY = segStartY + obj.Y;
@@ -3413,7 +3408,6 @@ namespace L1FlyMapViewer
             _editState.UndoHistory.Clear();
             _editState.RedoHistory.Clear();
             _editState.SelectedLayer4Groups.Clear();
-            _editState.IsFilteringLayer4Groups = false;
             // hasLayer4Clipboard 也保留，不清除
             isLayer4CopyMode = false;
             selectedRegion = new Rectangle();
@@ -4995,12 +4989,6 @@ namespace L1FlyMapViewer
                 if (showLayer4)
                 {
                     var sortedObjects = s32Data.Layer4.OrderBy(o => o.Layer).ToList();
-
-                    // 如果有篩選條件，只渲染選中的群組
-                    if (_editState.IsFilteringLayer4Groups && _editState.SelectedLayer4Groups.Count > 0)
-                    {
-                        sortedObjects = sortedObjects.Where(o => _editState.SelectedLayer4Groups.Contains(o.GroupId)).ToList();
-                    }
 
                     foreach (var obj in sortedObjects)
                     {
@@ -8028,11 +8016,6 @@ namespace L1FlyMapViewer
                         // 精確檢查是否在選取的格子內
                         if (selectedGlobalCells.Contains((objGlobalX, objGlobalY)))
                         {
-                            // 檢查群組篩選
-                            if (_editState.IsFilteringLayer4Groups && _editState.SelectedLayer4Groups.Count > 0 &&
-                                !_editState.SelectedLayer4Groups.Contains(obj.GroupId))
-                                continue;
-
                             // 避免重複加入
                             if (!objectsToDeleteByS32.ContainsKey(s32Data))
                             {
@@ -8242,12 +8225,6 @@ namespace L1FlyMapViewer
         {
             // 找出該格子的所有物件
             var objectsAtCell = currentS32Data.Layer4.Where(o => o.X == cellX && o.Y == cellY).ToList();
-
-            // 如果有選擇群組，只刪除選中群組的物件
-            if (_editState.IsFilteringLayer4Groups && _editState.SelectedLayer4Groups.Count > 0)
-            {
-                objectsAtCell = objectsAtCell.Where(o => _editState.SelectedLayer4Groups.Contains(o.GroupId)).ToList();
-            }
 
             if (objectsAtCell.Count == 0)
             {
@@ -10371,7 +10348,6 @@ namespace L1FlyMapViewer
         {
             lvLayer4Groups.Items.Clear();
             _editState.SelectedLayer4Groups.Clear();
-            _editState.IsFilteringLayer4Groups = false;
 
             if (s32Data == null || s32Data.Layer4 == null)
                 return;
@@ -10621,12 +10597,6 @@ namespace L1FlyMapViewer
             {
                 _editState.SelectedLayer4Groups.Remove(groupId);
             }
-
-            // 只要有任何勾選就啟用篩選
-            _editState.IsFilteringLayer4Groups = _editState.SelectedLayer4Groups.Count > 0;
-
-            // 重新渲染地圖
-            RenderS32Map();
         }
 
         // 更新群組縮圖列表（顯示所有已載入 S32 的群組）
@@ -11131,7 +11101,6 @@ namespace L1FlyMapViewer
                     _editState.SelectedLayer4Groups.Add(info.GroupId);
                 }
             }
-            _editState.IsFilteringLayer4Groups = _editState.SelectedLayer4Groups.Count > 0;
 
             // 更新狀態列
             if (_editState.SelectedLayer4Groups.Count > 0)
@@ -11525,6 +11494,18 @@ namespace L1FlyMapViewer
                 menu.Items.Add(new ToolStripSeparator());
                 menu.Items.Add(deleteItem);
 
+                // 變更群組 ID 選項
+                menu.Items.Add(new ToolStripSeparator());
+
+                ToolStripMenuItem changeIdItem = new ToolStripMenuItem($"變更群組 {info.GroupId} 的 ID...");
+                changeIdItem.Click += (s, ev) => ChangeGroupId(selectedInfos, false);
+
+                ToolStripMenuItem autoNewIdItem = new ToolStripMenuItem($"自動指定新群組 ID");
+                autoNewIdItem.Click += (s, ev) => ChangeGroupId(selectedInfos, true);
+
+                menu.Items.Add(changeIdItem);
+                menu.Items.Add(autoNewIdItem);
+
                 // Layer5 設定選項（僅在透明編輯模式或有選取格子時顯示）
                 if (_editState.IsLayer5EditMode && _editState.SelectedCells.Count > 0)
                 {
@@ -11558,6 +11539,18 @@ namespace L1FlyMapViewer
                 menu.Items.Add(copyItem);
                 menu.Items.Add(new ToolStripSeparator());
                 menu.Items.Add(deleteItem);
+
+                // 變更群組 ID 選項
+                menu.Items.Add(new ToolStripSeparator());
+
+                ToolStripMenuItem changeIdItem = new ToolStripMenuItem($"變更 {selectedInfos.Count} 個群組的 ID...");
+                changeIdItem.Click += (s, ev) => ChangeGroupId(selectedInfos, false);
+
+                ToolStripMenuItem autoNewIdItem = new ToolStripMenuItem($"自動指定新群組 ID（各自獨立）");
+                autoNewIdItem.Click += (s, ev) => ChangeGroupId(selectedInfos, true);
+
+                menu.Items.Add(changeIdItem);
+                menu.Items.Add(autoNewIdItem);
 
                 // Layer5 設定選項（僅在透明編輯模式或有選取格子時顯示）
                 if (_editState.IsLayer5EditMode && _editState.SelectedCells.Count > 0)
@@ -11644,12 +11637,11 @@ namespace L1FlyMapViewer
             // 記錄 Undo
             PushUndoAction(undoAction);
 
-            // 清除已刪除群組的選取狀態（避免渲染時過濾不到物件）
+            // 清除已刪除群組的選取狀態
             foreach (var info in infos)
             {
                 _editState.SelectedLayer4Groups.Remove(info.GroupId);
             }
-            _editState.IsFilteringLayer4Groups = _editState.SelectedLayer4Groups.Count > 0;
 
             // 清除快取並重新渲染
             ClearS32BlockCache();
@@ -11734,9 +11726,8 @@ namespace L1FlyMapViewer
                 PushUndoAction(undoAction);
             }
 
-            // 清除已刪除群組的選取狀態（避免渲染時過濾不到物件）
+            // 清除已刪除群組的選取狀態
             _editState.SelectedLayer4Groups.Remove(groupId);
-            _editState.IsFilteringLayer4Groups = _editState.SelectedLayer4Groups.Count > 0;
 
             // 清除快取並重新渲染（RenderS32Map 內部會在完成後自動 Invalidate）
             ClearS32BlockCache();
@@ -11815,10 +11806,6 @@ namespace L1FlyMapViewer
                 }
             }
 
-            // 清除群組篩選狀態，確保所有 Layer4 物件都能正常渲染
-            _editState.SelectedLayer4Groups.Clear();
-            _editState.IsFilteringLayer4Groups = false;
-
             // 重新渲染
             ClearS32BlockCache();
             RenderS32Map();
@@ -11874,10 +11861,6 @@ namespace L1FlyMapViewer
                 }
             }
 
-            // 清除群組篩選狀態，確保所有 Layer4 物件都能正常渲染
-            _editState.SelectedLayer4Groups.Clear();
-            _editState.IsFilteringLayer4Groups = false;
-
             // 重新渲染
             ClearS32BlockCache();
             RenderS32Map();
@@ -11893,6 +11876,263 @@ namespace L1FlyMapViewer
             }
 
             this.toolStripStatusLabel1.Text = $"已移除 {removedCount} 筆 Layer5 設定";
+        }
+
+        // 變更群組 ID
+        private void ChangeGroupId(List<GroupThumbnailInfo> infos, bool autoAssign)
+        {
+            if (infos.Count == 0)
+                return;
+
+            // 收集所有涉及的 S32 檔案
+            var affectedS32Files = new HashSet<S32Data>();
+            foreach (var info in infos)
+            {
+                foreach (var (s32, obj) in info.Objects)
+                {
+                    affectedS32Files.Add(s32);
+                }
+            }
+
+            if (affectedS32Files.Count == 0)
+            {
+                MessageBox.Show("選取的群組內沒有物件。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 找出所有 S32 中的最大群組 ID
+            int maxGroupId = 0;
+            foreach (var s32 in affectedS32Files)
+            {
+                foreach (var obj in s32.Layer4)
+                {
+                    if (obj.GroupId > maxGroupId)
+                        maxGroupId = obj.GroupId;
+                }
+            }
+
+            int newGroupId;
+            if (autoAssign)
+            {
+                // 自動指定：最大 ID + 1
+                newGroupId = maxGroupId + 1;
+            }
+            else
+            {
+                // 讓使用者輸入 ID
+                string oldIds = string.Join(", ", infos.Select(i => i.GroupId).Distinct());
+                string prompt = infos.Count == 1
+                    ? $"將群組 {infos[0].GroupId} 變更為新的 ID："
+                    : $"將 {infos.Count} 個群組 ({oldIds}) 變更為同一個新 ID：";
+
+                using (var inputForm = new Form())
+                {
+                    inputForm.Text = "變更群組 ID";
+                    inputForm.Size = new Size(350, 180);
+                    inputForm.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    inputForm.MaximizeBox = false;
+                    inputForm.MinimizeBox = false;
+                    inputForm.StartPosition = FormStartPosition.CenterParent;
+
+                    Label lblPrompt = new Label
+                    {
+                        Text = prompt,
+                        Location = new Point(15, 15),
+                        Size = new Size(310, 40)
+                    };
+
+                    Label lblCurrentMax = new Label
+                    {
+                        Text = $"（目前最大群組 ID: {maxGroupId}）",
+                        Location = new Point(15, 55),
+                        Size = new Size(200, 20),
+                        ForeColor = Color.Gray
+                    };
+
+                    TextBox txtNewId = new TextBox
+                    {
+                        Location = new Point(15, 80),
+                        Size = new Size(150, 24),
+                        Text = (maxGroupId + 1).ToString()
+                    };
+
+                    Button btnOk = new Button
+                    {
+                        Text = "確定",
+                        Location = new Point(170, 100),
+                        Size = new Size(75, 28),
+                        DialogResult = DialogResult.OK
+                    };
+
+                    Button btnCancel = new Button
+                    {
+                        Text = "取消",
+                        Location = new Point(255, 100),
+                        Size = new Size(75, 28),
+                        DialogResult = DialogResult.Cancel
+                    };
+
+                    inputForm.AcceptButton = btnOk;
+                    inputForm.CancelButton = btnCancel;
+                    inputForm.Controls.AddRange(new Control[] { lblPrompt, lblCurrentMax, txtNewId, btnOk, btnCancel });
+
+                    if (inputForm.ShowDialog(this) != DialogResult.OK)
+                        return;
+
+                    if (!int.TryParse(txtNewId.Text, out newGroupId) || newGroupId < 0)
+                    {
+                        MessageBox.Show("請輸入有效的群組 ID（非負整數）", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+                }
+            }
+
+            // 建立 Undo 動作
+            var undoAction = new UndoAction
+            {
+                Description = $"變更 {infos.Count} 個群組的 ID"
+            };
+
+            int changedCount = 0;
+            var oldGroupIds = infos.Select(i => i.GroupId).ToHashSet();
+
+            // 如果是多選且自動指定，每個群組分配不同的新 ID
+            if (autoAssign && infos.Count > 1)
+            {
+                int nextId = newGroupId;
+                foreach (var info in infos)
+                {
+                    int oldId = info.GroupId;
+                    int assignedId = nextId++;
+
+                    foreach (var (s32, obj) in info.Objects)
+                    {
+                        // 記錄 Undo 資訊
+                        undoAction.RemovedObjects.Add(new UndoObjectInfo
+                        {
+                            S32FilePath = s32.FilePath,
+                            GroupId = oldId,
+                            LocalX = obj.X,
+                            LocalY = obj.Y,
+                            Layer = obj.Layer,
+                            IndexId = obj.IndexId,
+                            TileId = obj.TileId
+                        });
+
+                        // 變更 GroupId
+                        obj.GroupId = assignedId;
+                        s32.IsModified = true;
+                        changedCount++;
+
+                        // 記錄新狀態
+                        undoAction.AddedObjects.Add(new UndoObjectInfo
+                        {
+                            S32FilePath = s32.FilePath,
+                            GroupId = assignedId,
+                            LocalX = obj.X,
+                            LocalY = obj.Y,
+                            Layer = obj.Layer,
+                            IndexId = obj.IndexId,
+                            TileId = obj.TileId
+                        });
+                    }
+
+                    // 同時更新 Layer5 中的 ObjectIndex
+                    foreach (var s32 in affectedS32Files)
+                    {
+                        foreach (var l5Item in s32.Layer5)
+                        {
+                            if (l5Item.ObjectIndex == oldId)
+                            {
+                                l5Item.ObjectIndex = (ushort)assignedId;
+                            }
+                        }
+                    }
+                }
+
+                _editState.PushUndoAction(undoAction);
+
+                // 重新渲染
+                ClearS32BlockCache();
+                RenderS32Map();
+
+                // 更新群組列表
+                if (_editState.SelectedCells.Count > 0)
+                {
+                    var firstCell = _editState.SelectedCells[0];
+                    UpdateNearbyGroupThumbnails(firstCell.S32Data, firstCell.LocalX, firstCell.LocalY, 10);
+                }
+
+                this.toolStripStatusLabel1.Text = $"已將 {infos.Count} 個群組變更為新 ID（{newGroupId} ~ {nextId - 1}），共 {changedCount} 個物件";
+            }
+            else
+            {
+                // 單選或多選合併為同一 ID
+                foreach (var info in infos)
+                {
+                    int oldId = info.GroupId;
+
+                    foreach (var (s32, obj) in info.Objects)
+                    {
+                        // 記錄 Undo 資訊
+                        undoAction.RemovedObjects.Add(new UndoObjectInfo
+                        {
+                            S32FilePath = s32.FilePath,
+                            GroupId = oldId,
+                            LocalX = obj.X,
+                            LocalY = obj.Y,
+                            Layer = obj.Layer,
+                            IndexId = obj.IndexId,
+                            TileId = obj.TileId
+                        });
+
+                        // 變更 GroupId
+                        obj.GroupId = newGroupId;
+                        s32.IsModified = true;
+                        changedCount++;
+
+                        // 記錄新狀態
+                        undoAction.AddedObjects.Add(new UndoObjectInfo
+                        {
+                            S32FilePath = s32.FilePath,
+                            GroupId = newGroupId,
+                            LocalX = obj.X,
+                            LocalY = obj.Y,
+                            Layer = obj.Layer,
+                            IndexId = obj.IndexId,
+                            TileId = obj.TileId
+                        });
+                    }
+
+                    // 同時更新 Layer5 中的 ObjectIndex
+                    foreach (var s32 in affectedS32Files)
+                    {
+                        foreach (var l5Item in s32.Layer5)
+                        {
+                            if (l5Item.ObjectIndex == oldId)
+                            {
+                                l5Item.ObjectIndex = (ushort)newGroupId;
+                            }
+                        }
+                    }
+                }
+
+                _editState.PushUndoAction(undoAction);
+
+                // 重新渲染
+                ClearS32BlockCache();
+                RenderS32Map();
+
+                // 更新群組列表
+                if (_editState.SelectedCells.Count > 0)
+                {
+                    var firstCell = _editState.SelectedCells[0];
+                    UpdateNearbyGroupThumbnails(firstCell.S32Data, firstCell.LocalX, firstCell.LocalY, 10);
+                }
+
+                string oldIdsStr = string.Join(", ", oldGroupIds);
+                this.toolStripStatusLabel1.Text = $"已將群組 {oldIdsStr} 變更為 {newGroupId}，共 {changedCount} 個物件";
+            }
         }
 
         // ===== 工具列按鈕事件處理 =====

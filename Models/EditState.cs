@@ -38,11 +38,6 @@ namespace L1MapViewer.Models
         public HashSet<int> SelectedLayer4Groups { get; private set; } = new HashSet<int>();
 
         /// <summary>
-        /// 是否正在過濾 Layer4 群組
-        /// </summary>
-        public bool IsFilteringLayer4Groups { get; set; }
-
-        /// <summary>
         /// 高亮顯示的 S32 資料
         /// </summary>
         public S32Data HighlightedS32Data { get; set; }
@@ -268,7 +263,6 @@ namespace L1MapViewer.Models
             SelectedCells.Clear();
             SelectedLayer4Groups.Clear();
             IsSelectingRegion = false;
-            IsFilteringLayer4Groups = false;
             SelectionChanged?.Invoke(this, EventArgs.Empty);
         }
 
