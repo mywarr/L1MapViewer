@@ -8,6 +8,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <EnableWindowsTargeting>true</EnableWindowsTargeting>
+        <ApplicationIcon>icon.ico</ApplicationIcon>
         <!-- 抑制部分 nullable 和過時 API 警告 -->
         <NoWarn>CS8600;CS8601;CS8602;CS8603;CS8604;CS8605;CS8618;CS8619;CS8622;CS8625;CS0162;CS0168;CS0169;CS0219;CS0414;CA2022;SYSLIB0021</NoWarn>
 

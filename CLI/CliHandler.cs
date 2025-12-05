@@ -75,6 +75,8 @@ namespace L1MapViewer.CLI
                         return CmdExtractTile(cmdArgs);
                     case "trim-s32":
                         return CmdTrimS32(cmdArgs);
+                    case "generate-icon":
+                        return CmdGenerateIcon(cmdArgs);
                     case "help":
                     case "-h":
                     case "--help":
@@ -1880,6 +1882,157 @@ L1MapViewer CLI - S32 檔案解析工具
             Console.WriteLine($"新的 TileId 數量: {keepCount}");
 
             return 0;
+        }
+
+        /// <summary>
+        /// 產生應用程式圖示
+        /// </summary>
+        private static int CmdGenerateIcon(string[] args)
+        {
+            string outputPath = args.Length > 0 ? args[0] : "icon.png";
+
+            Console.WriteLine($"產生圖示: {outputPath}");
+
+            using (var bmp = new Bitmap(256, 256))
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                g.Clear(Color.Transparent);
+
+                int cx = 128, cy = 128;
+                int r = 50;  // 菱形半徑（高度）
+
+                // 繪製 5 個菱形格子（十字排列）
+                DrawDiamond(g, cx, cy - r * 2, r, Color.FromArgb(74, 124, 89));     // 上 - 草地綠
+                DrawDiamond(g, cx - r * 2, cy, r, Color.FromArgb(196, 163, 90));    // 左 - 沙地黃
+                DrawDiamond(g, cx, cy, r, Color.FromArgb(60, 100, 150));            // 中 - 水藍
+                DrawDiamond(g, cx + r * 2, cy, r, Color.FromArgb(140, 100, 70));    // 右 - 土棕
+                DrawDiamond(g, cx, cy + r * 2, r, Color.FromArgb(100, 110, 100));   // 下 - 石灰
+
+                // 中間菱形加白框表示選中
+                DrawDiamondBorder(g, cx, cy, r, Color.White, 4);
+
+                // 儲存 PNG
+                bmp.Save(outputPath, ImageFormat.Png);
+                Console.WriteLine($"已產生: {outputPath}");
+
+                // 產生不同尺寸
+                string dir = Path.GetDirectoryName(outputPath);
+                string baseName = Path.GetFileNameWithoutExtension(outputPath);
+                if (string.IsNullOrEmpty(dir)) dir = ".";
+
+                int[] sizes = { 16, 32, 48, 64, 128 };
+                foreach (var s in sizes)
+                {
+                    using (var resized = new Bitmap(bmp, s, s))
+                    {
+                        string sizePath = Path.Combine(dir, $"{baseName}_{s}.png");
+                        resized.Save(sizePath, ImageFormat.Png);
+                        Console.WriteLine($"已產生: {sizePath}");
+                    }
+                }
+
+                // 產生 ICO 檔案（包含多種尺寸）
+                string icoPath = Path.Combine(dir, $"{baseName}.ico");
+                SaveAsIco(bmp, icoPath);
+                Console.WriteLine($"已產生: {icoPath}");
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// 將 Bitmap 儲存為 ICO 檔案（包含 16, 32, 48, 256 尺寸）
+        /// </summary>
+        private static void SaveAsIco(Bitmap source, string icoPath)
+        {
+            int[] sizes = { 16, 32, 48, 256 };
+
+            using (var ms = new MemoryStream())
+            using (var bw = new BinaryWriter(ms))
+            {
+                // ICO Header
+                bw.Write((short)0);      // Reserved
+                bw.Write((short)1);      // Type: 1 = ICO
+                bw.Write((short)sizes.Length);  // Number of images
+
+                // 計算資料偏移量
+                int headerSize = 6 + (16 * sizes.Length);  // 6 bytes header + 16 bytes per entry
+                int currentOffset = headerSize;
+
+                // 準備所有圖片的 PNG 資料
+                var pngDataList = new List<byte[]>();
+                foreach (var size in sizes)
+                {
+                    using (var resized = new Bitmap(source, size, size))
+                    using (var pngMs = new MemoryStream())
+                    {
+                        resized.Save(pngMs, ImageFormat.Png);
+                        pngDataList.Add(pngMs.ToArray());
+                    }
+                }
+
+                // 寫入每個圖片的目錄條目
+                for (int i = 0; i < sizes.Length; i++)
+                {
+                    int size = sizes[i];
+                    byte[] pngData = pngDataList[i];
+
+                    bw.Write((byte)(size == 256 ? 0 : size));  // Width (0 = 256)
+                    bw.Write((byte)(size == 256 ? 0 : size));  // Height (0 = 256)
+                    bw.Write((byte)0);       // Color palette
+                    bw.Write((byte)0);       // Reserved
+                    bw.Write((short)1);      // Color planes
+                    bw.Write((short)32);     // Bits per pixel
+                    bw.Write(pngData.Length); // Size of image data
+                    bw.Write(currentOffset);  // Offset to image data
+
+                    currentOffset += pngData.Length;
+                }
+
+                // 寫入所有圖片資料
+                foreach (var pngData in pngDataList)
+                {
+                    bw.Write(pngData);
+                }
+
+                File.WriteAllBytes(icoPath, ms.ToArray());
+            }
+        }
+
+        private static void DrawDiamond(Graphics g, int cx, int cy, int r, Color fillColor)
+        {
+            // r 是高度半徑，寬度是 2 倍（等角視角）
+            var points = new Point[]
+            {
+                new Point(cx, cy - r),      // 上
+                new Point(cx + r * 2, cy),  // 右
+                new Point(cx, cy + r),      // 下
+                new Point(cx - r * 2, cy),  // 左
+            };
+
+            using (var brush = new SolidBrush(fillColor))
+            using (var pen = new Pen(Color.FromArgb(40, 40, 40), 2))
+            {
+                g.FillPolygon(brush, points);
+                g.DrawPolygon(pen, points);
+            }
+        }
+
+        private static void DrawDiamondBorder(Graphics g, int cx, int cy, int r, Color borderColor, int width)
+        {
+            var points = new Point[]
+            {
+                new Point(cx, cy - r),
+                new Point(cx + r * 2, cy),
+                new Point(cx, cy + r),
+                new Point(cx - r * 2, cy),
+            };
+
+            using (var pen = new Pen(borderColor, width))
+            {
+                g.DrawPolygon(pen, points);
+            }
         }
     }
 }

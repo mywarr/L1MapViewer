@@ -1,5 +1,6 @@
 publish
 .claude
+tests
 
 # Visual Studio 建置結果
 [Dd]ebug/
