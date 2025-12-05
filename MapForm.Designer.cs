@@ -23,8 +23,17 @@ namespace L1FlyMapViewer
 
         // 左側面板
         private Panel leftPanel;
-        public ComboBox comboBox1;
+        public ComboBox comboBox1;  // 保留給介面相容性，但隱藏
         private PictureBox miniMapPictureBox;
+
+        // 左下角 TabControl（地圖列表 / S32 檔案清單）
+        private TabControl leftTabControl;
+        private TabPage tabMapList;
+        private TabPage tabS32Files;
+        private TextBox txtMapSearch;
+        private ListBox lstMaps;
+
+        // S32 檔案清單 Tab 內容
         private Label lblS32Files;
         private Button btnS32SelectAll;
         private Button btnS32SelectNone;
@@ -146,6 +155,15 @@ namespace L1FlyMapViewer
             this.leftPanel = new Panel();
             this.comboBox1 = new ComboBox();
             this.miniMapPictureBox = new PictureBox();
+
+            // 左下角 TabControl
+            this.leftTabControl = new TabControl();
+            this.tabMapList = new TabPage();
+            this.tabS32Files = new TabPage();
+            this.txtMapSearch = new TextBox();
+            this.lstMaps = new ListBox();
+
+            // S32 檔案清單
             this.lblS32Files = new Label();
             this.btnS32SelectAll = new Button();
             this.btnS32SelectNone = new Button();
@@ -239,6 +257,9 @@ namespace L1FlyMapViewer
             this.menuStrip1.SuspendLayout();
             this.statusStrip1.SuspendLayout();
             this.leftPanel.SuspendLayout();
+            this.leftTabControl.SuspendLayout();
+            this.tabMapList.SuspendLayout();
+            this.tabS32Files.SuspendLayout();
             ((ISupportInitialize)this.miniMapPictureBox).BeginInit();
             this.tabControl1.SuspendLayout();
             this.tabMapPreview.SuspendLayout();
@@ -369,10 +390,7 @@ namespace L1FlyMapViewer
             this.leftPanel.BorderStyle = BorderStyle.FixedSingle;
             this.leftPanel.Controls.Add(this.comboBox1);
             this.leftPanel.Controls.Add(this.miniMapPictureBox);
-            this.leftPanel.Controls.Add(this.lblS32Files);
-            this.leftPanel.Controls.Add(this.btnS32SelectAll);
-            this.leftPanel.Controls.Add(this.btnS32SelectNone);
-            this.leftPanel.Controls.Add(this.lstS32Files);
+            this.leftPanel.Controls.Add(this.leftTabControl);
             this.leftPanel.Dock = DockStyle.Left;
             this.leftPanel.Location = new Point(0, 24);
             this.leftPanel.Name = "leftPanel";
@@ -380,15 +398,16 @@ namespace L1FlyMapViewer
             this.leftPanel.TabIndex = 2;
 
             //
-            // comboBox1
+            // comboBox1 (隱藏，保留給介面相容性)
             //
             this.comboBox1.FormattingEnabled = true;
             this.comboBox1.Location = new Point(10, 10);
             this.comboBox1.Name = "comboBox1";
             this.comboBox1.Size = new Size(260, 23);
             this.comboBox1.TabIndex = 0;
-            this.comboBox1.DropDownStyle = ComboBoxStyle.DropDown;  // 可輸入文字
+            this.comboBox1.DropDownStyle = ComboBoxStyle.DropDown;
             this.comboBox1.MaxDropDownItems = 20;
+            this.comboBox1.Visible = false;  // 隱藏
             this.comboBox1.SelectedIndexChanged += new System.EventHandler(this.comboBox1_SelectedIndexChanged);
             this.comboBox1.TextChanged += new System.EventHandler(this.comboBox1_TextChanged);
 
@@ -397,9 +416,9 @@ namespace L1FlyMapViewer
             //
             this.miniMapPictureBox.BackColor = Color.Black;
             this.miniMapPictureBox.BorderStyle = BorderStyle.FixedSingle;
-            this.miniMapPictureBox.Location = new Point(5, 40);
+            this.miniMapPictureBox.Location = new Point(5, 5);
             this.miniMapPictureBox.Name = "miniMapPictureBox";
-            this.miniMapPictureBox.Size = new Size(270, 270);
+            this.miniMapPictureBox.Size = new Size(268, 268);
             this.miniMapPictureBox.SizeMode = PictureBoxSizeMode.Normal;
             this.miniMapPictureBox.TabIndex = 1;
             this.miniMapPictureBox.TabStop = true;
@@ -412,11 +431,69 @@ namespace L1FlyMapViewer
             this.miniMapPictureBox.KeyDown += new KeyEventHandler(this.miniMapPictureBox_KeyDown);
 
             //
+            // leftTabControl
+            //
+            this.leftTabControl.Controls.Add(this.tabMapList);
+            this.leftTabControl.Controls.Add(this.tabS32Files);
+            this.leftTabControl.Location = new Point(5, 280);
+            this.leftTabControl.Name = "leftTabControl";
+            this.leftTabControl.SelectedIndex = 0;
+            this.leftTabControl.Size = new Size(268, 365);
+            this.leftTabControl.TabIndex = 2;
+
+            //
+            // tabMapList (地圖列表)
+            //
+            this.tabMapList.Controls.Add(this.txtMapSearch);
+            this.tabMapList.Controls.Add(this.lstMaps);
+            this.tabMapList.Location = new Point(4, 24);
+            this.tabMapList.Name = "tabMapList";
+            this.tabMapList.Padding = new Padding(3);
+            this.tabMapList.Size = new Size(260, 337);
+            this.tabMapList.TabIndex = 0;
+            this.tabMapList.Text = "地圖列表";
+            this.tabMapList.UseVisualStyleBackColor = true;
+
+            //
+            // txtMapSearch
+            //
+            this.txtMapSearch.Location = new Point(3, 3);
+            this.txtMapSearch.Name = "txtMapSearch";
+            this.txtMapSearch.Size = new Size(254, 23);
+            this.txtMapSearch.TabIndex = 0;
+            this.txtMapSearch.PlaceholderText = "搜尋地圖 (ID 或名稱)...";
+            this.txtMapSearch.TextChanged += new System.EventHandler(this.txtMapSearch_TextChanged);
+
+            //
+            // lstMaps (地圖列表 ListBox)
+            //
+            this.lstMaps.Location = new Point(3, 30);
+            this.lstMaps.Name = "lstMaps";
+            this.lstMaps.Size = new Size(254, 304);
+            this.lstMaps.TabIndex = 1;
+            this.lstMaps.SelectedIndexChanged += new System.EventHandler(this.lstMaps_SelectedIndexChanged);
+
+            //
+            // tabS32Files (S32 檔案清單)
+            //
+            this.tabS32Files.Controls.Add(this.lblS32Files);
+            this.tabS32Files.Controls.Add(this.btnS32SelectAll);
+            this.tabS32Files.Controls.Add(this.btnS32SelectNone);
+            this.tabS32Files.Controls.Add(this.lstS32Files);
+            this.tabS32Files.Location = new Point(4, 24);
+            this.tabS32Files.Name = "tabS32Files";
+            this.tabS32Files.Padding = new Padding(3);
+            this.tabS32Files.Size = new Size(260, 337);
+            this.tabS32Files.TabIndex = 1;
+            this.tabS32Files.Text = "S32 檔案";
+            this.tabS32Files.UseVisualStyleBackColor = true;
+
+            //
             // lblS32Files
             //
-            this.lblS32Files.Location = new Point(5, 320);
+            this.lblS32Files.Location = new Point(3, 3);
             this.lblS32Files.Name = "lblS32Files";
-            this.lblS32Files.Size = new Size(150, 20);
+            this.lblS32Files.Size = new Size(100, 20);
             this.lblS32Files.TabIndex = 2;
             this.lblS32Files.Text = "S32 檔案清單";
             this.lblS32Files.TextAlign = ContentAlignment.MiddleLeft;
@@ -424,7 +501,7 @@ namespace L1FlyMapViewer
             //
             // btnS32SelectAll
             //
-            this.btnS32SelectAll.Location = new Point(160, 320);
+            this.btnS32SelectAll.Location = new Point(150, 3);
             this.btnS32SelectAll.Name = "btnS32SelectAll";
             this.btnS32SelectAll.Size = new Size(50, 20);
             this.btnS32SelectAll.TabIndex = 20;
@@ -434,7 +511,7 @@ namespace L1FlyMapViewer
             //
             // btnS32SelectNone
             //
-            this.btnS32SelectNone.Location = new Point(215, 320);
+            this.btnS32SelectNone.Location = new Point(205, 3);
             this.btnS32SelectNone.Name = "btnS32SelectNone";
             this.btnS32SelectNone.Size = new Size(50, 20);
             this.btnS32SelectNone.TabIndex = 21;
@@ -444,11 +521,11 @@ namespace L1FlyMapViewer
             //
             // lstS32Files
             //
-            this.lstS32Files.Location = new Point(5, 345);
+            this.lstS32Files.Location = new Point(3, 26);
             this.lstS32Files.Name = "lstS32Files";
-            this.lstS32Files.Size = new Size(260, 300);
+            this.lstS32Files.Size = new Size(254, 305);
             this.lstS32Files.TabIndex = 3;
-            this.lstS32Files.CheckOnClick = false;  // 只有點擊 checkbox 才會切換勾選狀態
+            this.lstS32Files.CheckOnClick = false;
             this.lstS32Files.SelectedIndexChanged += new System.EventHandler(this.lstS32Files_SelectedIndexChanged);
             this.lstS32Files.ItemCheck += new ItemCheckEventHandler(this.lstS32Files_ItemCheck);
             this.lstS32Files.MouseUp += new MouseEventHandler(this.lstS32Files_MouseUp);
@@ -1364,6 +1441,10 @@ namespace L1FlyMapViewer
             this.menuStrip1.PerformLayout();
             this.statusStrip1.ResumeLayout(false);
             this.statusStrip1.PerformLayout();
+            this.tabS32Files.ResumeLayout(false);
+            this.tabMapList.ResumeLayout(false);
+            this.tabMapList.PerformLayout();
+            this.leftTabControl.ResumeLayout(false);
             this.leftPanel.ResumeLayout(false);
             this.leftPanel.PerformLayout();
             ((ISupportInitialize)this.miniMapPictureBox).EndInit();

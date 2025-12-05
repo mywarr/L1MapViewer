@@ -73,6 +73,8 @@ namespace L1MapViewer.CLI
                         return CmdListMaps(cmdArgs);
                     case "extract-tile":
                         return CmdExtractTile(cmdArgs);
+                    case "trim-s32":
+                        return CmdTrimS32(cmdArgs);
                     case "help":
                     case "-h":
                     case "--help":
@@ -1733,6 +1735,138 @@ L1MapViewer CLI - S32 檔案解析工具
 
                 File.WriteAllBytes(filePath, ms.ToArray());
             }
+        }
+
+        /// <summary>
+        /// 裁減 S32 檔案，只保留前 N 個 TileId
+        /// 用法: trim-s32 <來源s32> <輸出s32> <保留數量> [--skip TileId1,TileId2,...]
+        /// </summary>
+        private static int CmdTrimS32(string[] args)
+        {
+            if (args.Length < 3)
+            {
+                Console.WriteLine("用法: trim-s32 <來源s32> <輸出s32> <保留數量> [--skip TileId1,TileId2,...]");
+                Console.WriteLine("範例: trim-s32 source.s32 output.s32 10");
+                Console.WriteLine("範例: trim-s32 source.s32 output.s32 25 --skip 7137");
+                return 1;
+            }
+
+            string srcPath = args[0];
+            string dstPath = args[1];
+            if (!int.TryParse(args[2], out int keepCount) || keepCount <= 0)
+            {
+                Console.WriteLine("保留數量必須是正整數");
+                return 1;
+            }
+
+            // 解析 --skip 參數
+            HashSet<int> skipTileIds = new HashSet<int>();
+            for (int i = 3; i < args.Length; i++)
+            {
+                if (args[i] == "--skip" && i + 1 < args.Length)
+                {
+                    string[] skipIds = args[i + 1].Split(',');
+                    foreach (var idStr in skipIds)
+                    {
+                        if (int.TryParse(idStr.Trim(), out int skipId))
+                        {
+                            skipTileIds.Add(skipId);
+                        }
+                    }
+                    i++; // 跳過下一個參數
+                }
+            }
+
+            if (!File.Exists(srcPath))
+            {
+                Console.WriteLine($"找不到來源檔案: {srcPath}");
+                return 1;
+            }
+
+            // 讀取來源 S32
+            Console.WriteLine($"讀取來源: {srcPath}");
+            S32Data s32 = S32Parser.ParseFile(srcPath);
+
+            // 取得所有使用的 TileId（從 Layer6 或 UsedTiles）
+            List<int> allTileIds = s32.Layer6.Count > 0
+                ? s32.Layer6.OrderBy(t => t).ToList()
+                : s32.UsedTiles.Keys.OrderBy(t => t).ToList();
+
+            Console.WriteLine($"原始 TileId 數量: {allTileIds.Count}");
+
+            // 先過濾掉要跳過的 TileId
+            if (skipTileIds.Count > 0)
+            {
+                Console.WriteLine($"跳過的 TileId: {string.Join(", ", skipTileIds.OrderBy(t => t))}");
+                allTileIds = allTileIds.Where(t => !skipTileIds.Contains(t)).ToList();
+                Console.WriteLine($"過濾後 TileId 數量: {allTileIds.Count}");
+            }
+
+            if (allTileIds.Count <= keepCount)
+            {
+                Console.WriteLine($"TileId 數量 ({allTileIds.Count}) 已小於等於保留數量 ({keepCount})，直接複製");
+                File.Copy(srcPath, dstPath, true);
+                return 0;
+            }
+
+            // 只保留前 N 個 TileId
+            HashSet<int> keepTileIds = new HashSet<int>(allTileIds.Take(keepCount));
+            int defaultTileId = allTileIds.First(); // 用第一個 TileId 作為替代
+
+            Console.WriteLine($"保留的 TileId: {string.Join(", ", keepTileIds.OrderBy(t => t))}");
+            Console.WriteLine($"替代 TileId: {defaultTileId}");
+
+            int layer1Replaced = 0;
+            int layer4Replaced = 0;
+
+            // 處理 Layer1 - 將非保留的 TileId 替換為預設值
+            for (int y = 0; y < 64; y++)
+            {
+                for (int x = 0; x < 128; x++)
+                {
+                    var cell = s32.Layer1[y, x];
+                    if (cell != null && cell.TileId > 0 && !keepTileIds.Contains(cell.TileId))
+                    {
+                        cell.TileId = defaultTileId;
+                        cell.IndexId = 0; // 重設 IndexId
+                        layer1Replaced++;
+                    }
+                }
+            }
+
+            // 處理 Layer4 - 移除使用非保留 TileId 的物件
+            int originalLayer4Count = s32.Layer4.Count;
+            s32.Layer4.RemoveAll(obj => obj.TileId > 0 && !keepTileIds.Contains(obj.TileId));
+            layer4Replaced = originalLayer4Count - s32.Layer4.Count;
+
+            // 清空 Layer5, Layer7, Layer8
+            int layer5Count = s32.Layer5.Count;
+            int layer7Count = s32.Layer7.Count;
+            int layer8Count = s32.Layer8.Count;
+            s32.Layer5.Clear();
+            s32.Layer7.Clear();
+            s32.Layer8.Clear();
+
+            Console.WriteLine($"Layer1 替換了 {layer1Replaced} 個格子");
+            Console.WriteLine($"Layer4 移除了 {layer4Replaced} 個物件");
+            Console.WriteLine($"Layer5 清空了 {layer5Count} 個事件");
+            Console.WriteLine($"Layer7 清空了 {layer7Count} 個傳送點");
+            Console.WriteLine($"Layer8 清空了 {layer8Count} 個特效");
+
+            // 確保輸出目錄存在
+            string dstDir = Path.GetDirectoryName(dstPath);
+            if (!string.IsNullOrEmpty(dstDir) && !Directory.Exists(dstDir))
+            {
+                Directory.CreateDirectory(dstDir);
+            }
+
+            // 寫出（S32Writer 會自動重新計算 Layer6）
+            S32Writer.Write(s32, dstPath);
+
+            Console.WriteLine($"已寫入: {dstPath}");
+            Console.WriteLine($"新的 TileId 數量: {keepCount}");
+
+            return 0;
         }
     }
 }

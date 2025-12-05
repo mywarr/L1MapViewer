@@ -2151,7 +2151,7 @@ namespace L1FlyMapViewer
                         allMapItems.Add(string.Format("{0}-{1}", key, l1Map.szName));
                     }
 
-                    // 填充 ComboBox
+                    // 填充 ComboBox（保留給相容性）
                     isFiltering = true;
                     this.comboBox1.Items.Clear();
                     this.comboBox1.BeginUpdate();
@@ -2161,6 +2161,15 @@ namespace L1FlyMapViewer
                     }
                     this.comboBox1.EndUpdate();
                     isFiltering = false;
+
+                    // 填充 lstMaps ListBox
+                    this.lstMaps.BeginUpdate();
+                    this.lstMaps.Items.Clear();
+                    foreach (var item in allMapItems)
+                    {
+                        this.lstMaps.Items.Add(item);
+                    }
+                    this.lstMaps.EndUpdate();
 
                     long uiMs = stopwatch.ElapsedMilliseconds;
 
@@ -2193,6 +2202,11 @@ namespace L1FlyMapViewer
                         // 這樣即使選擇相同的 index，也會重新載入 S32 檔案
                         this.comboBox1.SelectedIndex = -1;
                         this.comboBox1.SelectedIndex = selectedIndex;
+
+                        // 同步選擇 lstMaps
+                        isFiltering = true;  // 防止 lstMaps 再次觸發載入
+                        this.lstMaps.SelectedIndex = selectedIndex;
+                        isFiltering = false;
                     }
 
                     this.toolStripStatusLabel2.Text = $"Maps={dictionary.Count}, Files={L1MapHelper.LastTotalFileCount}";
@@ -2262,6 +2276,115 @@ namespace L1FlyMapViewer
             }
             this.comboBox1.EndUpdate();
             isFiltering = false;
+        }
+
+        // ===== 左下角 Tab: 地圖列表 =====
+
+        // 地圖搜尋（左下角 Tab）
+        private void txtMapSearch_TextChanged(object sender, EventArgs e)
+        {
+            if (isFiltering) return;
+
+            string searchText = txtMapSearch.Text.ToLower().Trim();
+
+            isFiltering = true;
+            lstMaps.BeginUpdate();
+            lstMaps.Items.Clear();
+
+            if (string.IsNullOrEmpty(searchText))
+            {
+                // 顯示所有地圖
+                foreach (var item in allMapItems)
+                {
+                    lstMaps.Items.Add(item);
+                }
+            }
+            else
+            {
+                // 過濾地圖
+                foreach (var item in allMapItems)
+                {
+                    if (item.ToLower().Contains(searchText))
+                    {
+                        lstMaps.Items.Add(item);
+                    }
+                }
+            }
+
+            lstMaps.EndUpdate();
+            isFiltering = false;
+
+            this.toolStripStatusLabel1.Text = $"找到 {lstMaps.Items.Count} 個地圖";
+        }
+
+        // 地圖列表選擇變更（左下角 Tab）
+        private void lstMaps_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (isFiltering) return;
+            if (lstMaps.SelectedItem == null) return;
+
+            string selectedMapName = lstMaps.SelectedItem.ToString();
+
+            // 取得地圖 ID
+            string szSelectName = selectedMapName;
+            if (szSelectName.Contains("-"))
+                szSelectName = szSelectName.Split('-')[0].Trim();
+
+            // 驗證地圖是否存在
+            if (!Share.MapDataList.ContainsKey(szSelectName))
+            {
+                toolStripStatusLabel1.Text = $"地圖 {szSelectName} 不存在";
+                return;
+            }
+
+            // 保存當前選擇的地圖名稱
+            string iniPath = Path.GetTempPath() + "mapviewer.ini";
+            Utils.WriteINI("MapForm", "LastSelectedMapName", selectedMapName, iniPath);
+
+            // 重置縮放級別
+            zoomLevel = 1.0;
+            if (originalMapImage != null)
+            {
+                originalMapImage.Dispose();
+                originalMapImage = null;
+            }
+
+            // 重置 S32 編輯器縮放級別
+            s32ZoomLevel = 1.0;
+            if (originalS32Image != null)
+            {
+                originalS32Image.Dispose();
+                originalS32Image = null;
+            }
+
+            // 同步 comboBox1（保持相容性）
+            isFiltering = true;
+            for (int i = 0; i < comboBox1.Items.Count; i++)
+            {
+                if (comboBox1.Items[i].ToString() == selectedMapName)
+                {
+                    comboBox1.SelectedIndex = i;
+                    break;
+                }
+            }
+            isFiltering = false;
+
+            // 載入地圖
+            try
+            {
+                L1MapHelper.doPaintEvent(szSelectName, this);
+
+                // 等待地圖繪製完成後更新小地圖
+                Application.DoEvents();
+                UpdateMiniMap();
+
+                // 載入該地圖的 s32 檔案清單
+                LoadS32FileList(szSelectName);
+            }
+            catch (Exception ex)
+            {
+                toolStripStatusLabel1.Text = $"載入地圖失敗: {ex.Message}";
+            }
         }
 
         private void comboBox1_SelectedIndexChanged(object sender, EventArgs e)
