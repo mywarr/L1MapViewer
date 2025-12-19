@@ -5276,78 +5276,84 @@ namespace L1FlyMapViewer
                 createBmpSw.Stop();
                 long createBmpMs = createBmpSw.ElapsedMilliseconds;
                 HashSet<string> newRenderedBlocks = new HashSet<string>();
-
-                ImageAttributes vAttr = new ImageAttributes();
-                vAttr.SetColorKey(Color.FromArgb(0), Color.FromArgb(0)); // 透明色
-
                 int renderedCount = 0;
                 int skippedCount = 0;
                 long totalGetBlockMs = 0;
                 long totalDrawImageMs = 0;
 
-                using (Graphics g = Graphics.FromImage(viewportBitmap))
+                // 使用空間索引快速查找與 worldRect 相交的 S32 檔案
+                var candidateFiles = GetS32FilesInRect(worldRect);
+                LogPerf($"[SPATIAL-QUERY] worldRect=({worldRect.X},{worldRect.Y},{worldRect.Width},{worldRect.Height}), candidates={candidateFiles.Count}, total={s32FilesSnapshot.Count}");
+
+                // 使用與原始 L1MapHelper.LoadMap 完全相同的排序方式（Utils.SortDesc）
+                var sortedFilePaths = Utils.SortDesc(candidateFiles.ToList());
+
+                // 1. 篩選需要渲染的區塊
+                var blocksToRender = new List<(S32Data s32Data, string filePath, int drawX, int drawY)>();
+                foreach (object filePathObj in sortedFilePaths)
                 {
-                    // 使用空間索引快速查找與 worldRect 相交的 S32 檔案
-                    var candidateFiles = GetS32FilesInRect(worldRect);
-                    LogPerf($"[SPATIAL-QUERY] worldRect=({worldRect.X},{worldRect.Y},{worldRect.Width},{worldRect.Height}), candidates={candidateFiles.Count}, total={s32FilesSnapshot.Count}");
+                    string filePath = filePathObj as string;
+                    if (filePath == null || !s32FilesSnapshot.ContainsKey(filePath)) continue;
+                    if (!checkedFilePaths.Contains(filePath)) continue;
 
-                    // 使用與原始 L1MapHelper.LoadMap 完全相同的排序方式（Utils.SortDesc）
-                    var sortedFilePaths = Utils.SortDesc(candidateFiles.ToList());
+                    var s32Data = s32FilesSnapshot[filePath];
+                    int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                    int mx = loc[0];
+                    int my = loc[1];
 
-                    // 遍歷候選 S32 檔案（已經過空間索引過濾）
-                    foreach (object filePathObj in sortedFilePaths)
+                    Rectangle blockRect = new Rectangle(mx, my, blockWidth, blockHeight);
+                    if (!blockRect.IntersectsWith(worldRect))
                     {
-                        if (cancellationToken.IsCancellationRequested)
-                        {
-                            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [RENDER-CANCELLED] after {renderedCount} blocks, elapsed={renderSw.ElapsedMilliseconds}ms");
-                            _isRendering = false;
-                            viewportBitmap.Dispose();
-                            return;
-                        }
-
-                        string filePath = filePathObj as string;
-                        if (filePath == null || !s32FilesSnapshot.ContainsKey(filePath)) continue;
-
-                        // 只渲染有勾選的 S32
-                        if (!checkedFilePaths.Contains(filePath)) continue;
-
-                        var s32Data = s32FilesSnapshot[filePath];
-                        // 使用 GetLoc 計算區塊位置（世界座標）
-                        int[] loc = s32Data.SegInfo.GetLoc(1.0);
-                        int mx = loc[0];
-                        int my = loc[1];
-
-                        // 精確檢查是否與渲染範圍相交（空間索引可能有誤差）
-                        Rectangle blockRect = new Rectangle(mx, my, blockWidth, blockHeight);
-                        if (!blockRect.IntersectsWith(worldRect))
-                        {
-                            skippedCount++;
-                            continue;
-                        }
-
-                        newRenderedBlocks.Add(filePath);
-                        renderedCount++;
-
-                        // 為這個 S32 生成獨立的 bitmap（使用快取）
-                        var getBlockSw = Stopwatch.StartNew();
-                        Bitmap blockBmp = GetOrRenderS32Block(s32Data, showLayer1, showLayer2, showLayer4);
-                        getBlockSw.Stop();
-                        totalGetBlockMs += getBlockSw.ElapsedMilliseconds;
-
-                        // 計算繪製位置（減去 worldRect 原點偏移）
-                        int drawX = mx - worldRect.X;
-                        int drawY = my - worldRect.Y;
-
-                        // 合併到 Viewport Bitmap（使用 unsafe 直接複製，比 DrawImage 快）
-                        var drawSw = Stopwatch.StartNew();
-                        CopyBitmapDirect(blockBmp, viewportBitmap, drawX, drawY);
-                        drawSw.Stop();
-                        totalDrawImageMs += drawSw.ElapsedMilliseconds;
-
-                        // 注意：如果是快取的 bitmap 不要 Dispose
-                        // 快取會在 ClearS32BlockCache 時統一釋放
+                        skippedCount++;
+                        continue;
                     }
+
+                    int drawX = mx - worldRect.X;
+                    int drawY = my - worldRect.Y;
+                    blocksToRender.Add((s32Data, filePath, drawX, drawY));
+                    newRenderedBlocks.Add(filePath);
                 }
+
+                // 檢查取消
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [RENDER-CANCELLED] before parallel render");
+                    _isRendering = false;
+                    viewportBitmap.Dispose();
+                    return;
+                }
+
+                // 2. 平行渲染所有區塊
+                var getBlockSw = Stopwatch.StartNew();
+                var renderedBlocks = new System.Collections.Concurrent.ConcurrentBag<(Bitmap bmp, int drawX, int drawY)>();
+
+                System.Threading.Tasks.Parallel.ForEach(blocksToRender, block =>
+                {
+                    Bitmap blockBmp = GetOrRenderS32Block(block.s32Data, showLayer1, showLayer2, showLayer4);
+                    renderedBlocks.Add((blockBmp, block.drawX, block.drawY));
+                });
+                getBlockSw.Stop();
+                totalGetBlockMs = getBlockSw.ElapsedMilliseconds;
+                renderedCount = blocksToRender.Count;
+
+                // 檢查取消
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [RENDER-CANCELLED] after parallel render");
+                    _isRendering = false;
+                    viewportBitmap.Dispose();
+                    return;
+                }
+
+                // 3. 順序複製到 viewport（按 drawY, drawX 排序確保正確繪製順序）
+                var drawSw = Stopwatch.StartNew();
+                var orderedBlocks = renderedBlocks.OrderBy(b => b.drawY).ThenBy(b => b.drawX).ToList();
+                foreach (var block in orderedBlocks)
+                {
+                    CopyBitmapDirect(block.bmp, viewportBitmap, block.drawX, block.drawY);
+                }
+                drawSw.Stop();
+                totalDrawImageMs = drawSw.ElapsedMilliseconds;
                 renderSw.Stop();
                 LogPerf($"[RENDER] total={renderSw.ElapsedMilliseconds}ms, createBmp={createBmpMs}ms, getBlock={totalGetBlockMs}ms, drawImage={totalDrawImageMs}ms, rendered={renderedCount}, skipped={skippedCount}, cacheHit={_cacheHits}, cacheMiss={_cacheMisses}");
                 _cacheHits = 0;
