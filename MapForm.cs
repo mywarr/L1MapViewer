@@ -100,6 +100,9 @@ namespace L1FlyMapViewer
         private RegionEditMode currentRegionEditMode = RegionEditMode.None;
         private RegionType currentRegionType = RegionType.Normal;
         private Label lblRegionHelp; // 區域編輯操作說明標籤
+        private Button btnRegionNormal;  // 一般區域按鈕
+        private Button btnRegionSafe;    // 安全區域按鈕
+        private Button btnRegionCombat;  // 戰鬥區域按鈕
 
         // Layer5 透明編輯模式（狀態存於 _editState.IsLayer5EditMode）
         private Label lblLayer5Help; // Layer5 編輯操作說明標籤
@@ -376,6 +379,46 @@ namespace L1FlyMapViewer
             this.s32MapPanel.Controls.Add(lblRegionHelp);
             lblRegionHelp.BringToFront();
             lblRegionHelp.Location = new Point(10, 10);
+
+            // 建立區域類型切換按鈕
+            btnRegionNormal = new Button
+            {
+                Text = "一般",
+                Size = new Size(50, 25),
+                Location = new Point(10, 85),
+                BackColor = Color.FromArgb(200, 200, 200),
+                FlatStyle = FlatStyle.Flat,
+                Visible = false
+            };
+            btnRegionNormal.Click += (s, ev) => { currentRegionType = RegionType.Normal; UpdateRegionHelpLabel(); };
+            this.s32MapPanel.Controls.Add(btnRegionNormal);
+            btnRegionNormal.BringToFront();
+
+            btnRegionSafe = new Button
+            {
+                Text = "安全",
+                Size = new Size(50, 25),
+                Location = new Point(65, 85),
+                BackColor = Color.FromArgb(100, 150, 255),
+                FlatStyle = FlatStyle.Flat,
+                Visible = false
+            };
+            btnRegionSafe.Click += (s, ev) => { currentRegionType = RegionType.Safe; UpdateRegionHelpLabel(); };
+            this.s32MapPanel.Controls.Add(btnRegionSafe);
+            btnRegionSafe.BringToFront();
+
+            btnRegionCombat = new Button
+            {
+                Text = "戰鬥",
+                Size = new Size(50, 25),
+                Location = new Point(120, 85),
+                BackColor = Color.FromArgb(180, 100, 255),
+                FlatStyle = FlatStyle.Flat,
+                Visible = false
+            };
+            btnRegionCombat.Click += (s, ev) => { currentRegionType = RegionType.Combat; UpdateRegionHelpLabel(); };
+            this.s32MapPanel.Controls.Add(btnRegionCombat);
+            btnRegionCombat.BringToFront();
 
             // 註冊 F5 快捷鍵重新載入
             this.KeyPreview = true;
@@ -4725,7 +4768,7 @@ namespace L1FlyMapViewer
                 UpdateLayer5HelpLabel();
                 // 自動顯示區域覆蓋層
                 EnsureRegionsLayerVisible();
-                this.toolStripStatusLabel1.Text = $"區域設置模式 ({GetRegionTypeName(currentRegionType)})：點擊格子設定區域 | 1=一般 2=安全 3=戰鬥";
+                this.toolStripStatusLabel1.Text = $"區域設置模式 ({GetRegionTypeName(currentRegionType)})：左鍵拖曳選取，右鍵套用 | 1=一般 2=安全 3=戰鬥";
                 UpdateRegionHelpLabel();
             }
         }
@@ -4852,6 +4895,89 @@ namespace L1FlyMapViewer
             }
 
             s32Data.IsModified = true;
+            ClearS32BlockCache();
+            RenderS32Map();
+        }
+
+        // 批量設定選取區域的區域類型
+        private void SetSelectedCellsRegionType(RegionType regionType)
+        {
+            if (_editState.SelectedCells.Count == 0) return;
+
+            int count = 0;
+            HashSet<S32Data> modifiedS32s = new HashSet<S32Data>();
+
+            // 建立 Undo 記錄
+            var undoAction = new UndoAction
+            {
+                Description = $"設定 {_editState.SelectedCells.Count} 個格子為{GetRegionTypeName(regionType)}"
+            };
+
+            foreach (var cell in _editState.SelectedCells)
+            {
+                if (cell.S32Data == null) continue;
+
+                int layer3X = cell.LocalX / 2;
+                if (layer3X >= 64) layer3X = 63;
+
+                // 確保屬性存在
+                if (cell.S32Data.Layer3[cell.LocalY, layer3X] == null)
+                {
+                    cell.S32Data.Layer3[cell.LocalY, layer3X] = new MapAttribute { Attribute1 = 0, Attribute2 = 0 };
+                }
+
+                var attr = cell.S32Data.Layer3[cell.LocalY, layer3X];
+
+                // 記錄舊值
+                short oldAttr1 = attr.Attribute1;
+                short oldAttr2 = attr.Attribute2;
+
+                // 清除現有的區域標記
+                attr.Attribute1 = (short)(attr.Attribute1 & ~0x06);
+                attr.Attribute2 = (short)(attr.Attribute2 & ~0x06);
+
+                // 設定新的區域標記
+                switch (regionType)
+                {
+                    case RegionType.Safe:
+                        attr.Attribute1 = (short)(attr.Attribute1 | 0x02);
+                        attr.Attribute2 = (short)(attr.Attribute2 | 0x02);
+                        break;
+                    case RegionType.Combat:
+                        attr.Attribute1 = (short)(attr.Attribute1 | 0x04);
+                        attr.Attribute2 = (short)(attr.Attribute2 | 0x04);
+                        break;
+                }
+
+                // 記錄到 Undo
+                undoAction.ModifiedLayer3.Add(new UndoLayer3Info
+                {
+                    S32FilePath = cell.S32Data.FilePath,
+                    LocalX = layer3X,
+                    LocalY = cell.LocalY,
+                    OldAttribute1 = oldAttr1,
+                    OldAttribute2 = oldAttr2,
+                    NewAttribute1 = attr.Attribute1,
+                    NewAttribute2 = attr.Attribute2
+                });
+
+                cell.S32Data.IsModified = true;
+                modifiedS32s.Add(cell.S32Data);
+                count++;
+            }
+
+            // 儲存 Undo 記錄
+            if (undoAction.ModifiedLayer3.Count > 0)
+            {
+                PushUndoAction(undoAction);
+            }
+
+            this.toolStripStatusLabel1.Text = $"已將 {count} 個格子設定為{GetRegionTypeName(regionType)} (Ctrl+Z 可還原)";
+
+            // 清除選取區域
+            _editState.SelectedCells.Clear();
+
+            ClearS32BlockCache();
             RenderS32Map();
         }
 
@@ -4956,19 +5082,38 @@ namespace L1FlyMapViewer
             if (currentRegionEditMode == RegionEditMode.None)
             {
                 lblRegionHelp.Visible = false;
+                btnRegionNormal.Visible = false;
+                btnRegionSafe.Visible = false;
+                btnRegionCombat.Visible = false;
                 return;
             }
 
             string regionTypeName = GetRegionTypeName(currentRegionType);
             Color regionColor = GetRegionTypeColor(currentRegionType);
 
-            lblRegionHelp.Text = $"【區域設置模式 - {regionTypeName}】\n" +
-                                 "• 直接點擊格子：設定該格區域類型\n" +
-                                 "• 1鍵：一般區域 | 2鍵：安全區域 | 3鍵：戰鬥區域\n" +
+            lblRegionHelp.Text = $"【區域設置模式】\n" +
+                                 "• 左鍵拖曳選取，右鍵套用\n" +
                                  "• 再按按鈕：取消模式";
             lblRegionHelp.ForeColor = regionColor;
             lblRegionHelp.Visible = true;
             lblRegionHelp.BringToFront();
+
+            // 顯示區域類型按鈕並更新狀態
+            btnRegionNormal.Visible = true;
+            btnRegionSafe.Visible = true;
+            btnRegionCombat.Visible = true;
+            btnRegionNormal.BringToFront();
+            btnRegionSafe.BringToFront();
+            btnRegionCombat.BringToFront();
+
+            // 高亮當前選中的類型
+            btnRegionNormal.BackColor = currentRegionType == RegionType.Normal ? Color.White : Color.FromArgb(80, 80, 80);
+            btnRegionSafe.BackColor = currentRegionType == RegionType.Safe ? Color.FromArgb(0, 150, 255) : Color.FromArgb(60, 60, 80);
+            btnRegionCombat.BackColor = currentRegionType == RegionType.Combat ? Color.FromArgb(180, 0, 255) : Color.FromArgb(70, 50, 80);
+
+            btnRegionNormal.ForeColor = currentRegionType == RegionType.Normal ? Color.Black : Color.White;
+            btnRegionSafe.ForeColor = Color.White;
+            btnRegionCombat.ForeColor = Color.White;
         }
 
         // 重新載入按鈕點擊事件
@@ -6115,9 +6260,10 @@ namespace L1FlyMapViewer
             using (Graphics g = Graphics.FromImage(bitmap))
             {
                 // 定義區域顏色（半透明）
-                using (Brush safeRegionBrush = new SolidBrush(Color.FromArgb(60, 0, 150, 255)))   // 半透明藍色
-                using (Brush combatRegionBrush = new SolidBrush(Color.FromArgb(60, 255, 100, 0))) // 半透明橙色
-                using (Brush normalRegionBrush = new SolidBrush(Color.FromArgb(40, 50, 255, 50))) // 半透明綠色
+                // 一般：淺白色，安全：藍色，戰鬥：紫色
+                using (Brush normalBrush = new SolidBrush(Color.FromArgb(40, 255, 255, 255)))   // 淺白色
+                using (Brush safeBrush = new SolidBrush(Color.FromArgb(80, 0, 150, 255)))       // 藍色
+                using (Brush combatBrush = new SolidBrush(Color.FromArgb(80, 180, 0, 255)))     // 紫色
                 {
                     foreach (var s32Data in _document.S32Files.Values)
                     {
@@ -6130,14 +6276,10 @@ namespace L1FlyMapViewer
                             for (int x = 0; x < 64; x++)
                             {
                                 var attr = s32Data.Layer3[y, x];
-                                if (attr == null) continue;
 
                                 // 檢查區域類型
-                                bool isSafe = (attr.Attribute1 & 0x02) != 0 || (attr.Attribute2 & 0x02) != 0;
-                                bool isCombat = (attr.Attribute1 & 0x04) != 0 || (attr.Attribute2 & 0x04) != 0;
-
-                                // 只繪製特殊區域（安全區或戰鬥區）
-                                if (!isSafe && !isCombat) continue;
+                                bool isSafe = attr != null && ((attr.Attribute1 & 0x02) != 0 || (attr.Attribute2 & 0x02) != 0);
+                                bool isCombat = attr != null && ((attr.Attribute1 & 0x04) != 0 || (attr.Attribute2 & 0x04) != 0);
 
                                 int x1 = x * 2;
                                 int localBaseX = 0 - 24 * (x1 / 2);
@@ -6159,7 +6301,15 @@ namespace L1FlyMapViewer
                                     new Point(X + 0, Y + 12)       // 左
                                 };
 
-                                Brush regionBrush = isCombat ? combatRegionBrush : safeRegionBrush;
+                                // 選擇對應的顏色
+                                Brush regionBrush;
+                                if (isCombat)
+                                    regionBrush = combatBrush;
+                                else if (isSafe)
+                                    regionBrush = safeBrush;
+                                else
+                                    regionBrush = normalBrush;
+
                                 g.FillPolygon(regionBrush, diamond);
                             }
                         }
@@ -7484,10 +7634,13 @@ namespace L1FlyMapViewer
                                 return;
                             }
 
-                            // 區域編輯模式：單擊設定區域類型
-                            if (currentRegionEditMode != RegionEditMode.None && e.Button == MouseButtons.Left)
+                            // 區域編輯模式：右鍵變更選取區域的區域類型
+                            if (currentRegionEditMode != RegionEditMode.None && e.Button == MouseButtons.Right)
                             {
-                                SetCellRegionType(s32Data, x, y, currentRegionType);
+                                if (_editState.SelectedCells.Count > 0)
+                                {
+                                    SetSelectedCellsRegionType(currentRegionType);
+                                }
                                 return;
                             }
 
