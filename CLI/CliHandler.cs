@@ -79,6 +79,8 @@ namespace L1MapViewer.CLI
                         return CmdGenerateIcon(cmdArgs);
                     case "benchmark-viewport":
                         return CmdBenchmarkViewport(cmdArgs);
+                    case "benchmark-minimap":
+                        return CmdBenchmarkMiniMap(cmdArgs);
                     case "help":
                     case "-h":
                     case "--help":
@@ -2231,6 +2233,184 @@ L1MapViewer CLI - S32 檔案解析工具
 
             double percentage = (bottleneck.Item2 / avgTotal) * 100;
             Console.WriteLine($"Bottleneck: {bottleneck.Item1} ({percentage:F0}%)");
+
+            renderer.ClearCache();
+            return 0;
+        }
+
+        /// <summary>
+        /// benchmark-minimap 命令 - 測試 MiniMap 渲染效能
+        /// </summary>
+        private static int CmdBenchmarkMiniMap(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.WriteLine("用法: -cli benchmark-minimap <map_path> [--size N] [--runs N]");
+                Console.WriteLine("  map_path: 地圖資料夾路徑（包含 S32 檔案）");
+                Console.WriteLine("  --size N: MiniMap 目標大小（預設 256）");
+                Console.WriteLine("  --runs N: 執行次數（預設 3）");
+                Console.WriteLine();
+                Console.WriteLine("範例:");
+                Console.WriteLine("  -cli benchmark-minimap \"C:\\Lin\\map\\4\"");
+                Console.WriteLine("  -cli benchmark-minimap \"C:\\Lin\\map\\4\" --size 512 --runs 5");
+                return 1;
+            }
+
+            string mapPath = args[0];
+            int targetSize = 256;
+            int runCount = 3;
+
+            // 解析參數
+            for (int i = 1; i < args.Length - 1; i++)
+            {
+                if (args[i] == "--size" && int.TryParse(args[i + 1], out int s))
+                {
+                    targetSize = s;
+                }
+                else if (args[i] == "--runs" && int.TryParse(args[i + 1], out int r))
+                {
+                    runCount = r;
+                }
+            }
+
+            if (!Directory.Exists(mapPath))
+            {
+                Console.WriteLine($"資料夾不存在: {mapPath}");
+                return 1;
+            }
+
+            // 找出所有 S32 檔案
+            var s32FilePaths = Directory.GetFiles(mapPath, "*.s32");
+            if (s32FilePaths.Length == 0)
+            {
+                Console.WriteLine($"找不到 S32 檔案: {mapPath}");
+                return 1;
+            }
+
+            // 從 S32 路徑推斷 client 路徑
+            string clientPath = FindClientPath(s32FilePaths[0]);
+            if (string.IsNullOrEmpty(clientPath))
+            {
+                Console.WriteLine($"無法找到 client 資料夾（需要 Tile.idx 和 Tile.pak）");
+                return 1;
+            }
+            Share.LineagePath = clientPath;
+
+            // 取得 mapId
+            string mapId = Path.GetFileName(mapPath);
+
+            Console.WriteLine("=== MiniMap Benchmark ===");
+            Console.WriteLine($"Map: {mapId}");
+            Console.WriteLine($"Client: {clientPath}");
+            Console.WriteLine($"Target Size: {targetSize}");
+            Console.WriteLine($"Runs: {runCount}");
+            Console.WriteLine();
+
+            // 使用 L1MapHelper.Read 載入地圖資料
+            Console.Write("Loading map data...");
+            var sw = Stopwatch.StartNew();
+            L1MapViewer.Helper.L1MapHelper.Read(clientPath);
+            sw.Stop();
+            Console.WriteLine($" {sw.ElapsedMilliseconds} ms");
+
+            // 確認地圖存在於 MapDataList
+            if (!Share.MapDataList.ContainsKey(mapId))
+            {
+                Console.WriteLine($"找不到地圖 {mapId}，可用地圖: {string.Join(", ", Share.MapDataList.Keys.Take(10))}...");
+                return 1;
+            }
+            var currentMap = Share.MapDataList[mapId];
+
+            // 載入所有 S32 檔案
+            Console.Write("Loading S32 files...");
+            sw.Restart();
+            var s32Files = new Dictionary<string, S32Data>();
+            foreach (var kvp in currentMap.FullFileNameList)
+            {
+                string filePath = kvp.Key;
+                var segInfo = kvp.Value;
+
+                if (!segInfo.isS32) continue;
+                if (!File.Exists(filePath)) continue;
+
+                var s32 = S32Parser.ParseFile(filePath);
+                if (s32 == null) continue;
+
+                s32.FilePath = filePath;
+                s32.SegInfo = segInfo;
+                s32Files[filePath] = s32;
+            }
+            sw.Stop();
+            Console.WriteLine($" {sw.ElapsedMilliseconds} ms (valid: {s32Files.Count})");
+
+            // 計算地圖範圍
+            int minX = int.MaxValue, minY = int.MaxValue;
+            int maxX = int.MinValue, maxY = int.MinValue;
+
+            foreach (var s32Data in s32Files.Values)
+            {
+                int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                if (loc == null) continue;
+                int mx = loc[0];
+                int my = loc[1];
+
+                minX = Math.Min(minX, mx);
+                minY = Math.Min(minY, my);
+                maxX = Math.Max(maxX, mx + L1MapViewer.Helper.MiniMapRenderer.BlockWidth);
+                maxY = Math.Max(maxY, my + L1MapViewer.Helper.MiniMapRenderer.BlockHeight);
+            }
+
+            int mapWidth = maxX - minX;
+            int mapHeight = maxY - minY;
+            Console.WriteLine($"Map Size: {mapWidth} x {mapHeight} px");
+            Console.WriteLine($"S32 Blocks: {s32Files.Count}");
+            Console.WriteLine();
+
+            // 建立渲染器
+            var renderer = new L1MapViewer.Helper.MiniMapRenderer();
+            var checkedFiles = new HashSet<string>(s32Files.Keys);
+
+            // 執行測試
+            var allStats = new List<L1MapViewer.Helper.MiniMapRenderer.RenderStats>();
+
+            for (int i = 0; i < runCount; i++)
+            {
+                Console.WriteLine($"--- Run {i + 1}/{runCount} ---");
+
+                // 每次清除快取以測試完整渲染時間
+                renderer.ClearCache();
+
+                L1MapViewer.Helper.MiniMapRenderer.RenderStats stats;
+                using (var bitmap = renderer.RenderMiniMap(mapWidth, mapHeight, targetSize, s32Files, checkedFiles, out stats))
+                {
+                    // 可選：儲存結果
+                    // bitmap.Save($"minimap_run{i+1}.png");
+                }
+
+                string mode = stats.IsSimplified ? "simplified" : "full";
+                Console.WriteLine($"  [Mode]       {mode}");
+                Console.WriteLine($"  [Scale]      {stats.Scale:F4}");
+                Console.WriteLine($"  [Output]     {stats.ScaledWidth}x{stats.ScaledHeight}");
+                Console.WriteLine($"  [GetBlock]   {stats.GetBlockMs,5} ms  (blocks: {stats.BlockCount})");
+                Console.WriteLine($"  [DrawImage]  {stats.DrawImageMs,5} ms");
+                Console.WriteLine($"  [Total]      {stats.TotalMs,5} ms");
+                Console.WriteLine();
+
+                allStats.Add(stats);
+            }
+
+            // 統計
+            Console.WriteLine("=== Summary ===");
+            var avgTotal = allStats.Average(s => s.TotalMs);
+            var minTotal = allStats.Min(s => s.TotalMs);
+            var maxTotal = allStats.Max(s => s.TotalMs);
+            Console.WriteLine($"Average: {avgTotal:F0} ms");
+            Console.WriteLine($"Min: {minTotal} ms, Max: {maxTotal} ms");
+
+            var avgGetBlock = allStats.Average(s => s.GetBlockMs);
+            var avgDrawImage = allStats.Average(s => s.DrawImageMs);
+            Console.WriteLine($"Avg GetBlock: {avgGetBlock:F0} ms ({avgGetBlock / avgTotal * 100:F0}%)");
+            Console.WriteLine($"Avg DrawImage: {avgDrawImage:F0} ms ({avgDrawImage / avgTotal * 100:F0}%)");
 
             renderer.ClearCache();
             return 0;
