@@ -320,11 +320,11 @@ namespace L1FlyMapViewer
             dragRenderTimer.Tick += (s, e) =>
             {
                 var timerSw = Stopwatch.StartNew();
-                LogPerf($"[DRAG-TIMER] tick start");
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [DRAG-TIMER] tick start");
                 dragRenderTimer.Stop();
                 CheckAndRerenderIfNeeded();
                 timerSw.Stop();
-                LogPerf($"[DRAG-TIMER] tick end, total={timerSw.ElapsedMilliseconds}ms");
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [DRAG-TIMER] tick end, total={timerSw.ElapsedMilliseconds}ms");
             };
 
             // 註冊滑鼠滾輪事件用於縮放
@@ -2653,7 +2653,7 @@ namespace L1FlyMapViewer
                         out stats);
 
                     string mode = stats.IsSimplified ? "simplified" : "full";
-                    LogPerf($"[MINIMAP] Rendered {s32Count} S32 blocks in {stats.TotalMs}ms, size={stats.ScaledWidth}x{stats.ScaledHeight}, mode={mode}");
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [MINIMAP] total={stats.TotalMs}ms | blocks={s32Count}, size={stats.ScaledWidth}x{stats.ScaledHeight}, mode={mode}");
 
                     // 回到 UI 執行緒更新
                     this.BeginInvoke((MethodInvoker)delegate
@@ -3617,10 +3617,14 @@ namespace L1FlyMapViewer
                 readSw.Stop();
                 totalFileReadMs = readSw.ElapsedMilliseconds;
 
-                // 階段 2: 平行解析所有檔案
-                var parsedResults = new System.Collections.Concurrent.ConcurrentDictionary<string, S32Data>();
+                // 階段 2: 平行解析所有檔案（使用 ConcurrentBag 避免 Dictionary 鎖競爭）
+                var parsedResults = new System.Collections.Concurrent.ConcurrentBag<(string path, S32Data data)>();
                 var parseSw = Stopwatch.StartNew();
-                System.Threading.Tasks.Parallel.ForEach(fileDataList, fileData =>
+                var parallelOptions = new System.Threading.Tasks.ParallelOptions
+                {
+                    MaxDegreeOfParallelism = Environment.ProcessorCount
+                };
+                System.Threading.Tasks.Parallel.ForEach(fileDataList, parallelOptions, fileData =>
                 {
                     try
                     {
@@ -3628,7 +3632,7 @@ namespace L1FlyMapViewer
                         s32Data.FilePath = fileData.item.FilePath;
                         s32Data.SegInfo = fileData.item.SegInfo;
                         s32Data.IsModified = false;
-                        parsedResults[fileData.item.FilePath] = s32Data;
+                        parsedResults.Add((fileData.item.FilePath, s32Data));
                     }
                     catch (Exception ex)
                     {
@@ -3639,9 +3643,9 @@ namespace L1FlyMapViewer
                 totalParseMs = parseSw.ElapsedMilliseconds;
 
                 // 將結果複製到 _document.S32Files
-                foreach (var kvp in parsedResults)
+                foreach (var (path, data) in parsedResults)
                 {
-                    _document.S32Files[kvp.Key] = kvp.Value;
+                    _document.S32Files[path] = data;
                 }
                 loadedCount = parsedResults.Count;
 
@@ -4086,9 +4090,8 @@ namespace L1FlyMapViewer
         {
             S32Data s32Data = new S32Data();
 
-            // 保存原始文件數據
-            s32Data.OriginalFileData = new byte[data.Length];
-            Array.Copy(data, s32Data.OriginalFileData, data.Length);
+            // 保存原始文件數據（直接使用，不複製，因為 data 已經是獨立的副本）
+            s32Data.OriginalFileData = data;
 
             using (BinaryReader br = new BinaryReader(new MemoryStream(data)))
             {
@@ -5164,7 +5167,7 @@ namespace L1FlyMapViewer
                 drawSw.Stop();
                 totalDrawImageMs = drawSw.ElapsedMilliseconds;
                 renderSw.Stop();
-                LogPerf($"[RENDER] total={renderSw.ElapsedMilliseconds}ms, createBmp={createBmpMs}ms, getBlock={totalGetBlockMs}ms, drawImage={totalDrawImageMs}ms, rendered={renderedCount}, skipped={skippedCount}, cacheHit={_cacheHits}, cacheMiss={_cacheMisses}");
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [RENDER] total={renderSw.ElapsedMilliseconds}ms | createBmp={createBmpMs}ms, getBlock={totalGetBlockMs}ms, drawImage={totalDrawImageMs}ms | blocks={renderedCount}, cacheHit={_cacheHits}, cacheMiss={_cacheMisses}");
                 _cacheHits = 0;
                 _cacheMisses = 0;
 
@@ -6868,7 +6871,7 @@ namespace L1FlyMapViewer
                 }
 
                 sw.Stop();
-                LogPerf($"[TILELIST] Loaded {aggregatedTiles.Count} tiles in {sw.ElapsedMilliseconds}ms");
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [TILELIST] total={sw.ElapsedMilliseconds}ms | tiles={aggregatedTiles.Count}");
 
                 // 回到 UI 執行緒更新列表
                 this.BeginInvoke((MethodInvoker)delegate
@@ -8252,6 +8255,7 @@ namespace L1FlyMapViewer
             // 結束中鍵拖拽
             if (e.Button == MouseButtons.Middle && isMainMapDragging)
             {
+                var upSw = Stopwatch.StartNew();
                 _dragSessionSw.Stop();
                 long dragMs = _dragSessionSw.ElapsedMilliseconds;
                 double fps = dragMs > 0 ? (_dragPaintCount * 1000.0 / dragMs) : 0;
@@ -8268,6 +8272,9 @@ namespace L1FlyMapViewer
                 // 拖曳結束後延遲渲染（避免快速連續拖曳時頻繁重渲染）
                 dragRenderTimer.Stop();
                 dragRenderTimer.Start();
+
+                upSw.Stop();
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [MOUSE-UP-MIDDLE] total={upSw.ElapsedMilliseconds}ms");
                 return;
             }
 
@@ -8436,15 +8443,16 @@ namespace L1FlyMapViewer
                 }
             }
 
-            // 拖曳時一律記錄 Paint 時間（每 10 次記錄一次避免過多）
-            if (isMainMapDragging && _dragPaintCount % 10 == 1)
+            paintSw.Stop();
+            // 拖曳時記錄慢的 Paint（> 30ms）或每 20 次記一次
+            if (isMainMapDragging && (paintSw.ElapsedMilliseconds > 30 || _dragPaintCount % 20 == 1))
             {
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [PAINT-DRAG] lockWait={lockWaitMs}ms, drawImage={drawImageMs}ms, bmp={bmpW}x{bmpH}, draw={drawW}x{drawH}");
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [PAINT-DRAG] total={paintSw.ElapsedMilliseconds}ms, lockWait={lockWaitMs}ms, drawImage={drawImageMs}ms, bmp={bmpW}x{bmpH}, draw={drawW}x{drawH}");
             }
             // 非拖曳時只在超過 10ms 時記錄
-            else if (!isMainMapDragging && drawImageMs > 10)
+            else if (!isMainMapDragging && paintSw.ElapsedMilliseconds > 10)
             {
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [PAINT] lockWait={lockWaitMs}ms, drawImage={drawImageMs}ms, bmp={bmpW}x{bmpH}, draw={drawW}x{drawH}");
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] [PAINT] total={paintSw.ElapsedMilliseconds}ms, lockWait={lockWaitMs}ms, drawImage={drawImageMs}ms, bmp={bmpW}x{bmpH}, draw={drawW}x{drawH}");
             }
 
             // 通行性編輯模式：繪製多邊形
@@ -17063,26 +17071,50 @@ namespace L1FlyMapViewer
             resultForm.Show();
         }
 
-        // 檢查 Layer5 異常並更新按鈕顯示狀態
+        // 檢查 Layer5 異常並更新按鈕顯示狀態（異步版本，不阻塞 UI）
         private void UpdateLayer5InvalidButton()
         {
-            var invalidL5Items = GetInvalidLayer5Items();
-            var invalidTileItems = GetInvalidTileIds();
-            var layer8ExtendedS32 = GetLayer8ExtendedS32Files();
-            int totalInvalid = invalidL5Items.Count + invalidTileItems.Count + layer8ExtendedS32.Count;
+            // 先隱藏按鈕，背景檢查完成後再更新
+            btnToolCheckL5Invalid.Visible = false;
 
-            btnToolCheckL5Invalid.Visible = totalInvalid > 0;
-            if (totalInvalid > 0)
+            Task.Run(() =>
             {
-                var tooltipParts = new List<string>();
-                if (invalidL5Items.Count > 0)
-                    tooltipParts.Add($"Layer5異常: {invalidL5Items.Count}");
-                if (invalidTileItems.Count > 0)
-                    tooltipParts.Add($"無效TileId: {invalidTileItems.Count}");
-                if (layer8ExtendedS32.Count > 0)
-                    tooltipParts.Add($"L8擴展: {layer8ExtendedS32.Count}");
-                toolTip1.SetToolTip(btnToolCheckL5Invalid, $"發現異常: {string.Join(", ", tooltipParts)}");
-            }
+                var totalSw = Stopwatch.StartNew();
+
+                var sw1 = Stopwatch.StartNew();
+                var invalidL5Items = GetInvalidLayer5Items();
+                sw1.Stop();
+
+                var sw2 = Stopwatch.StartNew();
+                var invalidTileItems = GetInvalidTileIds();
+                sw2.Stop();
+
+                var sw3 = Stopwatch.StartNew();
+                var layer8ExtendedS32 = GetLayer8ExtendedS32Files();
+                sw3.Stop();
+
+                totalSw.Stop();
+
+                int totalInvalid = invalidL5Items.Count + invalidTileItems.Count + layer8ExtendedS32.Count;
+                Console.WriteLine($"[L5CHECK] Total: {totalSw.ElapsedMilliseconds}ms | L5Check: {sw1.ElapsedMilliseconds}ms ({invalidL5Items.Count}) | TileValidate: {sw2.ElapsedMilliseconds}ms ({invalidTileItems.Count}) | L8Ext: {sw3.ElapsedMilliseconds}ms ({layer8ExtendedS32.Count})");
+
+                // 回到 UI 執行緒更新按鈕
+                this.BeginInvoke((MethodInvoker)delegate
+                {
+                    btnToolCheckL5Invalid.Visible = totalInvalid > 0;
+                    if (totalInvalid > 0)
+                    {
+                        var tooltipParts = new List<string>();
+                        if (invalidL5Items.Count > 0)
+                            tooltipParts.Add($"Layer5異常: {invalidL5Items.Count}");
+                        if (invalidTileItems.Count > 0)
+                            tooltipParts.Add($"無效TileId: {invalidTileItems.Count}");
+                        if (layer8ExtendedS32.Count > 0)
+                            tooltipParts.Add($"L8擴展: {layer8ExtendedS32.Count}");
+                        toolTip1.SetToolTip(btnToolCheckL5Invalid, $"發現異常: {string.Join(", ", tooltipParts)}");
+                    }
+                });
+            });
         }
 
         // 取得使用 Layer8 擴展格式的 S32 檔案
@@ -17154,7 +17186,7 @@ namespace L1FlyMapViewer
             public string Reason { get; set; } = string.Empty;  // "Til檔案不存在" 或 "IndexId超出範圍"
         }
 
-        // 取得無效的 TileId（Layer1, Layer2, Layer4）
+        // 取得無效的 TileId（Layer1, Layer2, Layer4）- Fast mode 使用索引查詢
         private List<InvalidTileInfo> GetInvalidTileIds()
         {
             var invalidTiles = new List<InvalidTileInfo>();
@@ -17162,41 +17194,37 @@ namespace L1FlyMapViewer
             if (_document.S32Files.Count == 0)
                 return invalidTiles;
 
-            // 快取已檢查過的 TileId -> (是否存在, tilArray Count)
-            var tilCache = new Dictionary<int, (bool exists, int count)>();
+            // Fast mode: 從 Tile 索引建立可用 TileId 的 HashSet
+            var availableTileIds = new HashSet<int>();
 
-            // 檢查 TileId 和 IndexId 是否有效
-            bool CheckTileValid(int tileId, int indexId, out string reason)
+            // 觸發載入 Tile 索引（如果尚未載入）
+            L1PakReader.UnPack("Tile", "1.til");
+
+            if (Share.IdxDataList.TryGetValue("Tile", out var tileIdx))
+            {
+                foreach (var key in tileIdx.Keys)
+                {
+                    // key 格式是 "123.til"
+                    if (key.EndsWith(".til"))
+                    {
+                        string numStr = key.Substring(0, key.Length - 4);
+                        if (int.TryParse(numStr, out int tileId))
+                        {
+                            availableTileIds.Add(tileId);
+                        }
+                    }
+                }
+            }
+
+            // 檢查 TileId 是否存在於索引中
+            bool CheckTileValid(int tileId, out string reason)
             {
                 reason = string.Empty;
                 if (tileId <= 0) return true;  // TileId = 0 表示空格子，不算無效
 
-                if (!tilCache.TryGetValue(tileId, out var cacheInfo))
-                {
-                    string key = $"{tileId}.til";
-                    byte[] data = L1PakReader.UnPack("Tile", key);
-                    if (data == null)
-                    {
-                        tilCache[tileId] = (false, 0);
-                        cacheInfo = (false, 0);
-                    }
-                    else
-                    {
-                        var tilArray = L1Til.Parse(data);
-                        tilCache[tileId] = (true, tilArray.Count);
-                        cacheInfo = (true, tilArray.Count);
-                    }
-                }
-
-                if (!cacheInfo.exists)
+                if (!availableTileIds.Contains(tileId))
                 {
                     reason = "Til檔案不存在";
-                    return false;
-                }
-
-                if (indexId >= cacheInfo.count)
-                {
-                    reason = $"IndexId超出範圍(max={cacheInfo.count - 1})";
                     return false;
                 }
 
@@ -17217,7 +17245,7 @@ namespace L1FlyMapViewer
                         var cell = s32Data.Layer1[y, x];
                         if (cell != null && cell.TileId > 0)
                         {
-                            if (!CheckTileValid(cell.TileId, cell.IndexId, out string reason))
+                            if (!CheckTileValid(cell.TileId, out string reason))
                             {
                                 invalidTiles.Add(new InvalidTileInfo
                                 {
@@ -17241,7 +17269,7 @@ namespace L1FlyMapViewer
                     var item = s32Data.Layer2[i];
                     if (item.TileId > 0)
                     {
-                        if (!CheckTileValid(item.TileId, item.IndexId, out string reason))
+                        if (!CheckTileValid(item.TileId, out string reason))
                         {
                             invalidTiles.Add(new InvalidTileInfo
                             {
@@ -17264,7 +17292,7 @@ namespace L1FlyMapViewer
                     var obj = s32Data.Layer4[i];
                     if (obj.TileId > 0)
                     {
-                        if (!CheckTileValid(obj.TileId, obj.IndexId, out string reason))
+                        if (!CheckTileValid(obj.TileId, out string reason))
                         {
                             invalidTiles.Add(new InvalidTileInfo
                             {

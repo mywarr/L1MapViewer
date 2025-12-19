@@ -81,6 +81,12 @@ namespace L1MapViewer.CLI
                         return CmdBenchmarkViewport(cmdArgs);
                     case "benchmark-minimap":
                         return CmdBenchmarkMiniMap(cmdArgs);
+                    case "benchmark-s32parse":
+                        return CmdBenchmarkS32Parse(cmdArgs);
+                    case "benchmark-s32parse-detail":
+                        return CmdBenchmarkS32ParseDetail(cmdArgs);
+                    case "benchmark-tilevalidate":
+                        return CmdBenchmarkTileValidate(cmdArgs);
                     case "help":
                     case "-h":
                     case "--help":
@@ -2413,6 +2419,600 @@ L1MapViewer CLI - S32 檔案解析工具
             Console.WriteLine($"Avg DrawImage: {avgDrawImage:F0} ms ({avgDrawImage / avgTotal * 100:F0}%)");
 
             renderer.ClearCache();
+            return 0;
+        }
+
+        /// <summary>
+        /// 測試 S32 解析效能
+        /// </summary>
+        private static int CmdBenchmarkS32Parse(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.WriteLine("用法: benchmark-s32parse <map_path> [--runs N] [--parallel]");
+                Console.WriteLine("範例: benchmark-s32parse C:\\client\\map\\4");
+                Console.WriteLine("      benchmark-s32parse C:\\client\\map\\4 --parallel");
+                return 1;
+            }
+
+            string mapPath = args[0];
+            int runs = 3;
+            bool useParallel = false;
+
+            // 解析參數
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (args[i] == "--runs" && i + 1 < args.Length)
+                {
+                    int.TryParse(args[++i], out runs);
+                }
+                else if (args[i] == "--parallel")
+                {
+                    useParallel = true;
+                }
+            }
+
+            if (!Directory.Exists(mapPath))
+            {
+                Console.WriteLine($"目錄不存在: {mapPath}");
+                return 1;
+            }
+
+            // 找出所有 S32 檔案
+            var s32Files = Directory.GetFiles(mapPath, "*.s32");
+            if (s32Files.Length == 0)
+            {
+                Console.WriteLine($"找不到 S32 檔案: {mapPath}");
+                return 1;
+            }
+
+            Console.WriteLine($"=== S32 Parse Benchmark ===");
+            Console.WriteLine($"Map: {Path.GetFileName(mapPath)}");
+            Console.WriteLine($"S32 Files: {s32Files.Length}");
+            Console.WriteLine($"Mode: {(useParallel ? "Parallel (seq read + parallel parse)" : "Sequential")}");
+            Console.WriteLine($"Runs: {runs}");
+            Console.WriteLine();
+
+            var allTimes = new List<(long total, long read, long parse)>();
+
+            for (int run = 1; run <= runs; run++)
+            {
+                Console.WriteLine($"--- Run {run}/{runs} ---");
+
+                var totalSw = Stopwatch.StartNew();
+                long readMs = 0;
+                long parseMs = 0;
+
+                if (useParallel)
+                {
+                    // 模擬 Form 的流程：先順序讀取，再平行解析
+
+                    // 1. 順序讀取所有檔案
+                    var readSw = Stopwatch.StartNew();
+                    var fileDataList = new List<(string path, byte[] data)>();
+                    foreach (var filePath in s32Files)
+                    {
+                        byte[] data = File.ReadAllBytes(filePath);
+                        fileDataList.Add((filePath, data));
+                    }
+                    readSw.Stop();
+                    readMs = readSw.ElapsedMilliseconds;
+
+                    // 2. 平行解析
+                    var parseSw = Stopwatch.StartNew();
+                    var results = new System.Collections.Concurrent.ConcurrentBag<S32Data>();
+                    var parallelOptions = new System.Threading.Tasks.ParallelOptions
+                    {
+                        MaxDegreeOfParallelism = Environment.ProcessorCount
+                    };
+                    System.Threading.Tasks.Parallel.ForEach(fileDataList, parallelOptions, fileData =>
+                    {
+                        var s32Data = S32Parser.Parse(fileData.data);
+                        s32Data.FilePath = fileData.path;
+                        results.Add(s32Data);
+                    });
+                    parseSw.Stop();
+                    parseMs = parseSw.ElapsedMilliseconds;
+                }
+                else
+                {
+                    // 順序解析
+                    foreach (var filePath in s32Files)
+                    {
+                        var s32Data = S32Parser.ParseFile(filePath);
+                    }
+                }
+
+                totalSw.Stop();
+
+                if (useParallel)
+                {
+                    Console.WriteLine($"  [File Read]   {readMs,6} ms");
+                    Console.WriteLine($"  [Parse]       {parseMs,6} ms");
+                }
+                Console.WriteLine($"  [Total]       {totalSw.ElapsedMilliseconds,6} ms");
+                Console.WriteLine($"  [Per File]    {(double)totalSw.ElapsedMilliseconds / s32Files.Length:F2} ms/file");
+                Console.WriteLine();
+
+                allTimes.Add((totalSw.ElapsedMilliseconds, readMs, parseMs));
+            }
+
+            // 統計
+            Console.WriteLine($"=== Summary ===");
+            var avgTotal = allTimes.Average(t => t.total);
+            var minTotal = allTimes.Min(t => t.total);
+            var maxTotal = allTimes.Max(t => t.total);
+
+            Console.WriteLine($"Average: {avgTotal:F0} ms");
+            Console.WriteLine($"Min: {minTotal} ms, Max: {maxTotal} ms");
+
+            if (useParallel)
+            {
+                var avgRead = allTimes.Average(t => t.read);
+                var avgParse = allTimes.Average(t => t.parse);
+                Console.WriteLine($"Avg File Read: {avgRead:F0} ms ({avgRead / avgTotal * 100:F0}%)");
+                Console.WriteLine($"Avg Parse: {avgParse:F0} ms ({avgParse / avgTotal * 100:F0}%)");
+            }
+
+            Console.WriteLine($"Per File: {avgTotal / s32Files.Length:F2} ms/file");
+
+            return 0;
+        }
+
+        /// <summary>
+        /// 測試 S32 解析效能（詳細分層計時）
+        /// </summary>
+        private static int CmdBenchmarkS32ParseDetail(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.WriteLine("用法: benchmark-s32parse-detail <map_path>");
+                return 1;
+            }
+
+            string mapPath = args[0];
+
+            if (!Directory.Exists(mapPath))
+            {
+                Console.WriteLine($"目錄不存在: {mapPath}");
+                return 1;
+            }
+
+            var s32Files = Directory.GetFiles(mapPath, "*.s32");
+            if (s32Files.Length == 0)
+            {
+                Console.WriteLine($"找不到 S32 檔案: {mapPath}");
+                return 1;
+            }
+
+            Console.WriteLine($"=== S32 Parse Detail Benchmark ===");
+            Console.WriteLine($"S32 Files: {s32Files.Length}");
+            Console.WriteLine();
+
+            // 先順序讀取所有檔案
+            var fileDataList = new List<(string path, byte[] data)>();
+            foreach (var filePath in s32Files)
+            {
+                byte[] data = File.ReadAllBytes(filePath);
+                fileDataList.Add((filePath, data));
+            }
+            Console.WriteLine($"Files loaded into memory");
+
+            // 計時各階段
+            long totalLayer1 = 0, totalLayer2 = 0, totalLayer3 = 0, totalLayer4 = 0, totalOther = 0;
+            var totalSw = Stopwatch.StartNew();
+
+            foreach (var fileData in fileDataList)
+            {
+                var data = fileData.data;
+                var s32Data = new S32Data();
+                s32Data.OriginalFileData = data;
+
+                using (BinaryReader br = new BinaryReader(new MemoryStream(data)))
+                {
+                    // Layer1
+                    var sw1 = Stopwatch.StartNew();
+                    s32Data.Layer1Offset = (int)br.BaseStream.Position;
+                    for (int y = 0; y < 64; y++)
+                    {
+                        for (int x = 0; x < 128; x++)
+                        {
+                            int id = br.ReadByte();
+                            int til = br.ReadUInt16();
+                            int nk = br.ReadByte();
+                            s32Data.Layer1[y, x] = new TileCell { X = x, Y = y, TileId = til, IndexId = id };
+                            if (!s32Data.UsedTiles.ContainsKey(til))
+                                s32Data.UsedTiles[til] = new TileInfo { TileId = til, IndexId = id, UsageCount = 1 };
+                            else
+                                s32Data.UsedTiles[til].UsageCount++;
+                        }
+                    }
+                    sw1.Stop();
+                    totalLayer1 += sw1.ElapsedTicks;
+
+                    // Layer2
+                    var sw2 = Stopwatch.StartNew();
+                    s32Data.Layer2Offset = (int)br.BaseStream.Position;
+                    int layer2Count = br.ReadUInt16();
+                    for (int i = 0; i < layer2Count; i++)
+                    {
+                        s32Data.Layer2.Add(new Layer2Item
+                        {
+                            X = br.ReadByte(),
+                            Y = br.ReadByte(),
+                            IndexId = br.ReadByte(),
+                            TileId = br.ReadUInt16(),
+                            UK = br.ReadByte()
+                        });
+                    }
+                    sw2.Stop();
+                    totalLayer2 += sw2.ElapsedTicks;
+
+                    // Layer3
+                    var sw3 = Stopwatch.StartNew();
+                    s32Data.Layer3Offset = (int)br.BaseStream.Position;
+                    for (int y = 0; y < 64; y++)
+                    {
+                        for (int x = 0; x < 64; x++)
+                        {
+                            s32Data.Layer3[y, x] = new MapAttribute
+                            {
+                                Attribute1 = br.ReadInt16(),
+                                Attribute2 = br.ReadInt16()
+                            };
+                        }
+                    }
+                    sw3.Stop();
+                    totalLayer3 += sw3.ElapsedTicks;
+
+                    // Layer4
+                    var sw4 = Stopwatch.StartNew();
+                    s32Data.Layer4Offset = (int)br.BaseStream.Position;
+                    int layer4GroupCount = br.ReadInt32();
+                    for (int i = 0; i < layer4GroupCount; i++)
+                    {
+                        int groupId = br.ReadInt16();
+                        int blockCount = br.ReadUInt16();
+                        for (int j = 0; j < blockCount; j++)
+                        {
+                            int x = br.ReadByte();
+                            int y = br.ReadByte();
+                            if (x == 0xCD && y == 0xCD)
+                            {
+                                br.ReadBytes(5);
+                                continue;
+                            }
+                            int layer = br.ReadByte();
+                            int indexId = br.ReadByte();
+                            int tileId = br.ReadInt16();
+                            int uk = br.ReadByte();
+                            s32Data.Layer4.Add(new ObjectTile
+                            {
+                                GroupId = 0,
+                                X = x,
+                                Y = y,
+                                Layer = layer,
+                                IndexId = indexId,
+                                TileId = tileId
+                            });
+                        }
+                    }
+                    sw4.Stop();
+                    totalLayer4 += sw4.ElapsedTicks;
+                }
+            }
+            totalSw.Stop();
+
+            double ticksPerMs = Stopwatch.Frequency / 1000.0;
+            long layer1Ms = (long)(totalLayer1 / ticksPerMs);
+            long layer2Ms = (long)(totalLayer2 / ticksPerMs);
+            long layer3Ms = (long)(totalLayer3 / ticksPerMs);
+            long layer4Ms = (long)(totalLayer4 / ticksPerMs);
+            long totalMs = totalSw.ElapsedMilliseconds;
+
+            Console.WriteLine($"[Layer1]  {layer1Ms,6} ms  ({layer1Ms * 100.0 / totalMs:F1}%)  - 64x128 TileCell + UsedTiles Dict");
+            Console.WriteLine($"[Layer2]  {layer2Ms,6} ms  ({layer2Ms * 100.0 / totalMs:F1}%)");
+            Console.WriteLine($"[Layer3]  {layer3Ms,6} ms  ({layer3Ms * 100.0 / totalMs:F1}%)  - 64x64 MapAttribute");
+            Console.WriteLine($"[Layer4]  {layer4Ms,6} ms  ({layer4Ms * 100.0 / totalMs:F1}%)");
+            Console.WriteLine($"[Total]   {totalMs,6} ms  (sequential)");
+
+            return 0;
+        }
+
+        /// <summary>
+        /// 測試 Tile 驗證效能（模擬 GetInvalidTileIds）
+        /// </summary>
+        private static int CmdBenchmarkTileValidate(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.WriteLine("用法: benchmark-tilevalidate <map_path> [--runs N] [--fast]");
+                Console.WriteLine("範例: benchmark-tilevalidate C:\\client\\map\\4");
+                Console.WriteLine("      benchmark-tilevalidate C:\\client\\map\\4 --fast  (只檢查存在性)");
+                return 1;
+            }
+
+            string mapPath = args[0];
+            int runs = 1;
+            bool fastMode = false;
+
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (args[i] == "--runs" && i + 1 < args.Length)
+                {
+                    int.TryParse(args[++i], out runs);
+                }
+                else if (args[i] == "--fast")
+                {
+                    fastMode = true;
+                }
+            }
+
+            if (!Directory.Exists(mapPath))
+            {
+                Console.WriteLine($"目錄不存在: {mapPath}");
+                return 1;
+            }
+
+            var s32Files = Directory.GetFiles(mapPath, "*.s32");
+            if (s32Files.Length == 0)
+            {
+                Console.WriteLine($"找不到 S32 檔案: {mapPath}");
+                return 1;
+            }
+
+            Console.WriteLine($"=== Tile Validate Benchmark ===");
+            Console.WriteLine($"Map: {Path.GetFileName(mapPath)}");
+            Console.WriteLine($"S32 Files: {s32Files.Length}");
+            Console.WriteLine($"Mode: {(fastMode ? "Fast (index lookup only)" : "Full (UnPack + Parse)")}");
+            Console.WriteLine($"Runs: {runs}");
+            Console.WriteLine();
+
+            // 先解析所有 S32 檔案
+            Console.WriteLine("Loading S32 files...");
+            var loadSw = Stopwatch.StartNew();
+            var s32DataList = new List<S32Data>();
+            foreach (var filePath in s32Files)
+            {
+                s32DataList.Add(S32Parser.ParseFile(filePath));
+            }
+            loadSw.Stop();
+            Console.WriteLine($"Loaded {s32DataList.Count} files in {loadSw.ElapsedMilliseconds}ms");
+            Console.WriteLine();
+
+            // 統計 TileId 數量
+            int totalLayer1Cells = s32DataList.Count * 64 * 128;
+            int totalLayer2Items = s32DataList.Sum(s => s.Layer2.Count);
+            int totalLayer4Items = s32DataList.Sum(s => s.Layer4.Count);
+            var uniqueTileIds = new HashSet<int>();
+            foreach (var s32 in s32DataList)
+            {
+                foreach (var tile in s32.UsedTiles.Keys)
+                    uniqueTileIds.Add(tile);
+            }
+            Console.WriteLine($"Total Layer1 cells: {totalLayer1Cells:N0}");
+            Console.WriteLine($"Total Layer2 items: {totalLayer2Items:N0}");
+            Console.WriteLine($"Total Layer4 items: {totalLayer4Items:N0}");
+            Console.WriteLine($"Unique TileIds: {uniqueTileIds.Count}");
+            Console.WriteLine();
+
+            // 如果是 fast 模式，先載入 Tile 索引
+            HashSet<int> availableTileIds = null;
+            if (fastMode)
+            {
+                Console.WriteLine("Loading Tile index...");
+                var idxSw = Stopwatch.StartNew();
+
+                // 嘗試從 map 路徑推斷 client 路徑
+                string clientPath = mapPath;
+                while (!string.IsNullOrEmpty(clientPath))
+                {
+                    string tileIdxPath = Path.Combine(clientPath, "Tile.idx");
+                    if (File.Exists(tileIdxPath))
+                    {
+                        Share.LineagePath = clientPath;
+                        Console.WriteLine($"Found Tile.idx at: {clientPath}");
+                        break;
+                    }
+                    clientPath = Path.GetDirectoryName(clientPath);
+                }
+
+                // 觸發載入 Tile 索引（呼叫任何一個 tile 就會載入整個索引）
+                L1PakReader.UnPack("Tile", "1.til");
+
+                // 從 Share.IdxDataList 取得所有可用的 TileId
+                availableTileIds = new HashSet<int>();
+                if (Share.IdxDataList.TryGetValue("Tile", out var tileIdx))
+                {
+                    foreach (var key in tileIdx.Keys)
+                    {
+                        // key 格式是 "123.til"
+                        if (key.EndsWith(".til"))
+                        {
+                            string numStr = key.Substring(0, key.Length - 4);
+                            if (int.TryParse(numStr, out int tileId))
+                            {
+                                availableTileIds.Add(tileId);
+                            }
+                        }
+                    }
+                }
+                idxSw.Stop();
+                Console.WriteLine($"Tile index loaded: {availableTileIds.Count} tiles in {idxSw.ElapsedMilliseconds}ms");
+                Console.WriteLine();
+            }
+
+            var allTimes = new List<long>();
+
+            for (int run = 1; run <= runs; run++)
+            {
+                Console.WriteLine($"--- Run {run}/{runs} ---");
+
+                int invalidCount = 0;
+                int pakReadCount = 0;
+
+                var sw = Stopwatch.StartNew();
+
+                if (fastMode)
+                {
+                    // Fast mode: 只檢查 TileId 是否存在於索引中
+                    foreach (var s32Data in s32DataList)
+                    {
+                        // 檢查 Layer1
+                        for (int y = 0; y < 64; y++)
+                        {
+                            for (int x = 0; x < 128; x++)
+                            {
+                                var cell = s32Data.Layer1[y, x];
+                                if (cell != null && cell.TileId > 0)
+                                {
+                                    if (!availableTileIds.Contains(cell.TileId))
+                                    {
+                                        invalidCount++;
+                                    }
+                                }
+                            }
+                        }
+
+                        // 檢查 Layer2
+                        foreach (var item in s32Data.Layer2)
+                        {
+                            if (item.TileId > 0 && !availableTileIds.Contains(item.TileId))
+                            {
+                                invalidCount++;
+                            }
+                        }
+
+                        // 檢查 Layer4
+                        foreach (var obj in s32Data.Layer4)
+                        {
+                            if (obj.TileId > 0 && !availableTileIds.Contains(obj.TileId))
+                            {
+                                invalidCount++;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // Full mode: UnPack + Parse 每個 tile
+                    var tilCache = new Dictionary<int, (bool exists, int count)>();
+
+                    foreach (var s32Data in s32DataList)
+                    {
+                        // 檢查 Layer1
+                        for (int y = 0; y < 64; y++)
+                        {
+                            for (int x = 0; x < 128; x++)
+                            {
+                                var cell = s32Data.Layer1[y, x];
+                                if (cell != null && cell.TileId > 0)
+                                {
+                                    if (!tilCache.TryGetValue(cell.TileId, out var cacheInfo))
+                                    {
+                                        pakReadCount++;
+                                        string key = $"{cell.TileId}.til";
+                                        byte[] data = L1PakReader.UnPack("Tile", key);
+                                        if (data == null)
+                                        {
+                                            tilCache[cell.TileId] = (false, 0);
+                                            invalidCount++;
+                                        }
+                                        else
+                                        {
+                                            var tilArray = L1Til.Parse(data);
+                                            tilCache[cell.TileId] = (true, tilArray.Count);
+                                            if (cell.IndexId >= tilArray.Count)
+                                                invalidCount++;
+                                        }
+                                    }
+                                    else if (!cacheInfo.exists || cell.IndexId >= cacheInfo.count)
+                                    {
+                                        invalidCount++;
+                                    }
+                                }
+                            }
+                        }
+
+                        // 檢查 Layer2
+                        foreach (var item in s32Data.Layer2)
+                        {
+                            if (item.TileId > 0)
+                            {
+                                if (!tilCache.TryGetValue(item.TileId, out var cacheInfo))
+                                {
+                                    pakReadCount++;
+                                    string key = $"{item.TileId}.til";
+                                    byte[] data = L1PakReader.UnPack("Tile", key);
+                                    if (data == null)
+                                    {
+                                        tilCache[item.TileId] = (false, 0);
+                                        invalidCount++;
+                                    }
+                                    else
+                                    {
+                                        var tilArray = L1Til.Parse(data);
+                                        tilCache[item.TileId] = (true, tilArray.Count);
+                                        if (item.IndexId >= tilArray.Count)
+                                            invalidCount++;
+                                    }
+                                }
+                                else if (!cacheInfo.exists || item.IndexId >= cacheInfo.count)
+                                {
+                                    invalidCount++;
+                                }
+                            }
+                        }
+
+                        // 檢查 Layer4
+                        foreach (var obj in s32Data.Layer4)
+                        {
+                            if (obj.TileId > 0)
+                            {
+                                if (!tilCache.TryGetValue(obj.TileId, out var cacheInfo))
+                                {
+                                    pakReadCount++;
+                                    string key = $"{obj.TileId}.til";
+                                    byte[] data = L1PakReader.UnPack("Tile", key);
+                                    if (data == null)
+                                    {
+                                        tilCache[obj.TileId] = (false, 0);
+                                        invalidCount++;
+                                    }
+                                    else
+                                    {
+                                        var tilArray = L1Til.Parse(data);
+                                        tilCache[obj.TileId] = (true, tilArray.Count);
+                                        if (obj.IndexId >= tilArray.Count)
+                                            invalidCount++;
+                                    }
+                                }
+                                else if (!cacheInfo.exists || obj.IndexId >= cacheInfo.count)
+                                {
+                                    invalidCount++;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                sw.Stop();
+                allTimes.Add(sw.ElapsedMilliseconds);
+
+                Console.WriteLine($"  Time: {sw.ElapsedMilliseconds} ms");
+                if (!fastMode) Console.WriteLine($"  Pak Reads: {pakReadCount}");
+                Console.WriteLine($"  Invalid: {invalidCount}");
+            }
+
+            if (runs > 1)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"=== Summary ===");
+                Console.WriteLine($"Average: {allTimes.Average():F0} ms");
+                Console.WriteLine($"Min: {allTimes.Min()} ms");
+                Console.WriteLine($"Max: {allTimes.Max()} ms");
+            }
+
             return 0;
         }
     }

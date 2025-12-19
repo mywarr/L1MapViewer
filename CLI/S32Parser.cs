@@ -18,9 +18,8 @@ namespace L1MapViewer.CLI
         {
             S32Data s32Data = new S32Data();
 
-            // 保存原始文件數據
-            s32Data.OriginalFileData = new byte[data.Length];
-            Array.Copy(data, s32Data.OriginalFileData, data.Length);
+            // 保存原始文件數據（直接使用，不複製）
+            s32Data.OriginalFileData = data;
 
             using (BinaryReader br = new BinaryReader(new MemoryStream(data)))
             {

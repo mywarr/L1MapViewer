@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using L1MapViewer.Other;
@@ -104,7 +105,7 @@ namespace L1MapViewer.Models
         }
 
         /// <summary>
-        /// 載入 S32 檔案
+        /// 載入 S32 檔案（平行解析）
         /// </summary>
         private void LoadS32Files()
         {
@@ -112,9 +113,15 @@ namespace L1MapViewer.Models
             if (!Directory.Exists(s32Folder))
                 return;
 
+            var totalSw = Stopwatch.StartNew();
             string[] s32FilePaths = Directory.GetFiles(s32Folder, "*.s32");
+            var enumSw = totalSw.ElapsedMilliseconds;
 
-            foreach (string filePath in s32FilePaths)
+            // 平行解析 S32 檔案
+            var parsedFiles = new System.Collections.Concurrent.ConcurrentBag<(string filePath, S32Data s32Data)>();
+            var parseSw = Stopwatch.StartNew();
+
+            System.Threading.Tasks.Parallel.ForEach(s32FilePaths, filePath =>
             {
                 try
                 {
@@ -137,24 +144,36 @@ namespace L1MapViewer.Models
                         }
                     }
 
-                    S32Files[filePath] = s32Data;
-
-                    // 建立顯示項目
-                    var fileItem = new S32FileItem
-                    {
-                        FilePath = filePath,
-                        DisplayName = Path.GetFileName(filePath),
-                        SegInfo = s32Data.SegInfo,
-                        IsChecked = true
-                    };
-                    S32FileItems.Add(fileItem);
-                    CheckedS32Files.Add(filePath);
+                    parsedFiles.Add((filePath, s32Data));
                 }
                 catch (Exception)
                 {
                     // 忽略無法載入的檔案
                 }
+            });
+            parseSw.Stop();
+
+            // 順序加入集合（確保執行緒安全）
+            var collectSw = Stopwatch.StartNew();
+            foreach (var (filePath, s32Data) in parsedFiles)
+            {
+                S32Files[filePath] = s32Data;
+
+                // 建立顯示項目
+                var fileItem = new S32FileItem
+                {
+                    FilePath = filePath,
+                    DisplayName = Path.GetFileName(filePath),
+                    SegInfo = s32Data.SegInfo,
+                    IsChecked = true
+                };
+                S32FileItems.Add(fileItem);
+                CheckedS32Files.Add(filePath);
             }
+            collectSw.Stop();
+            totalSw.Stop();
+
+            Console.WriteLine($"[LoadS32Files] files={s32FilePaths.Length}, enum={enumSw}ms, parse={parseSw.ElapsedMilliseconds}ms, collect={collectSw.ElapsedMilliseconds}ms, total={totalSw.ElapsedMilliseconds}ms");
         }
 
         /// <summary>
