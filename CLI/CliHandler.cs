@@ -77,6 +77,8 @@ namespace L1MapViewer.CLI
                         return CmdTrimS32(cmdArgs);
                     case "generate-icon":
                         return CmdGenerateIcon(cmdArgs);
+                    case "benchmark-viewport":
+                        return CmdBenchmarkViewport(cmdArgs);
                     case "help":
                     case "-h":
                     case "--help":
@@ -2033,6 +2035,205 @@ L1MapViewer CLI - S32 檔案解析工具
             {
                 g.DrawPolygon(pen, points);
             }
+        }
+
+        /// <summary>
+        /// benchmark-viewport 命令 - 測試 viewport 渲染效能
+        /// </summary>
+        private static int CmdBenchmarkViewport(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.WriteLine("用法: -cli benchmark-viewport <map_path> [--regions N]");
+                Console.WriteLine("  map_path: 地圖資料夾路徑（包含 S32 檔案）");
+                Console.WriteLine("  --regions N: 測試區域數量（預設 6）");
+                Console.WriteLine();
+                Console.WriteLine("範例:");
+                Console.WriteLine("  -cli benchmark-viewport \"C:\\Lin\\map\\4\"");
+                Console.WriteLine("  -cli benchmark-viewport \"C:\\Lin\\map\\4\" --regions 10");
+                return 1;
+            }
+
+            string mapPath = args[0];
+            int regionCount = 6;
+
+            // 解析 --regions 參數
+            for (int i = 1; i < args.Length - 1; i++)
+            {
+                if (args[i] == "--regions" && int.TryParse(args[i + 1], out int r))
+                {
+                    regionCount = r;
+                    break;
+                }
+            }
+
+            if (!Directory.Exists(mapPath))
+            {
+                Console.WriteLine($"資料夾不存在: {mapPath}");
+                return 1;
+            }
+
+            // 找出所有 S32 檔案
+            var s32FilePaths = Directory.GetFiles(mapPath, "*.s32");
+            if (s32FilePaths.Length == 0)
+            {
+                Console.WriteLine($"找不到 S32 檔案: {mapPath}");
+                return 1;
+            }
+
+            // 從 S32 路徑推斷 client 路徑
+            string clientPath = FindClientPath(s32FilePaths[0]);
+            if (string.IsNullOrEmpty(clientPath))
+            {
+                Console.WriteLine($"無法找到 client 資料夾（需要 Tile.idx 和 Tile.pak）");
+                return 1;
+            }
+            Share.LineagePath = clientPath;
+
+            // 取得 mapId (地圖資料夾名稱)
+            string mapId = Path.GetFileName(mapPath);
+
+            Console.WriteLine("=== Viewport Benchmark ===");
+            Console.WriteLine($"Map: {mapId}");
+            Console.WriteLine($"Client: {clientPath}");
+            Console.WriteLine($"S32 Files: {s32FilePaths.Length}");
+            Console.WriteLine($"Regions: {regionCount}");
+            Console.WriteLine();
+
+            // 使用 L1MapHelper.Read 載入地圖資料（會填入 SegInfo）
+            Console.Write("Loading map data...");
+            var sw = Stopwatch.StartNew();
+            L1MapViewer.Helper.L1MapHelper.Read(clientPath);
+            sw.Stop();
+            Console.WriteLine($" {sw.ElapsedMilliseconds} ms");
+
+            // 確認地圖存在於 MapDataList
+            if (!Share.MapDataList.ContainsKey(mapId))
+            {
+                Console.WriteLine($"找不到地圖 {mapId}，可用地圖: {string.Join(", ", Share.MapDataList.Keys.Take(10))}...");
+                return 1;
+            }
+            var currentMap = Share.MapDataList[mapId];
+
+            // 載入所有 S32 檔案
+            Console.Write("Loading S32 files...");
+            sw.Restart();
+            var s32Files = new Dictionary<string, S32Data>();
+            int nullS32 = 0;
+            foreach (var kvp in currentMap.FullFileNameList)
+            {
+                string filePath = kvp.Key;
+                var segInfo = kvp.Value;
+
+                if (!segInfo.isS32) continue;
+                if (!File.Exists(filePath)) continue;
+
+                var s32 = S32Parser.ParseFile(filePath);
+                if (s32 == null)
+                {
+                    nullS32++;
+                    continue;
+                }
+                s32.FilePath = filePath;
+                s32.SegInfo = segInfo;
+                s32Files[filePath] = s32;
+            }
+            sw.Stop();
+            Console.WriteLine($" {sw.ElapsedMilliseconds} ms (valid: {s32Files.Count}, nullS32: {nullS32})");
+
+            // 計算地圖範圍
+            int minX = int.MaxValue, minY = int.MaxValue;
+            int maxX = int.MinValue, maxY = int.MinValue;
+
+            foreach (var s32Data in s32Files.Values)
+            {
+                int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                if (loc == null) continue;
+                int mx = loc[0];
+                int my = loc[1];
+
+                minX = Math.Min(minX, mx);
+                minY = Math.Min(minY, my);
+                maxX = Math.Max(maxX, mx + L1MapViewer.Helper.ViewportRenderer.BlockWidth);
+                maxY = Math.Max(maxY, my + L1MapViewer.Helper.ViewportRenderer.BlockHeight);
+            }
+
+            int mapWidth = maxX - minX;
+            int mapHeight = maxY - minY;
+            Console.WriteLine($"Map Size: {mapWidth} x {mapHeight} px");
+            Console.WriteLine();
+
+            // 建立渲染器
+            var renderer = new L1MapViewer.Helper.ViewportRenderer();
+            var checkedFiles = new HashSet<string>(s32Files.Keys);
+
+            // Viewport 大小（模擬典型螢幕）
+            int viewportWidth = 4121;
+            int viewportHeight = 3844;
+
+            // 隨機生成測試區域
+            var random = new Random(42); // 固定種子以便重現
+            var regions = new List<Rectangle>();
+            for (int i = 0; i < regionCount; i++)
+            {
+                int x = random.Next(minX, Math.Max(minX + 1, maxX - viewportWidth));
+                int y = random.Next(minY, Math.Max(minY + 1, maxY - viewportHeight));
+                regions.Add(new Rectangle(x, y, viewportWidth, viewportHeight));
+            }
+
+            // 執行測試
+            var allStats = new List<L1MapViewer.Helper.ViewportRenderer.RenderStats>();
+
+            for (int i = 0; i < regions.Count; i++)
+            {
+                var region = regions[i];
+                Console.WriteLine($"--- Region {i + 1}/{regionCount}: ({region.X}, {region.Y}) {region.Width}x{region.Height} ---");
+
+                L1MapViewer.Helper.ViewportRenderer.RenderStats stats;
+                using (var bitmap = renderer.RenderViewport(region, s32Files, checkedFiles, true, true, true, out stats))
+                {
+                    // bitmap 會在 using 結束時 dispose
+                }
+
+                Console.WriteLine($"  [Create Bitmap]    {stats.CreateBitmapMs,5} ms");
+                Console.WriteLine($"  [Spatial Query]    {stats.SpatialQueryMs,5} ms  (candidates: {stats.CandidateCount})");
+                Console.WriteLine($"  [Sort]             {stats.SortMs,5} ms");
+                Console.WriteLine($"  [GetOrRender S32]  {stats.GetBlockMs,5} ms  (blocks: {stats.BlockCount}, hits: {stats.CacheHits}, misses: {stats.CacheMisses})");
+                Console.WriteLine($"  [CopyBitmapDirect] {stats.CopyBitmapMs,5} ms");
+                Console.WriteLine($"  [Total]            {stats.TotalMs,5} ms");
+                Console.WriteLine();
+
+                allStats.Add(stats);
+            }
+
+            // 統計
+            Console.WriteLine("=== Summary ===");
+            var avgTotal = allStats.Average(s => s.TotalMs);
+            var minTotal = allStats.Min(s => s.TotalMs);
+            var maxTotal = allStats.Max(s => s.TotalMs);
+            Console.WriteLine($"Average: {avgTotal:F0} ms");
+            Console.WriteLine($"Min: {minTotal} ms, Max: {maxTotal} ms");
+
+            // 找出瓶頸
+            var avgCreate = allStats.Average(s => s.CreateBitmapMs);
+            var avgSpatial = allStats.Average(s => s.SpatialQueryMs);
+            var avgSort = allStats.Average(s => s.SortMs);
+            var avgGetBlock = allStats.Average(s => s.GetBlockMs);
+            var avgCopy = allStats.Average(s => s.CopyBitmapMs);
+
+            var bottleneck = new[] {
+                ("Create Bitmap", avgCreate),
+                ("Spatial Query", avgSpatial),
+                ("Sort", avgSort),
+                ("GetOrRender S32", avgGetBlock),
+                ("CopyBitmapDirect", avgCopy)
+            }.OrderByDescending(x => x.Item2).First();
+
+            double percentage = (bottleneck.Item2 / avgTotal) * 100;
+            Console.WriteLine($"Bottleneck: {bottleneck.Item1} ({percentage:F0}%)");
+
+            renderer.ClearCache();
+            return 0;
         }
     }
 }

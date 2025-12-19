@@ -279,8 +279,9 @@ namespace L1MapViewer.Models
 
         /// <summary>
         /// 渲染緩衝區邊距（超出可見範圍多渲染的像素）
+        /// 減少緩衝區可提升大地圖拖曳效能，但會增加重渲染頻率
         /// </summary>
-        public int RenderBufferMargin { get; set; } = 2048;
+        public int RenderBufferMargin { get; set; } = 1536;
 
         /// <summary>
         /// 當前渲染結果的世界座標原點 X
