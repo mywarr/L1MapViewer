@@ -18,9 +18,13 @@ namespace L1MapViewer.Helper
         // 網格資料：key = (gridX, gridY), value = 該網格內的物件列表
         private readonly Dictionary<(int, int), List<Layer4Entry>> _grid;
 
+        // 預先建立的群組字典：key = GroupId, value = 該群組的所有物件
+        private readonly Dictionary<int, List<(S32Data s32, ObjectTile obj)>> _allGroups;
+
         // 統計資料
         public int TotalObjects { get; private set; }
         public int GridCellCount => _grid.Count;
+        public int GroupCount => _allGroups.Count;
         public long BuildTimeMs { get; private set; }
 
         /// <summary>
@@ -37,6 +41,7 @@ namespace L1MapViewer.Helper
         public Layer4SpatialIndex()
         {
             _grid = new Dictionary<(int, int), List<Layer4Entry>>();
+            _allGroups = new Dictionary<int, List<(S32Data s32, ObjectTile obj)>>();
         }
 
         /// <summary>
@@ -46,6 +51,7 @@ namespace L1MapViewer.Helper
         {
             var sw = Stopwatch.StartNew();
             _grid.Clear();
+            _allGroups.Clear();
             TotalObjects = 0;
 
             foreach (var s32Data in s32Files)
@@ -77,6 +83,14 @@ namespace L1MapViewer.Helper
                         GameX = gameX,
                         GameY = gameY
                     });
+
+                    // 同時建立群組字典（避免之後再次掃描）
+                    if (!_allGroups.TryGetValue(obj.GroupId, out var groupList))
+                    {
+                        groupList = new List<(S32Data, ObjectTile)>();
+                        _allGroups[obj.GroupId] = groupList;
+                    }
+                    groupList.Add((s32Data, obj));
 
                     TotalObjects++;
                 }
@@ -156,11 +170,20 @@ namespace L1MapViewer.Helper
         }
 
         /// <summary>
+        /// 取得所有群組（預先建立，O(1)）
+        /// </summary>
+        public Dictionary<int, List<(S32Data s32, ObjectTile obj)>> GetAllGroups()
+        {
+            return _allGroups;
+        }
+
+        /// <summary>
         /// 清除索引
         /// </summary>
         public void Clear()
         {
             _grid.Clear();
+            _allGroups.Clear();
             TotalObjects = 0;
         }
     }

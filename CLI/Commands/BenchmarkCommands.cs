@@ -564,5 +564,213 @@ namespace L1MapViewer.CLI.Commands
 
             return 0;
         }
+
+        /// <summary>
+        /// 測試縮圖產生效能（不含實際 tile 繪製）
+        /// </summary>
+        public static int Thumbnails(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.WriteLine("用法: benchmark-thumbnails <map_path> [--runs N] [--size N]");
+                Console.WriteLine("範例: benchmark-thumbnails C:\\client\\map\\4");
+                Console.WriteLine("      benchmark-thumbnails C:\\client\\map\\4 --size 80");
+                Console.WriteLine();
+                Console.WriteLine("測試縮圖產生的效能（不含實際 tile 繪製）");
+                Console.WriteLine("這可以分離 Bitmap 操作開銷 vs tile 讀取/繪製開銷");
+                return 1;
+            }
+
+            string mapPath = args[0];
+            int runs = 3;
+            int thumbnailSize = 80;
+
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (args[i] == "--runs" && i + 1 < args.Length)
+                    int.TryParse(args[++i], out runs);
+                else if (args[i] == "--size" && i + 1 < args.Length)
+                    int.TryParse(args[++i], out thumbnailSize);
+            }
+
+            var loadResult = MapLoader.Load(mapPath);
+            if (!loadResult.Success) return 1;
+
+            Console.WriteLine();
+            Console.WriteLine($"Runs: {runs}");
+            Console.WriteLine($"Thumbnail Size: {thumbnailSize}x{thumbnailSize}");
+
+            // 建立空間索引取得所有群組
+            Console.Write("Building spatial index...");
+            var spatialIndex = new Layer4SpatialIndex();
+            spatialIndex.Build(loadResult.S32Files.Values);
+            Console.WriteLine($" {spatialIndex.BuildTimeMs} ms");
+            Console.WriteLine($"  Total Groups: {spatialIndex.GroupCount:N0}");
+            Console.WriteLine();
+
+            var allGroups = spatialIndex.GetAllGroups();
+            var groupList = allGroups.OrderBy(k => k.Key).ToList();
+
+            Console.WriteLine($"=== Benchmark: Generate {groupList.Count} Thumbnails ===");
+            Console.WriteLine();
+
+            var allTimes = new List<long>();
+            var sw = new Stopwatch();
+
+            for (int run = 1; run <= runs; run++)
+            {
+                Console.WriteLine($"--- Run {run}/{runs} ---");
+
+                long totalBitmapCreate = 0;
+                long totalFillWhite = 0;
+                long totalCalcBounds = 0;
+                long totalScale = 0;
+                long totalDispose = 0;
+                int processedCount = 0;
+
+                sw.Restart();
+
+                // 模擬並行處理（與 MapForm 相同）
+                var parallelOptions = new System.Threading.Tasks.ParallelOptions
+                {
+                    MaxDegreeOfParallelism = Environment.ProcessorCount
+                };
+
+                System.Threading.Tasks.Parallel.ForEach(groupList, parallelOptions, kvp =>
+                {
+                    var localSw = new Stopwatch();
+                    var objects = kvp.Value;
+
+                    // 1. 計算像素邊界
+                    localSw.Start();
+                    int pixelMinX = int.MaxValue, pixelMaxX = int.MinValue;
+                    int pixelMinY = int.MaxValue, pixelMaxY = int.MinValue;
+
+                    foreach (var item in objects)
+                    {
+                        var obj = item.obj;
+                        int halfX = obj.X / 2;
+                        int baseX = -24 * halfX;
+                        int baseY = 63 * 12 - 12 * halfX;
+                        int px = baseX + obj.X * 24 + obj.Y * 24;
+                        int py = baseY + obj.Y * 12;
+
+                        pixelMinX = Math.Min(pixelMinX, px);
+                        pixelMaxX = Math.Max(pixelMaxX, px + 48);
+                        pixelMinY = Math.Min(pixelMinY, py);
+                        pixelMaxY = Math.Max(pixelMaxY, py + 48);
+                    }
+                    localSw.Stop();
+                    System.Threading.Interlocked.Add(ref totalCalcBounds, localSw.ElapsedTicks);
+
+                    // 2. 計算大小
+                    int margin = 8;
+                    int actualWidth = pixelMaxX - pixelMinX + margin * 2;
+                    int actualHeight = pixelMaxY - pixelMinY + margin * 2;
+                    int maxTempSize = 512;
+                    int tempWidth = Math.Min(Math.Max(actualWidth, 64), maxTempSize);
+                    int tempHeight = Math.Min(Math.Max(actualHeight, 64), maxTempSize);
+
+                    float preScale = 1.0f;
+                    if (actualWidth > maxTempSize || actualHeight > maxTempSize)
+                    {
+                        preScale = Math.Min((float)maxTempSize / actualWidth, (float)maxTempSize / actualHeight);
+                        tempWidth = (int)(actualWidth * preScale);
+                        tempHeight = (int)(actualHeight * preScale);
+                    }
+
+                    // 3. 建立暫存 Bitmap
+                    localSw.Restart();
+                    using (var tempBitmap = new Bitmap(tempWidth, tempHeight, PixelFormat.Format16bppRgb555))
+                    {
+                        localSw.Stop();
+                        System.Threading.Interlocked.Add(ref totalBitmapCreate, localSw.ElapsedTicks);
+
+                        // 4. 填充白色背景
+                        localSw.Restart();
+                        var rect = new Rectangle(0, 0, tempBitmap.Width, tempBitmap.Height);
+                        var bmpData = tempBitmap.LockBits(rect, ImageLockMode.ReadWrite, tempBitmap.PixelFormat);
+                        int rowpix = bmpData.Stride;
+
+                        unsafe
+                        {
+                            byte* ptr = (byte*)bmpData.Scan0;
+                            byte[] whiteLine = new byte[rowpix];
+                            for (int x = 0; x < tempWidth; x++)
+                            {
+                                whiteLine[x * 2] = 0xFF;
+                                whiteLine[x * 2 + 1] = 0x7F;
+                            }
+                            for (int y = 0; y < tempHeight; y++)
+                            {
+                                System.Runtime.InteropServices.Marshal.Copy(whiteLine, 0, (IntPtr)(ptr + y * rowpix), rowpix);
+                            }
+                        }
+                        tempBitmap.UnlockBits(bmpData);
+                        localSw.Stop();
+                        System.Threading.Interlocked.Add(ref totalFillWhite, localSw.ElapsedTicks);
+
+                        // 5. 縮放到目標大小
+                        localSw.Restart();
+                        using (var result = new Bitmap(thumbnailSize, thumbnailSize, PixelFormat.Format32bppArgb))
+                        {
+                            using (var g = Graphics.FromImage(result))
+                            {
+                                g.Clear(Color.White);
+                                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+                                g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighSpeed;
+
+                                float scaleX = (float)(thumbnailSize - 4) / tempWidth;
+                                float scaleY = (float)(thumbnailSize - 4) / tempHeight;
+                                float scale = Math.Min(scaleX, scaleY);
+                                int scaledWidth = (int)(tempWidth * scale);
+                                int scaledHeight = (int)(tempHeight * scale);
+                                int drawX = (thumbnailSize - scaledWidth) / 2;
+                                int drawY = (thumbnailSize - scaledHeight) / 2;
+
+                                g.DrawImage(tempBitmap, drawX, drawY, scaledWidth, scaledHeight);
+                                g.DrawRectangle(Pens.LightGray, 0, 0, thumbnailSize - 1, thumbnailSize - 1);
+                            }
+                            localSw.Stop();
+                            System.Threading.Interlocked.Add(ref totalScale, localSw.ElapsedTicks);
+                        }
+                    }
+
+                    System.Threading.Interlocked.Increment(ref processedCount);
+                });
+
+                sw.Stop();
+                long totalMs = sw.ElapsedMilliseconds;
+                allTimes.Add(totalMs);
+
+                // 轉換 ticks 到 ms
+                double ticksPerMs = Stopwatch.Frequency / 1000.0;
+                double calcBoundsMs = totalCalcBounds / ticksPerMs;
+                double bitmapCreateMs = totalBitmapCreate / ticksPerMs;
+                double fillWhiteMs = totalFillWhite / ticksPerMs;
+                double scaleMs = totalScale / ticksPerMs;
+
+                Console.WriteLine($"  Total:          {totalMs,6} ms");
+                Console.WriteLine($"  Per thumbnail:  {(double)totalMs / groupList.Count:F2} ms");
+                Console.WriteLine();
+                Console.WriteLine($"  Breakdown (cumulative across all threads):");
+                Console.WriteLine($"    Calc Bounds:  {calcBoundsMs,8:F1} ms");
+                Console.WriteLine($"    Bitmap Create:{bitmapCreateMs,8:F1} ms");
+                Console.WriteLine($"    Fill White:   {fillWhiteMs,8:F1} ms");
+                Console.WriteLine($"    Scale+Draw:   {scaleMs,8:F1} ms");
+                Console.WriteLine();
+            }
+
+            Console.WriteLine("=== Summary ===");
+            Console.WriteLine($"Average:  {allTimes.Average():F0} ms ({allTimes.Average() / groupList.Count:F2} ms/thumbnail)");
+            Console.WriteLine($"Min:      {allTimes.Min()} ms");
+            Console.WriteLine($"Max:      {allTimes.Max()} ms");
+            Console.WriteLine();
+            Console.WriteLine("NOTE: This benchmark does NOT include actual tile drawing (DrawTilToBufferDirect).");
+            Console.WriteLine("      The real thumbnail generation includes tile lookup and pixel copying.");
+            Console.WriteLine("      If this is fast but GUI is slow, tile drawing is the bottleneck.");
+
+            return 0;
+        }
     }
 }

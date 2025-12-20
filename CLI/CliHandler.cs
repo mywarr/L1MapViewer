@@ -95,6 +95,8 @@ namespace L1MapViewer.CLI
                         return Commands.BenchmarkCommands.NearbyGroups(cmdArgs);
                     case "benchmark-spatialindex":
                         return Commands.BenchmarkCommands.SpatialIndex(cmdArgs);
+                    case "benchmark-thumbnails":
+                        return Commands.BenchmarkCommands.Thumbnails(cmdArgs);
                     case "help":
                     case "-h":
                     case "--help":

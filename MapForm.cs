@@ -253,7 +253,7 @@ namespace L1FlyMapViewer
             try
             {
                 _layer4SpatialIndex.Build(_document.S32Files.Values);
-                LogPerf($"[LAYER4-INDEX] Built index for {_layer4SpatialIndex.TotalObjects:N0} objects, {_layer4SpatialIndex.GridCellCount:N0} grid cells, in {_layer4SpatialIndex.BuildTimeMs}ms");
+                LogPerf($"[LAYER4-INDEX] Built index for {_layer4SpatialIndex.TotalObjects:N0} objects, {_layer4SpatialIndex.GridCellCount:N0} grid cells, {_layer4SpatialIndex.GroupCount:N0} groups, in {_layer4SpatialIndex.BuildTimeMs}ms");
             }
             catch (Exception ex)
             {
@@ -12087,18 +12087,8 @@ namespace L1FlyMapViewer
                 }
                 else
                 {
-                    // 收集所有 S32 中的群組
-                    foreach (var s32Data in s32FilesSnapshot)
-                    {
-                        foreach (var obj in s32Data.Layer4)
-                        {
-                            if (!allGroupsDict.ContainsKey(obj.GroupId))
-                            {
-                                allGroupsDict[obj.GroupId] = new List<(S32Data, ObjectTile)>();
-                            }
-                            allGroupsDict[obj.GroupId].Add((s32Data, obj));
-                        }
-                    }
+                    // 使用預先建立的群組字典（O(1) 取得，避免掃描 4.6M 物件）
+                    allGroupsDict = _layer4SpatialIndex.GetAllGroups();
                 }
 
                 if (cancellationToken.IsCancellationRequested) return;
