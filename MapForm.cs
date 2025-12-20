@@ -83,6 +83,10 @@ namespace L1FlyMapViewer
         // 拖曳結束後延遲渲染 Timer
         private System.Windows.Forms.Timer dragRenderTimer;
 
+        // 素材貼上預覽狀態
+        private Fs3pData _pendingMaterial = null;
+        private string _pendingMaterialPath = null;
+
         // 效能 Log 檔案路徑（開關由 Program.PerfLogEnabled 控制，啟動時加 --perf-log）
         private static readonly string _perfLogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "perf.log");
         private static void LogPerf(string message)
@@ -531,6 +535,12 @@ namespace L1FlyMapViewer
                     _editState.IsDrawingPassabilityPolygon = false;
                     s32PictureBox.Invalidate();
                     this.toolStripStatusLabel1.Text = "已取消多邊形繪製";
+                }
+                // 取消素材貼上模式
+                else if (_pendingMaterial != null)
+                {
+                    CancelMaterialPasteMode();
+                    this.toolStripStatusLabel1.Text = "已取消素材貼上模式";
                 }
                 else
                 {
@@ -7680,6 +7690,16 @@ namespace L1FlyMapViewer
                     return;
                 }
 
+                // 素材貼上模式：點擊貼上素材
+                if (_pendingMaterial != null && e.Button == MouseButtons.Left)
+                {
+                    // 計算遊戲座標
+                    int gameX = s32Data.SegInfo.nLinBeginX + x;
+                    int gameY = s32Data.SegInfo.nLinBeginY + y;
+                    PasteMaterialAtPosition(gameX, gameY);
+                    return;
+                }
+
                 // Ctrl + 左鍵：刪除該格子的所有第四層物件
                 if (e.Button == MouseButtons.Left && ModifierKeys == Keys.Control)
                 {
@@ -8308,8 +8328,8 @@ namespace L1FlyMapViewer
                 this.toolStripStatusLabel1.Text = "已取消多邊形繪製";
                 return;
             }
-            // 左鍵：開始區域選擇
-            else if (e.Button == MouseButtons.Left && Control.ModifierKeys == Keys.None)
+            // 左鍵：開始區域選擇（素材貼上模式時不進入區域選擇）
+            else if (e.Button == MouseButtons.Left && Control.ModifierKeys == Keys.None && _pendingMaterial == null)
             {
                 isSelectingRegion = true;
                 isLayer4CopyMode = true;  // 進入複製模式
@@ -12269,8 +12289,24 @@ namespace L1FlyMapViewer
             var item = lvMaterials.SelectedItems[0];
             if (item.Tag is string filePath)
             {
-                // TODO: 進入素材貼上預覽模式
-                toolStripStatusLabel1.Text = $"選擇素材: {item.Text}";
+                try
+                {
+                    // 載入素材
+                    var library = new L1MapViewer.Helper.MaterialLibrary();
+                    var material = library.LoadMaterial(filePath);
+                    if (material != null)
+                    {
+                        StartMaterialPasteMode(material, filePath);
+                    }
+                    else
+                    {
+                        MessageBox.Show("無法載入素材", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"載入素材失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
         }
 
@@ -12280,7 +12316,210 @@ namespace L1FlyMapViewer
             if (e.Button != MouseButtons.Right)
                 return;
 
-            // TODO: 顯示素材操作選單（使用、刪除等）
+            if (lvMaterials.SelectedItems.Count == 0)
+                return;
+
+            var item = lvMaterials.SelectedItems[0];
+            if (!(item.Tag is string filePath))
+                return;
+
+            var menu = new ContextMenuStrip();
+
+            // 查看詳情
+            var detailItem = new ToolStripMenuItem("查看詳情...");
+            detailItem.Click += (s, ev) => ShowMaterialDetails(filePath);
+            menu.Items.Add(detailItem);
+
+            // 使用素材
+            var useItem = new ToolStripMenuItem("使用素材");
+            useItem.Click += (s, ev) =>
+            {
+                try
+                {
+                    var library = new L1MapViewer.Helper.MaterialLibrary();
+                    var material = library.LoadMaterial(filePath);
+                    if (material != null)
+                    {
+                        StartMaterialPasteMode(material, filePath);
+                    }
+                }
+                catch { }
+            };
+            menu.Items.Add(useItem);
+
+            menu.Items.Add(new ToolStripSeparator());
+
+            // 刪除素材
+            var deleteItem = new ToolStripMenuItem("刪除素材");
+            deleteItem.Click += (s, ev) =>
+            {
+                if (MessageBox.Show($"確定要刪除素材 \"{item.Text}\" 嗎？", "確認刪除",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+                {
+                    var library = new L1MapViewer.Helper.MaterialLibrary();
+                    if (library.DeleteMaterial(filePath))
+                    {
+                        RefreshMaterialsList();
+                        toolStripStatusLabel1.Text = $"已刪除素材: {item.Text}";
+                    }
+                }
+            };
+            menu.Items.Add(deleteItem);
+
+            menu.Show(lvMaterials, e.Location);
+        }
+
+        // 顯示素材詳細資料
+        private void ShowMaterialDetails(string filePath)
+        {
+            try
+            {
+                var material = L1MapViewer.CLI.Fs3pParser.ParseFile(filePath);
+                if (material == null)
+                {
+                    MessageBox.Show("無法載入素材", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine($"素材名稱: {material.Name}");
+                sb.AppendLine($"檔案路徑: {filePath}");
+                sb.AppendLine();
+                sb.AppendLine($"尺寸: {material.Width} x {material.Height}");
+                sb.AppendLine($"原點偏移: ({material.OriginOffsetX}, {material.OriginOffsetY})");
+                sb.AppendLine();
+
+                // Layer 資訊
+                sb.AppendLine("=== 圖層資料 ===");
+                if (material.HasLayer1)
+                    sb.AppendLine($"Layer1 (地板): {material.Layer1Items.Count} 項");
+                if (material.HasLayer2)
+                    sb.AppendLine($"Layer2 (裝飾): {material.Layer2Items.Count} 項");
+                if (material.HasLayer3)
+                    sb.AppendLine($"Layer3 (屬性): {material.Layer3Items.Count} 項");
+                if (material.HasLayer4)
+                    sb.AppendLine($"Layer4 (物件): {material.Layer4Items.Count} 項");
+
+                if (!material.HasLayer1 && !material.HasLayer2 && !material.HasLayer3 && !material.HasLayer4)
+                    sb.AppendLine("(無圖層資料)");
+
+                sb.AppendLine();
+
+                // Tile 資訊
+                sb.AppendLine("=== Tile 資料 ===");
+                if (material.Tiles.Count > 0)
+                {
+                    sb.AppendLine($"包含 {material.Tiles.Count} 個 Tiles:");
+                    foreach (var tile in material.Tiles.OrderBy(t => t.Key))
+                    {
+                        sb.AppendLine($"  - Tile {tile.Key} ({tile.Value.TilData?.Length ?? 0} bytes)");
+                    }
+                }
+                else
+                {
+                    sb.AppendLine("(未包含 Tile 資料)");
+                }
+
+                sb.AppendLine();
+
+                // 使用的 TileId 統計
+                var usedTileIds = new HashSet<int>();
+                foreach (var item in material.Layer1Items)
+                    if (item.TileId > 0) usedTileIds.Add(item.TileId);
+                foreach (var item in material.Layer2Items)
+                    if (item.TileId > 0) usedTileIds.Add(item.TileId);
+                foreach (var item in material.Layer4Items)
+                    if (item.TileId > 0) usedTileIds.Add(item.TileId);
+
+                if (usedTileIds.Count > 0)
+                {
+                    sb.AppendLine($"=== 使用的 TileId ({usedTileIds.Count} 個) ===");
+                    var sortedIds = usedTileIds.OrderBy(x => x).ToList();
+                    for (int i = 0; i < sortedIds.Count; i += 10)
+                    {
+                        var batch = sortedIds.Skip(i).Take(10);
+                        sb.AppendLine(string.Join(", ", batch));
+                    }
+                }
+
+                // Metadata
+                sb.AppendLine();
+                sb.AppendLine("=== 中繼資料 ===");
+                if (material.CreatedTime > 0)
+                {
+                    var created = DateTimeOffset.FromUnixTimeSeconds(material.CreatedTime).LocalDateTime;
+                    sb.AppendLine($"建立時間: {created:yyyy-MM-dd HH:mm:ss}");
+                }
+                if (material.ModifiedTime > 0)
+                {
+                    var modified = DateTimeOffset.FromUnixTimeSeconds(material.ModifiedTime).LocalDateTime;
+                    sb.AppendLine($"修改時間: {modified:yyyy-MM-dd HH:mm:ss}");
+                }
+                if (material.Tags.Count > 0)
+                {
+                    sb.AppendLine($"標籤: {string.Join(", ", material.Tags)}");
+                }
+
+                // 使用可複製的對話框
+                using (var detailForm = new Form())
+                {
+                    detailForm.Text = $"素材詳情 - {material.Name}";
+                    detailForm.Size = new Size(500, 450);
+                    detailForm.StartPosition = FormStartPosition.CenterParent;
+                    detailForm.FormBorderStyle = FormBorderStyle.Sizable;
+                    detailForm.MinimumSize = new Size(400, 300);
+
+                    var textBox = new TextBox
+                    {
+                        Multiline = true,
+                        ReadOnly = true,
+                        ScrollBars = ScrollBars.Both,
+                        Dock = DockStyle.Fill,
+                        Font = new Font("Consolas", 9),
+                        Text = sb.ToString(),
+                        SelectionStart = 0,
+                        SelectionLength = 0
+                    };
+
+                    var btnPanel = new Panel
+                    {
+                        Dock = DockStyle.Bottom,
+                        Height = 40
+                    };
+
+                    var btnCopy = new Button
+                    {
+                        Text = "複製全部",
+                        Size = new Size(80, 28),
+                        Location = new Point(10, 6)
+                    };
+                    btnCopy.Click += (s, ev) =>
+                    {
+                        Clipboard.SetText(sb.ToString());
+                        toolStripStatusLabel1.Text = "已複製素材詳情到剪貼簿";
+                    };
+
+                    var btnClose = new Button
+                    {
+                        Text = "關閉",
+                        Size = new Size(80, 28),
+                        Location = new Point(100, 6),
+                        DialogResult = DialogResult.OK
+                    };
+
+                    btnPanel.Controls.Add(btnCopy);
+                    btnPanel.Controls.Add(btnClose);
+                    detailForm.Controls.Add(textBox);
+                    detailForm.Controls.Add(btnPanel);
+                    detailForm.AcceptButton = btnClose;
+
+                    detailForm.ShowDialog();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"讀取素材失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         // 素材面板 - 更多按鈕
@@ -12296,9 +12535,257 @@ namespace L1FlyMapViewer
             }
         }
 
-        // 素材貼上預覽狀態
-        private Fs3pData _pendingMaterial = null;
-        private string _pendingMaterialPath = null;
+        // 在指定位置貼上素材
+        private void PasteMaterialAtPosition(int gameX, int gameY)
+        {
+            if (_pendingMaterial == null)
+                return;
+
+            try
+            {
+                var material = _pendingMaterial;
+
+                // 計算貼上原點（Layer1 座標）- 點擊位置為素材左上角
+                int pasteOriginX = gameX * 2;
+                int pasteOriginY = gameY;
+
+                // 檢查並修正 RelativeX/Y 偏移（舊素材可能沒有正規化）
+                // 計算所有圖層的最小 RelativeX/Y
+                int minRelX = int.MaxValue;
+                int minRelY = int.MaxValue;
+
+                foreach (var item in material.Layer1Items)
+                {
+                    if (item.RelativeX < minRelX) minRelX = item.RelativeX;
+                    if (item.RelativeY < minRelY) minRelY = item.RelativeY;
+                }
+                foreach (var item in material.Layer2Items)
+                {
+                    if (item.RelativeX < minRelX) minRelX = item.RelativeX;
+                    if (item.RelativeY < minRelY) minRelY = item.RelativeY;
+                }
+                foreach (var item in material.Layer3Items)
+                {
+                    // Layer3 使用不同座標系統，暫時跳過
+                }
+                foreach (var item in material.Layer4Items)
+                {
+                    if (item.RelativeX < minRelX) minRelX = item.RelativeX;
+                    if (item.RelativeY < minRelY) minRelY = item.RelativeY;
+                }
+
+                // 如果沒有任何項目，設為 0
+                if (minRelX == int.MaxValue) minRelX = 0;
+                if (minRelY == int.MaxValue) minRelY = 0;
+
+                // 偏移修正值
+                int offsetFixX = minRelX;
+                int offsetFixY = minRelY;
+
+                int layer1Count = 0, layer2Count = 0, layer3Count = 0, layer4Count = 0;
+                int skippedCount = 0;
+
+                // 建立 Undo 記錄
+                var undoAction = new UndoAction
+                {
+                    Description = $"貼上素材 {material.Name}"
+                };
+
+                // 貼上 Layer1 資料（地板）
+                if (material.HasLayer1)
+                {
+                    foreach (var item in material.Layer1Items)
+                    {
+                        // 套用偏移修正
+                        int targetGlobalX = pasteOriginX + item.RelativeX - offsetFixX;
+                        int targetGlobalY = pasteOriginY + item.RelativeY - offsetFixY;
+                        int targetGameX = targetGlobalX / 2;
+                        int targetGameY = targetGlobalY;
+
+                        S32Data targetS32 = GetS32DataByGameCoords(targetGameX, targetGameY);
+                        if (targetS32 == null)
+                        {
+                            skippedCount++;
+                            continue;
+                        }
+
+                        int localX = targetGlobalX - targetS32.SegInfo.nLinBeginX * 2;
+                        int localY = targetGlobalY - targetS32.SegInfo.nLinBeginY;
+
+                        if (localX < 0 || localX >= 128 || localY < 0 || localY >= 64)
+                        {
+                            skippedCount++;
+                            continue;
+                        }
+
+                        var oldCell = targetS32.Layer1[localY, localX];
+                        undoAction.ModifiedLayer1.Add(new UndoLayer1Info
+                        {
+                            S32FilePath = targetS32.FilePath,
+                            LocalX = localX,
+                            LocalY = localY,
+                            OldTileId = oldCell?.TileId ?? 0,
+                            OldIndexId = oldCell?.IndexId ?? 0,
+                            NewTileId = item.TileId,
+                            NewIndexId = item.IndexId
+                        });
+
+                        targetS32.Layer1[localY, localX] = new TileCell
+                        {
+                            X = localX,
+                            Y = localY,
+                            TileId = item.TileId,
+                            IndexId = item.IndexId
+                        };
+                        if (item.TileId > 0) layer1Count++;
+                        targetS32.IsModified = true;
+                    }
+                }
+
+                // 貼上 Layer3 資料（屬性）
+                if (material.HasLayer3)
+                {
+                    foreach (var item in material.Layer3Items)
+                    {
+                        int targetGlobalX = pasteOriginX + item.RelativeX * 2;  // Layer3 是遊戲座標
+                        int targetGlobalY = pasteOriginY + item.RelativeY;
+                        int targetGameX = targetGlobalX / 2;
+                        int targetGameY = targetGlobalY;
+
+                        S32Data targetS32 = GetS32DataByGameCoords(targetGameX, targetGameY);
+                        if (targetS32 == null)
+                        {
+                            skippedCount++;
+                            continue;
+                        }
+
+                        int layer3X = targetGameX - targetS32.SegInfo.nLinBeginX;
+                        int localY = targetGameY - targetS32.SegInfo.nLinBeginY;
+
+                        if (layer3X < 0 || layer3X >= 64 || localY < 0 || localY >= 64)
+                        {
+                            skippedCount++;
+                            continue;
+                        }
+
+                        var oldAttr = targetS32.Layer3[localY, layer3X];
+                        undoAction.ModifiedLayer3.Add(new UndoLayer3Info
+                        {
+                            S32FilePath = targetS32.FilePath,
+                            LocalX = layer3X,
+                            LocalY = localY,
+                            OldAttribute1 = oldAttr?.Attribute1 ?? 0,
+                            OldAttribute2 = oldAttr?.Attribute2 ?? 0,
+                            NewAttribute1 = item.Attribute1,
+                            NewAttribute2 = item.Attribute2
+                        });
+
+                        targetS32.Layer3[localY, layer3X] = new MapAttribute
+                        {
+                            Attribute1 = item.Attribute1,
+                            Attribute2 = item.Attribute2
+                        };
+                        layer3Count++;
+                        targetS32.IsModified = true;
+                    }
+                }
+
+                // 貼上 Layer4 資料（物件）
+                if (material.HasLayer4)
+                {
+                    // 取得新的 GroupId 起始值
+                    int maxGroupId = 0;
+                    foreach (var s32 in _document.S32Files.Values)
+                    {
+                        foreach (var obj in s32.Layer4)
+                        {
+                            if (obj.GroupId > maxGroupId)
+                                maxGroupId = obj.GroupId;
+                        }
+                    }
+                    int baseGroupId = maxGroupId + 1;
+
+                    foreach (var item in material.Layer4Items)
+                    {
+                        // 套用偏移修正（舊素材的 RelativeX/Y 可能不是從 0 開始）
+                        int targetGlobalX = pasteOriginX + item.RelativeX - offsetFixX;
+                        int targetGlobalY = pasteOriginY + item.RelativeY - offsetFixY;
+                        int targetGameX = targetGlobalX / 2;
+                        int targetGameY = targetGlobalY;
+
+                        S32Data targetS32 = GetS32DataByGameCoords(targetGameX, targetGameY);
+                        if (targetS32 == null)
+                        {
+                            skippedCount++;
+                            continue;
+                        }
+
+                        int objLocalX = targetGlobalX - targetS32.SegInfo.nLinBeginX * 2;
+                        int objLocalY = targetGlobalY - targetS32.SegInfo.nLinBeginY;
+
+                        if (objLocalY < 0 || objLocalY >= 64)
+                        {
+                            skippedCount++;
+                            continue;
+                        }
+
+                        var newObj = new ObjectTile
+                        {
+                            GroupId = baseGroupId + item.GroupId,  // 重新映射 GroupId
+                            X = objLocalX,
+                            Y = objLocalY,
+                            Layer = item.Layer,
+                            IndexId = item.IndexId,
+                            TileId = item.TileId
+                        };
+                        targetS32.Layer4.Add(newObj);
+                        Layer4Index_Add(targetS32, newObj);
+                        layer4Count++;
+
+                        undoAction.AddedObjects.Add(new UndoObjectInfo
+                        {
+                            S32FilePath = targetS32.FilePath,
+                            GameX = targetS32.SegInfo.nLinBeginX + objLocalX / 2,
+                            GameY = targetS32.SegInfo.nLinBeginY + objLocalY,
+                            LocalX = newObj.X,
+                            LocalY = newObj.Y,
+                            GroupId = newObj.GroupId,
+                            Layer = newObj.Layer,
+                            IndexId = newObj.IndexId,
+                            TileId = newObj.TileId
+                        });
+
+                        targetS32.IsModified = true;
+                    }
+                }
+
+                // 加入 Undo 記錄
+                if (undoAction.ModifiedLayer1.Count > 0 || undoAction.ModifiedLayer3.Count > 0 ||
+                    undoAction.AddedObjects.Count > 0)
+                {
+                    _editState.UndoHistory.Push(undoAction);
+                    _editState.RedoHistory.Clear();
+                }
+
+                // 重新渲染
+                RenderS32Map();
+
+                // 更新狀態（包含座標資訊以便偵錯）
+                string info = $"已貼上素材: {material.Name} 於 ({gameX}, {gameY})";
+                if (layer1Count > 0) info += $", {layer1Count} 地板";
+                if (layer3Count > 0) info += $", {layer3Count} 屬性";
+                if (layer4Count > 0) info += $", {layer4Count} 物件";
+                if (skippedCount > 0) info += $" (跳過 {skippedCount})";
+                toolStripStatusLabel1.Text = info;
+
+                // 結束貼上模式
+                CancelMaterialPasteMode();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"貼上素材失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
 
         // 開始素材貼上預覽模式
         private void StartMaterialPasteMode(Fs3pData material, string filePath)
@@ -12306,12 +12793,8 @@ namespace L1FlyMapViewer
             _pendingMaterial = material;
             _pendingMaterialPath = filePath;
 
-            // 進入複製模式以便選取貼上位置
-            isLayer4CopyMode = true;
-            _editState.CellClipboard.Clear();
-
             // 提示用戶
-            toolStripStatusLabel1.Text = $"素材預覽模式：點擊地圖選擇貼上位置 | {material.Name} ({material.Width}x{material.Height})";
+            toolStripStatusLabel1.Text = $"素材貼上模式：點擊地圖選擇貼上位置，ESC 取消 | {material.Name} ({material.Width}x{material.Height})";
 
             // 更新素材列表
             RefreshMaterialsList();
@@ -13577,13 +14060,13 @@ namespace L1FlyMapViewer
                         if (worldY > maxWorldY) maxWorldY = worldY;
                     }
 
-                    // 建立 fs3p 資料
+                    // 建立 fs3p 資料 - OriginOffset 設為 0,0（RelativeX/Y 已經是相對座標）
                     var fs3p = new Fs3pData
                     {
                         Name = dialog.MaterialName,
                         LayerFlags = (ushort)(dialog.LayerFlags & 0x08), // 只保留 Layer4 flag
-                        OriginOffsetX = minWorldX,
-                        OriginOffsetY = minWorldY,
+                        OriginOffsetX = 0,
+                        OriginOffsetY = 0,
                         Width = maxWorldX - minWorldX + 1,
                         Height = maxWorldY - minWorldY + 1
                     };
