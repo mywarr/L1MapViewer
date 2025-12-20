@@ -99,6 +99,8 @@ namespace L1MapViewer.CLI
                         return Commands.BenchmarkCommands.Thumbnails(cmdArgs);
                     case "render-adjacent":
                         return Commands.BenchmarkCommands.RenderAdjacent(cmdArgs);
+                    case "render-material":
+                        return Commands.MaterialCommands.RenderMaterial(cmdArgs);
                     case "help":
                     case "-h":
                     case "--help":
@@ -147,6 +149,8 @@ L1MapViewer CLI - S32 檔案解析工具
                               從指定的 Tile.idx/pak 提取特定 TileId 的所有 block
   compare-tile <classic-idx> <remaster-idx> <tile-id> [輸出資料夾]
                               比對 Classic 版與 R 版降級後的 Tile，輸出比較圖片
+  render-material <fs3p> <地圖資料夾> <gameX> <gameY> [options]
+                              渲染素材到指定地圖位置並存成圖片
   help                        顯示此幫助資訊
 
 範例:

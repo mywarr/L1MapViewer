@@ -36,8 +36,62 @@ IDE 預設輸出至 `bin/Debug/net8.0-windows/`，CLI 輸出至 `bin/Debug/cli/`
 - 計算方式: `(WorldCoord - ScrollPosition) * ZoomLevel`
 
 ### 遊戲座標 (Game Coordinates)
-- Layer3 格子座標
+- Layer3 格子座標 (每格對應 Layer1 的 2x1)
 - 用於遊戲邏輯
+- 範圍: 每個 S32 區塊是 64x64 遊戲格
+
+### Layer1 座標
+- 地板座標系統
+- 每個 S32 區塊是 128x64 (X 是遊戲座標的 2 倍)
+
+### 座標轉換公式
+
+**遊戲座標 → 世界像素座標** (參考 `MapForm.JumpToGameCoordinate`):
+```csharp
+// 1. 找到包含該遊戲座標的 S32
+// 2. 計算 S32 內的本地座標
+int layer3LocalX = gameX - s32Data.SegInfo.nLinBeginX;  // 遊戲本地 0~63
+int localX = layer3LocalX * 2;  // 轉換為 Layer1 座標 0~127
+int localY = gameY - s32Data.SegInfo.nLinBeginY;  // 0~63
+
+// 3. 取得 S32 的世界像素起點
+int[] loc = s32Data.SegInfo.GetLoc(1.0);
+int mx = loc[0];
+int my = loc[1];
+
+// 4. 計算基準偏移 (菱形地圖計算)
+int localBaseX = 0 - 24 * (localX / 2);
+int localBaseY = 63 * 12 - 12 * (localX / 2);
+
+// 5. 計算最終世界座標 (格子左上角)
+int worldX = mx + localBaseX + localX * 24 + localY * 24;
+int worldY = my + localBaseY + localY * 12;
+
+// 6. 格子中心點 (可選)
+int centerX = worldX + 12;
+int centerY = worldY + 12;
+```
+
+**Layer1 座標 → 世界像素座標** (用於 Tile 渲染):
+```csharp
+// Layer1 座標 (0~127 x, 0~63 y)
+int halfX = layer1X / 2;
+int baseX = -24 * halfX;
+int baseY = 63 * 12 - 12 * halfX;
+int pixelX = s32LocX + baseX + layer1X * 24 + layer1Y * 24;
+int pixelY = s32LocY + baseY + layer1Y * 12;
+```
+
+**遊戲座標 ↔ Layer1 座標**:
+```csharp
+// 遊戲 → Layer1
+int layer1X = gameX * 2;  // 或 (gameX - s32.nLinBeginX) * 2 取得本地座標
+int layer1Y = gameY;
+
+// Layer1 → 遊戲
+int gameX = layer1X / 2;
+int gameY = layer1Y;
+```
 
 ## Viewport 渲染
 

@@ -12545,24 +12545,27 @@ namespace L1FlyMapViewer
             {
                 var material = _pendingMaterial;
 
-                // 計算貼上原點（Layer1 座標）- 點擊位置為素材左上角
+                // 計算貼上原點（Layer1 座標）- 點擊位置為素材底部
                 int pasteOriginX = gameX * 2;
                 int pasteOriginY = gameY;
 
                 // 檢查並修正 RelativeX/Y 偏移（舊素材可能沒有正規化）
-                // 計算所有圖層的最小 RelativeX/Y
+                // 計算所有圖層的 RelativeX/Y 範圍
                 int minRelX = int.MaxValue;
                 int minRelY = int.MaxValue;
+                int maxRelY = int.MinValue;
 
                 foreach (var item in material.Layer1Items)
                 {
                     if (item.RelativeX < minRelX) minRelX = item.RelativeX;
                     if (item.RelativeY < minRelY) minRelY = item.RelativeY;
+                    if (item.RelativeY > maxRelY) maxRelY = item.RelativeY;
                 }
                 foreach (var item in material.Layer2Items)
                 {
                     if (item.RelativeX < minRelX) minRelX = item.RelativeX;
                     if (item.RelativeY < minRelY) minRelY = item.RelativeY;
+                    if (item.RelativeY > maxRelY) maxRelY = item.RelativeY;
                 }
                 foreach (var item in material.Layer3Items)
                 {
@@ -12572,15 +12575,17 @@ namespace L1FlyMapViewer
                 {
                     if (item.RelativeX < minRelX) minRelX = item.RelativeX;
                     if (item.RelativeY < minRelY) minRelY = item.RelativeY;
+                    if (item.RelativeY > maxRelY) maxRelY = item.RelativeY;
                 }
 
                 // 如果沒有任何項目，設為 0
                 if (minRelX == int.MaxValue) minRelX = 0;
                 if (minRelY == int.MaxValue) minRelY = 0;
+                if (maxRelY == int.MinValue) maxRelY = 0;
 
-                // 偏移修正值
+                // 偏移修正值 - 使用 maxRelY 作為基準點（素材底部對齊點擊位置）
                 int offsetFixX = minRelX;
-                int offsetFixY = minRelY;
+                int offsetFixY = maxRelY;
 
                 int layer1Count = 0, layer2Count = 0, layer3Count = 0, layer4Count = 0;
                 int skippedCount = 0;
