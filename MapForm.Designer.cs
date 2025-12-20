@@ -1160,8 +1160,11 @@ namespace L1FlyMapViewer
             this.lvMaterials.TabIndex = 3;
             this.lvMaterials.View = View.LargeIcon;
             this.lvMaterials.MultiSelect = false;
+            this.lvMaterials.AllowDrop = true;
             this.lvMaterials.DoubleClick += new System.EventHandler(this.lvMaterials_DoubleClick);
             this.lvMaterials.MouseUp += new MouseEventHandler(this.lvMaterials_MouseUp);
+            this.lvMaterials.DragEnter += new DragEventHandler(this.lvMaterials_DragEnter);
+            this.lvMaterials.DragDrop += new DragEventHandler(this.lvMaterials_DragDrop);
 
             //
             // btnMoreMaterials

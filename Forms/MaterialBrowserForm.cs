@@ -398,7 +398,7 @@ namespace L1MapViewer.Forms
         {
             using (var ofd = new OpenFileDialog())
             {
-                ofd.Filter = "素材檔案|*.fs3p|所有檔案|*.*";
+                ofd.Filter = "素材檔案|*.fs32p|所有檔案|*.*";
                 ofd.Title = "開啟素材檔案";
 
                 if (ofd.ShowDialog() == DialogResult.OK)

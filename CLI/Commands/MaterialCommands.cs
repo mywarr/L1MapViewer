@@ -21,10 +21,10 @@ namespace L1MapViewer.CLI.Commands
         {
             if (args.Length < 4)
             {
-                Console.WriteLine("用法: render-material <material.fs3p> <map_path> <gameX> <gameY> [options]");
+                Console.WriteLine("用法: render-material <material.fs32p> <map_path> <gameX> <gameY> [options]");
                 Console.WriteLine();
                 Console.WriteLine("參數:");
-                Console.WriteLine("  material.fs3p  素材檔案路徑");
+                Console.WriteLine("  material.fs32p  素材檔案路徑");
                 Console.WriteLine("  map_path       地圖資料夾路徑");
                 Console.WriteLine("  gameX          遊戲座標 X");
                 Console.WriteLine("  gameY          遊戲座標 Y");
@@ -36,8 +36,8 @@ namespace L1MapViewer.CLI.Commands
                 Console.WriteLine("  --side-by-side    並排顯示 (左:原圖, 右:套用素材後)");
                 Console.WriteLine();
                 Console.WriteLine("範例:");
-                Console.WriteLine("  render-material house.fs3p C:\\client\\map\\4 32800 32800");
-                Console.WriteLine("  render-material house.fs3p C:\\client\\map\\4 32800 32800 --side-by-side");
+                Console.WriteLine("  render-material house.fs32p C:\\client\\map\\4 32800 32800");
+                Console.WriteLine("  render-material house.fs32p C:\\client\\map\\4 32800 32800 --side-by-side");
                 return 1;
             }
 

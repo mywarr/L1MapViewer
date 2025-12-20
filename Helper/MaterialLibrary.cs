@@ -123,7 +123,7 @@ namespace L1MapViewer.Helper
             EnsureDirectoryExists();
 
             var materials = new List<Fs3pInfo>();
-            var files = Directory.GetFiles(LibraryPath, "*.fs3p", SearchOption.AllDirectories);
+            var files = Directory.GetFiles(LibraryPath, "*.fs32p", SearchOption.AllDirectories);
 
             foreach (var file in files)
             {
@@ -225,14 +225,14 @@ namespace L1MapViewer.Helper
 
             // 產生檔案名稱
             string safeName = GetSafeFileName(material.Name);
-            string fileName = $"{safeName}.fs3p";
+            string fileName = $"{safeName}.fs32p";
             string filePath = Path.Combine(LibraryPath, fileName);
 
             // 如果檔案已存在，加上數字
             int counter = 1;
             while (File.Exists(filePath))
             {
-                fileName = $"{safeName}_{counter}.fs3p";
+                fileName = $"{safeName}_{counter}.fs32p";
                 filePath = Path.Combine(LibraryPath, fileName);
                 counter++;
             }

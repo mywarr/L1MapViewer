@@ -12432,6 +12432,63 @@ namespace L1FlyMapViewer
             menu.Show(lvMaterials, e.Location);
         }
 
+        // 拖放進入事件
+        private void lvMaterials_DragEnter(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                // 檢查是否有 .fs32p 檔案
+                if (files.Any(f => f.EndsWith(".fs32p", StringComparison.OrdinalIgnoreCase)))
+                {
+                    e.Effect = DragDropEffects.Copy;
+                    return;
+                }
+            }
+            e.Effect = DragDropEffects.None;
+        }
+
+        // 拖放放下事件
+        private void lvMaterials_DragDrop(object sender, DragEventArgs e)
+        {
+            if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+                return;
+
+            string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+            var library = new L1MapViewer.Helper.MaterialLibrary();
+            int imported = 0;
+
+            foreach (var file in files)
+            {
+                if (!file.EndsWith(".fs32p", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                try
+                {
+                    // 驗證檔案
+                    if (!L1MapViewer.CLI.Fs3pParser.IsValidFs3pFile(file))
+                    {
+                        MessageBox.Show($"無效的素材檔案: {Path.GetFileName(file)}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        continue;
+                    }
+
+                    // 加到最近使用
+                    library.AddToRecent(file);
+                    imported++;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"匯入失敗: {Path.GetFileName(file)}\n{ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+
+            if (imported > 0)
+            {
+                RefreshMaterialsList();
+                toolStripStatusLabel1.Text = $"已匯入 {imported} 個素材";
+            }
+        }
+
         // 重新命名素材
         private void RenameMaterial(string filePath, ListViewItem listItem)
         {
@@ -12498,7 +12555,7 @@ namespace L1FlyMapViewer
             {
                 using (var sfd = new SaveFileDialog())
                 {
-                    sfd.Filter = "素材檔案|*.fs3p";
+                    sfd.Filter = "素材檔案|*.fs32p";
                     sfd.Title = "匯出素材";
                     sfd.FileName = Path.GetFileName(filePath);
 
