@@ -87,7 +87,9 @@ namespace L1FlyMapViewer
         private static void LogPerf(string message)
         {
             if (!L1MapViewerCore.Program.PerfLogEnabled) return;
-            string line = $"{DateTime.Now:HH:mm:ss.fff} {message}";
+            string timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
+            string elapsed = $"+{L1MapViewerCore.Program.StartupStopwatch.ElapsedMilliseconds}ms";
+            string line = $"{timestamp} {elapsed,-10} {message}";
             Console.WriteLine(line);
             try { File.AppendAllText(_perfLogPath, line + Environment.NewLine); } catch { }
         }
@@ -248,8 +250,16 @@ namespace L1FlyMapViewer
         /// </summary>
         private void BuildLayer4SpatialIndex()
         {
-            _layer4SpatialIndex.Build(_document.S32Files.Values);
-            LogPerf($"[LAYER4-INDEX] Built index for {_layer4SpatialIndex.TotalObjects:N0} objects, {_layer4SpatialIndex.GridCellCount:N0} grid cells, in {_layer4SpatialIndex.BuildTimeMs}ms");
+            try
+            {
+                _layer4SpatialIndex.Build(_document.S32Files.Values);
+                LogPerf($"[LAYER4-INDEX] Built index for {_layer4SpatialIndex.TotalObjects:N0} objects, {_layer4SpatialIndex.GridCellCount:N0} grid cells, in {_layer4SpatialIndex.BuildTimeMs}ms");
+            }
+            catch (Exception ex)
+            {
+                LogPerf($"[LAYER4-INDEX] ERROR: {ex.Message}");
+                Console.WriteLine($"BuildLayer4SpatialIndex error: {ex}");
+            }
         }
 
         /// <summary>
@@ -306,7 +316,9 @@ namespace L1FlyMapViewer
 
         public MapForm()
         {
+            LogPerf("[FORM-CTOR] Start");
             InitializeComponent();
+            LogPerf("[FORM-CTOR] InitializeComponent done");
 
             // 初始化渲染防抖Timer（300ms延遲）
             renderDebounceTimer = new System.Windows.Forms.Timer();
@@ -446,6 +458,8 @@ namespace L1FlyMapViewer
             // 註冊 F5 快捷鍵重新載入
             this.KeyPreview = true;
             this.KeyDown += MapForm_KeyDown;
+
+            LogPerf("[FORM-CTOR] End");
         }
 
         // 處理快捷鍵
@@ -1876,10 +1890,13 @@ namespace L1FlyMapViewer
 
         private void MapForm_Load(object sender, EventArgs e)
         {
+            LogPerf("[FORM-LOAD] Start");
+
             // 初始化浮動圖層面板狀態（必須在載入地圖前執行）
             SyncFloatPanelCheckboxes();
             s32EditorPanel_Resize(null, null);
             layerFloatPanel.BringToFront();
+            LogPerf("[FORM-LOAD] Panel setup done");
 
             string iniPath = Path.GetTempPath() + "mapviewer.ini";
 
@@ -1887,14 +1904,17 @@ namespace L1FlyMapViewer
             if (File.Exists(iniPath))
             {
                 string savedPath = Utils.GetINI("Path", "LineagePath", "", iniPath);
+                LogPerf($"[FORM-LOAD] INI savedPath={savedPath}");
                 if (!string.IsNullOrEmpty(savedPath) && Directory.Exists(savedPath))
                 {
                     // 如果還沒載入地圖資料，自動載入
                     if (Share.MapDataList == null || Share.MapDataList.Count == 0)
                     {
+                        LogPerf("[FORM-LOAD] Calling LoadMap...");
                         this.toolStripStatusLabel3.Text = savedPath;
                         Share.LineagePath = savedPath;
                         this.LoadMap(savedPath);
+                        LogPerf("[FORM-LOAD] LoadMap returned (async continues in background)");
                         return; // LoadMap 會觸發 comboBox1_SelectedIndexChanged，會自動載入上次選擇的地圖
                     }
                 }
@@ -1903,6 +1923,7 @@ namespace L1FlyMapViewer
             // 如果已經有地圖資料，填充 comboBox
             if (Share.MapDataList != null && Share.MapDataList.Count > 0)
             {
+                LogPerf("[FORM-LOAD] Filling comboBox...");
                 // 儲存所有地圖項目供過濾使用
                 allMapItems.Clear();
                 foreach (string key in Utils.SortAsc(Share.MapDataList.Keys))
@@ -1945,9 +1966,11 @@ namespace L1FlyMapViewer
                         }
                     }
 
+                    LogPerf($"[FORM-LOAD] Setting comboBox1.SelectedIndex={selectedIndex}");
                     this.comboBox1.SelectedIndex = selectedIndex;
                 }
             }
+            LogPerf("[FORM-LOAD] End");
         }
 
         private void openToolStripMenuItem_Click(object sender, EventArgs e)
@@ -2234,6 +2257,8 @@ namespace L1FlyMapViewer
 
         public void LoadMap(string selectedPath)
         {
+            LogPerf("[LOADMAP] Start");
+
             // 先在 UI 執行緒檢查路徑是否有效（避免 MessageBox 在背景執行緒彈出）
             string szMapPath = string.Format(@"{0}\map\", selectedPath);
             if (!Directory.Exists(szMapPath))
@@ -2248,6 +2273,7 @@ namespace L1FlyMapViewer
             tileDataCache.Clear();
             Share.IdxDataList.Clear();  // 清除 idx 快取，強制重新讀取新資料夾的 idx
             _listTilMaxId = null;       // 清除 list.til 快取
+            LogPerf("[LOADMAP] Cache cleared");
 
             Utils.ShowProgressBar(true, this);
             this.toolStripStatusLabel1.Text = "正在讀取地圖列表...";
@@ -2255,14 +2281,18 @@ namespace L1FlyMapViewer
             // 在背景執行緒載入地圖資料
             Task.Run(() =>
             {
+                LogPerf("[LOADMAP-BG] Task started, calling L1MapHelper.Read...");
                 var stopwatch = Stopwatch.StartNew();
                 var dictionary = L1MapHelper.Read(selectedPath);
                 stopwatch.Stop();
                 long readMs = stopwatch.ElapsedMilliseconds;
+                LogPerf($"[LOADMAP-BG] L1MapHelper.Read done: {readMs}ms, maps={dictionary.Count}");
 
                 // 回到 UI 執行緒更新介面
+                LogPerf("[LOADMAP-BG] Invoking UI update...");
                 this.BeginInvoke((MethodInvoker)delegate
                 {
+                    LogPerf("[LOADMAP-UI] BeginInvoke callback started");
                     stopwatch.Restart();
 
                     // 儲存所有地圖項目供過濾使用
@@ -2294,6 +2324,7 @@ namespace L1FlyMapViewer
                     this.lstMaps.EndUpdate();
 
                     long uiMs = stopwatch.ElapsedMilliseconds;
+                    LogPerf($"[LOADMAP-UI] Lists filled: {uiMs}ms");
 
                     // 讀取上次選擇的地圖名稱（改用名稱而非索引，避免過濾後索引錯亂）
                     if (this.comboBox1.Items.Count > 0)
@@ -2322,8 +2353,10 @@ namespace L1FlyMapViewer
 
                         // 先設為 -1 再設回來，強制觸發 SelectedIndexChanged 事件
                         // 這樣即使選擇相同的 index，也會重新載入 S32 檔案
+                        LogPerf($"[LOADMAP-UI] Setting comboBox1.SelectedIndex={selectedIndex} (will trigger LoadS32FileList)");
                         this.comboBox1.SelectedIndex = -1;
                         this.comboBox1.SelectedIndex = selectedIndex;
+                        LogPerf("[LOADMAP-UI] comboBox1.SelectedIndex set done");
 
                         // 同步選擇 lstMaps
                         isFiltering = true;  // 防止 lstMaps 再次觸發載入
@@ -2334,8 +2367,10 @@ namespace L1FlyMapViewer
                     this.toolStripStatusLabel2.Text = $"Maps={dictionary.Count}, Files={L1MapHelper.LastTotalFileCount}";
                     this.toolStripStatusLabel1.Text = $"載入完成 - Zone3desc:{L1MapHelper.LastLoadZone3descMs}ms, ZoneXml:{L1MapHelper.LastLoadZoneXmlMs}ms, 掃描目錄:{L1MapHelper.LastScanDirectoriesMs}ms, UI:{uiMs}ms (總計:{readMs + uiMs}ms)";
                     Utils.ShowProgressBar(false, this);
+                    LogPerf("[LOADMAP-UI] Done");
                 });
             });
+            LogPerf("[LOADMAP] Task.Run started (async)");
         }
 
         // 地圖搜尋過濾
@@ -2494,14 +2529,19 @@ namespace L1FlyMapViewer
             // 載入地圖
             try
             {
+                var swMapSelect = Stopwatch.StartNew();
                 L1MapHelper.doPaintEvent(szSelectName, this);
+                LogPerf($"[MAP-SELECT] doPaintEvent: {swMapSelect.ElapsedMilliseconds}ms");
 
                 // 等待地圖繪製完成後更新小地圖
                 Application.DoEvents();
+                LogPerf($"[MAP-SELECT] DoEvents: {swMapSelect.ElapsedMilliseconds}ms");
                 UpdateMiniMap();
+                LogPerf($"[MAP-SELECT] UpdateMiniMap: {swMapSelect.ElapsedMilliseconds}ms");
 
                 // 載入該地圖的 s32 檔案清單
                 LoadS32FileList(szSelectName);
+                LogPerf($"[MAP-SELECT] LoadS32FileList: {swMapSelect.ElapsedMilliseconds}ms");
             }
             catch (Exception ex)
             {
@@ -2514,6 +2554,9 @@ namespace L1FlyMapViewer
             if (isFiltering) return;  // 過濾中不觸發
             if (this.comboBox1.SelectedItem == null)
                 return;
+
+            LogPerf($"[COMBOBOX-CHANGED] Start, map={this.comboBox1.SelectedItem}");
+            var swCombo = Stopwatch.StartNew();
 
             // 保存當前選擇的地圖名稱（用名稱而非索引，避免過濾後錯亂）
             string iniPath = Path.GetTempPath() + "mapviewer.ini";
@@ -2538,17 +2581,24 @@ namespace L1FlyMapViewer
             string szSelectName = this.comboBox1.SelectedItem.ToString();
             if (szSelectName.Contains("-"))
                 szSelectName = szSelectName.Split('-')[0].Trim();
+
+            LogPerf($"[COMBOBOX-CHANGED] Calling doPaintEvent for map={szSelectName}");
             L1MapHelper.doPaintEvent(szSelectName, this);
+            LogPerf($"[COMBOBOX-CHANGED] doPaintEvent done: {swCombo.ElapsedMilliseconds}ms");
 
             // 等待地圖繪製完成後更新小地圖
             Application.DoEvents();
+            LogPerf($"[COMBOBOX-CHANGED] DoEvents done: {swCombo.ElapsedMilliseconds}ms");
             UpdateMiniMap();
+            LogPerf($"[COMBOBOX-CHANGED] UpdateMiniMap done: {swCombo.ElapsedMilliseconds}ms");
 
             // 載入該地圖的 s32 檔案清單
             LoadS32FileList(szSelectName);
+            LogPerf($"[COMBOBOX-CHANGED] LoadS32FileList done: {swCombo.ElapsedMilliseconds}ms");
 
             // 選擇後重置過濾，顯示所有地圖
             ResetMapFilter();
+            LogPerf($"[COMBOBOX-CHANGED] End, total={swCombo.ElapsedMilliseconds}ms");
         }
 
         // ===== 小地圖 =====
@@ -3514,6 +3564,7 @@ namespace L1FlyMapViewer
         // 載入當前地圖的 s32 檔案清單並載入所有 S32 資料
         private void LoadS32FileList(string mapId)
         {
+            LogPerf($"[LOAD-S32-LIST] Start, mapId={mapId}");
             var totalStopwatch = Stopwatch.StartNew();
             var phaseStopwatch = new Stopwatch();
 
@@ -3531,6 +3582,7 @@ namespace L1FlyMapViewer
             tileDataCache.Clear();
             _tilFileCache.Clear();
             _tilRemasterCache.Clear();
+            LogPerf($"[LOAD-S32-LIST] Caches cleared: {totalStopwatch.ElapsedMilliseconds}ms");
 
             // 清除 viewport bitmap
             lock (_viewportBitmapLock)
@@ -3616,8 +3668,10 @@ namespace L1FlyMapViewer
             this.toolStripStatusLabel1.Text = $"找到 {s32FileItems.Count} 個 S32 檔案，正在載入...";
 
             // 使用背景執行緒順序載入（避免並行造成磁碟競爭）
+            LogPerf($"[LOAD-S32-LIST] Starting background Task.Run, s32Count={s32FileItems.Count}");
             Task.Run(() =>
             {
+                LogPerf("[LOAD-S32-BG] Task started");
                 long totalFileReadMs = 0;
                 long totalParseMs = 0;
                 int loadedCount = 0;
@@ -3639,6 +3693,7 @@ namespace L1FlyMapViewer
                 }
                 readSw.Stop();
                 totalFileReadMs = readSw.ElapsedMilliseconds;
+                LogPerf($"[LOAD-S32-BG] File read done: {totalFileReadMs}ms, files={fileDataList.Count}");
 
                 // 階段 2: 平行解析所有檔案（使用 ConcurrentBag 避免 Dictionary 鎖競爭）
                 var parsedResults = new System.Collections.Concurrent.ConcurrentBag<(string path, S32Data data)>();
