@@ -917,11 +917,37 @@ namespace L1MapViewer.CLI.Commands
             Console.WriteLine($"Found {foundCount}/{gridSize * gridSize} S32 files");
             Console.WriteLine();
 
-            // 渲染每個 S32 並合成
+            // 計算所有 S32 的世界像素位置，找出邊界
             int blockWidth = 3072;
             int blockHeight = 1536;
-            int totalWidth = gridSize * blockWidth;
-            int totalHeight = gridSize * blockHeight;
+            int worldMinX = int.MaxValue, worldMinY = int.MaxValue;
+            int worldMaxX = int.MinValue, worldMaxY = int.MinValue;
+
+            var s32WorldPositions = new Dictionary<S32Data, (int worldX, int worldY)>();
+
+            for (int gy = 0; gy < gridSize; gy++)
+            {
+                for (int gx = 0; gx < gridSize; gx++)
+                {
+                    var s32 = gridS32[gx, gy];
+                    if (s32 == null) continue;
+
+                    int[] loc = s32.SegInfo.GetLoc(1.0);
+                    int worldX = loc[0];
+                    int worldY = loc[1];
+                    s32WorldPositions[s32] = (worldX, worldY);
+
+                    worldMinX = Math.Min(worldMinX, worldX);
+                    worldMinY = Math.Min(worldMinY, worldY);
+                    worldMaxX = Math.Max(worldMaxX, worldX + blockWidth);
+                    worldMaxY = Math.Max(worldMaxY, worldY + blockHeight);
+                }
+            }
+
+            int totalWidth = worldMaxX - worldMinX;
+            int totalHeight = worldMaxY - worldMinY;
+
+            Console.WriteLine($"World bounds: ({worldMinX}, {worldMinY}) - ({worldMaxX}, {worldMaxY})");
 
             // 清除 Tile 快取
             _tilCache.Clear();
@@ -949,47 +975,128 @@ namespace L1MapViewer.CLI.Commands
                 }
                 combinedBitmap.UnlockBits(bmpData);
 
-                // 渲染每個 S32
-                for (int gy = 0; gy < gridSize; gy++)
+                // 渲染每個 S32 的 Layer1 和 Layer2（地板層）
+                var swTotal = Stopwatch.StartNew();
+                Console.WriteLine("  Rendering Layer1 & Layer2...");
+                var bmpDataCombined = combinedBitmap.LockBits(
+                    new Rectangle(0, 0, totalWidth, totalHeight),
+                    ImageLockMode.ReadWrite, combinedBitmap.PixelFormat);
+                int combinedRowPix = bmpDataCombined.Stride;
+
+                unsafe
                 {
-                    for (int gx = 0; gx < gridSize; gx++)
+                    byte* combinedPtr = (byte*)bmpDataCombined.Scan0;
+
+                    for (int gy = 0; gy < gridSize; gy++)
                     {
-                        var s32 = gridS32[gx, gy];
-                        if (s32 == null) continue;
-
-                        Console.Write($"  Rendering [{gx},{gy}] {Path.GetFileName(s32.FilePath)} (L4:{s32.Layer4.Count})...");
-                        var sw = Stopwatch.StartNew();
-
-                        using (var blockBitmap = RenderS32BlockForCli(s32, true))
+                        for (int gx = 0; gx < gridSize; gx++)
                         {
-                            using (var g = Graphics.FromImage(combinedBitmap))
-                            {
-                                int destX = gx * blockWidth;
-                                int destY = gy * blockHeight;
-                                g.DrawImage(blockBitmap, destX, destY);
+                            var s32 = gridS32[gx, gy];
+                            if (s32 == null) continue;
 
-                                // 畫邊框區分各 S32
-                                using (var pen = new Pen(Color.Yellow, 2))
+                            // 使用世界座標計算偏移
+                            var (worldX, worldY) = s32WorldPositions[s32];
+                            int offsetX = worldX - worldMinX;
+                            int offsetY = worldY - worldMinY;
+
+                            // Layer 1 (地板)
+                            for (int y = 0; y < 64; y++)
+                            {
+                                for (int x = 0; x < 128; x++)
                                 {
-                                    g.DrawRectangle(pen, destX, destY, blockWidth - 1, blockHeight - 1);
+                                    var cell = s32.Layer1[y, x];
+                                    if (cell != null && cell.TileId > 0)
+                                    {
+                                        int halfX = x / 2;
+                                        int baseX = -24 * halfX;
+                                        int baseY = 63 * 12 - 12 * halfX;
+                                        int pixelX = offsetX + baseX + x * 24 + y * 24;
+                                        int pixelY = offsetY + baseY + y * 12;
+
+                                        DrawTilToBufferDirect(pixelX, pixelY, cell.TileId, cell.IndexId,
+                                            combinedRowPix, combinedPtr, totalWidth, totalHeight);
+                                    }
+                                }
+                            }
+
+                            // Layer 2
+                            foreach (var item in s32.Layer2)
+                            {
+                                if (item.TileId > 0)
+                                {
+                                    int x = item.X;
+                                    int y = item.Y;
+                                    int halfX = x / 2;
+                                    int baseX = -24 * halfX;
+                                    int baseY = 63 * 12 - 12 * halfX;
+                                    int pixelX = offsetX + baseX + x * 24 + y * 24;
+                                    int pixelY = offsetY + baseY + y * 12;
+
+                                    DrawTilToBufferDirect(pixelX, pixelY, item.TileId, item.IndexId,
+                                        combinedRowPix, combinedPtr, totalWidth, totalHeight);
                                 }
                             }
                         }
-
-                        sw.Stop();
-                        Console.WriteLine($" {sw.ElapsedMilliseconds} ms");
                     }
+
+                    // 收集所有 S32 的 Layer4 物件，計算絕對像素位置
+                    Console.WriteLine("  Collecting Layer4 objects...");
+                    var allLayer4Objects = new List<(int pixelX, int pixelY, int layer, int tileId, int indexId)>();
+
+                    for (int gy = 0; gy < gridSize; gy++)
+                    {
+                        for (int gx = 0; gx < gridSize; gx++)
+                        {
+                            var s32 = gridS32[gx, gy];
+                            if (s32 == null) continue;
+
+                            // 使用世界座標計算偏移
+                            var (worldX, worldY) = s32WorldPositions[s32];
+                            int offsetX = worldX - worldMinX;
+                            int offsetY = worldY - worldMinY;
+
+                            foreach (var obj in s32.Layer4)
+                            {
+                                int halfX = obj.X / 2;
+                                int baseX = -24 * halfX;
+                                int baseY = 63 * 12 - 12 * halfX;
+                                int pixelX = offsetX + baseX + obj.X * 24 + obj.Y * 24;
+                                int pixelY = offsetY + baseY + obj.Y * 12;
+
+                                allLayer4Objects.Add((pixelX, pixelY, obj.Layer, obj.TileId, obj.IndexId));
+                            }
+                        }
+                    }
+
+                    Console.WriteLine($"  Total Layer4 objects: {allLayer4Objects.Count}");
+
+                    // 按 Layer 全域排序後繪製
+                    Console.WriteLine("  Rendering Layer4 (sorted by Layer)...");
+                    int layer4Ok = 0, layer4Fail = 0;
+
+                    foreach (var obj in allLayer4Objects.OrderBy(o => o.layer))
+                    {
+                        bool drawn = DrawTilToBufferDirect(obj.pixelX, obj.pixelY, obj.tileId, obj.indexId,
+                            combinedRowPix, combinedPtr, totalWidth, totalHeight);
+                        if (drawn) layer4Ok++;
+                        else layer4Fail++;
+                    }
+
+                    Console.WriteLine($"  Layer4: {layer4Ok} ok, {layer4Fail} fail");
                 }
+
+                combinedBitmap.UnlockBits(bmpDataCombined);
+
+                swTotal.Stop();
+                Console.WriteLine($"  Total render time: {swTotal.ElapsedMilliseconds} ms");
 
                 // 標記目標位置
                 using (var g = Graphics.FromImage(combinedBitmap))
                 {
-                    // 計算目標位置在 combined bitmap 中的像素位置
-                    // 目標 S32 在 grid 中的位置
-                    // 對於 2x2：中心在右下角 (1,1)
-                    // 對於 3x3：中心在正中央 (1,1)
-                    int targetGridX = (gridSize % 2 == 0) ? gridSize - 1 : halfGrid;
-                    int targetGridY = (gridSize % 2 == 0) ? gridSize - 1 : halfGrid;
+                    // 使用世界座標計算目標位置
+                    var (centerWorldX, centerWorldY) = s32WorldPositions[centerS32];
+                    int centerOffsetX = centerWorldX - worldMinX;
+                    int centerOffsetY = centerWorldY - worldMinY;
 
                     // 遊戲座標轉格子座標
                     int cellX = (gameX - centerS32.SegInfo.nLinBeginX) * 2;  // Layer4 X 是 0-127
@@ -1002,9 +1109,9 @@ namespace L1MapViewer.CLI.Commands
                     int pixelX = baseX + cellX * 24 + cellY * 24;
                     int pixelY = baseY + cellY * 12;
 
-                    // 加上 grid 偏移
-                    int finalX = targetGridX * blockWidth + pixelX;
-                    int finalY = targetGridY * blockHeight + pixelY;
+                    // 加上世界座標偏移
+                    int finalX = centerOffsetX + pixelX;
+                    int finalY = centerOffsetY + pixelY;
 
                     // 畫紅色十字標記
                     using (var pen = new Pen(Color.Red, 3))

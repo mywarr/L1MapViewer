@@ -46,7 +46,7 @@ namespace L1MapViewer.Helper
         public const int BlockHeight = 64 * 12 * 2; // 1536
 
         /// <summary>
-        /// 渲染 Viewport 區域
+        /// 渲染 Viewport 區域（全域 Layer 排序）
         /// </summary>
         public Bitmap RenderViewport(
             Rectangle worldRect,
@@ -73,18 +73,11 @@ namespace L1MapViewer.Helper
             stats.SpatialQueryMs = spatialSw.ElapsedMilliseconds;
             stats.CandidateCount = candidateFiles.Count;
 
-            // 3. 排序
-            var sortSw = Stopwatch.StartNew();
-            var sortedFilePaths = Utils.SortDesc(candidateFiles.ToList());
-            sortSw.Stop();
-            stats.SortMs = sortSw.ElapsedMilliseconds;
-
-            // 4. 篩選需要渲染的區塊
-            var blocksToRender = new List<(S32Data s32Data, int drawX, int drawY)>();
-            foreach (object filePathObj in sortedFilePaths)
+            // 3. 篩選需要渲染的區塊
+            var blocksToRender = new List<(S32Data s32Data, int offsetX, int offsetY)>();
+            foreach (var filePath in candidateFiles)
             {
-                string filePath = filePathObj as string;
-                if (filePath == null || !s32Files.ContainsKey(filePath)) continue;
+                if (!s32Files.ContainsKey(filePath)) continue;
                 if (!checkedFiles.Contains(filePath)) continue;
 
                 var s32Data = s32Files[filePath];
@@ -95,47 +88,101 @@ namespace L1MapViewer.Helper
                 Rectangle blockRect = new Rectangle(mx, my, BlockWidth, BlockHeight);
                 if (!blockRect.IntersectsWith(worldRect)) continue;
 
-                int drawX = mx - worldRect.X;
-                int drawY = my - worldRect.Y;
-                blocksToRender.Add((s32Data, drawX, drawY));
+                int offsetX = mx - worldRect.X;
+                int offsetY = my - worldRect.Y;
+                blocksToRender.Add((s32Data, offsetX, offsetY));
             }
-
-            // 5. 平行渲染所有區塊
-            var getBlockSw = Stopwatch.StartNew();
-            int cacheHits = 0;
-            int cacheMisses = 0;
-            var renderedBlocks = new ConcurrentBag<(Bitmap bmp, int drawX, int drawY, bool wasHit)>();
-
-            System.Threading.Tasks.Parallel.ForEach(blocksToRender, block =>
-            {
-                bool wasHit;
-                Bitmap blockBmp = GetOrRenderS32Block(block.s32Data, showLayer1, showLayer2, showLayer4, out wasHit);
-                renderedBlocks.Add((blockBmp, block.drawX, block.drawY, wasHit));
-            });
-            getBlockSw.Stop();
-
-            // 統計 cache hits/misses
-            foreach (var block in renderedBlocks)
-            {
-                if (block.wasHit) cacheHits++;
-                else cacheMisses++;
-            }
-
-            // 6. 順序複製到 viewport（需要按繪製順序）
-            var copySw = Stopwatch.StartNew();
-            // 按 drawY, drawX 排序確保正確的繪製順序
-            var orderedBlocks = renderedBlocks.OrderBy(b => b.drawY).ThenBy(b => b.drawX).ToList();
-            foreach (var block in orderedBlocks)
-            {
-                CopyBitmapDirect(block.bmp, viewportBitmap, block.drawX, block.drawY);
-            }
-            copySw.Stop();
-
-            stats.GetBlockMs = getBlockSw.ElapsedMilliseconds;
-            stats.CopyBitmapMs = copySw.ElapsedMilliseconds;
             stats.BlockCount = blocksToRender.Count;
-            stats.CacheHits = cacheHits;
-            stats.CacheMisses = cacheMisses;
+
+            // 4. 收集所有 Layer 物件並計算絕對像素位置
+            var sortSw = Stopwatch.StartNew();
+            var allTiles = new List<(int pixelX, int pixelY, int layer, int tileId, int indexId, bool needsBlend)>();
+
+            foreach (var (s32Data, offsetX, offsetY) in blocksToRender)
+            {
+                // Layer 1 (地板) - layer 值設為 -2 確保最先繪製
+                if (showLayer1)
+                {
+                    for (int y = 0; y < 64; y++)
+                    {
+                        for (int x = 0; x < 128; x++)
+                        {
+                            var cell = s32Data.Layer1[y, x];
+                            if (cell != null && cell.TileId > 0)
+                            {
+                                int halfX = x / 2;
+                                int baseX = -24 * halfX;
+                                int baseY = 63 * 12 - 12 * halfX;
+                                int pixelX = offsetX + baseX + x * 24 + y * 24;
+                                int pixelY = offsetY + baseY + y * 12;
+
+                                allTiles.Add((pixelX, pixelY, -2, cell.TileId, cell.IndexId, false));
+                            }
+                        }
+                    }
+                }
+
+                // Layer 2 - layer 值設為 -1 確保在 Layer1 之後、Layer4 之前繪製
+                if (showLayer2)
+                {
+                    foreach (var item in s32Data.Layer2)
+                    {
+                        if (item.TileId > 0)
+                        {
+                            int x = item.X;
+                            int y = item.Y;
+                            int halfX = x / 2;
+                            int baseX = -24 * halfX;
+                            int baseY = 63 * 12 - 12 * halfX;
+                            int pixelX = offsetX + baseX + x * 24 + y * 24;
+                            int pixelY = offsetY + baseY + y * 12;
+
+                            allTiles.Add((pixelX, pixelY, -1, item.TileId, item.IndexId, false));
+                        }
+                    }
+                }
+
+                // Layer 4 (物件) - 使用原始 Layer 值
+                if (showLayer4)
+                {
+                    foreach (var obj in s32Data.Layer4)
+                    {
+                        int halfX = obj.X / 2;
+                        int baseX = -24 * halfX;
+                        int baseY = 63 * 12 - 12 * halfX;
+                        int pixelX = offsetX + baseX + obj.X * 24 + obj.Y * 24;
+                        int pixelY = offsetY + baseY + obj.Y * 12;
+
+                        allTiles.Add((pixelX, pixelY, obj.Layer, obj.TileId, obj.IndexId, false));
+                    }
+                }
+            }
+
+            // 5. 按 Layer 全域排序
+            var sortedTiles = allTiles.OrderBy(t => t.layer).ToList();
+            sortSw.Stop();
+            stats.SortMs = sortSw.ElapsedMilliseconds;
+
+            // 6. 繪製所有 Tile
+            var getBlockSw = Stopwatch.StartNew();
+            Rectangle rect = new Rectangle(0, 0, viewportBitmap.Width, viewportBitmap.Height);
+            BitmapData bmpData = viewportBitmap.LockBits(rect, ImageLockMode.ReadWrite, viewportBitmap.PixelFormat);
+            int rowpix = bmpData.Stride;
+
+            unsafe
+            {
+                byte* ptr = (byte*)bmpData.Scan0;
+
+                foreach (var tile in sortedTiles)
+                {
+                    DrawTilToBufferDirect(tile.pixelX, tile.pixelY, tile.tileId, tile.indexId,
+                        rowpix, ptr, viewportBitmap.Width, viewportBitmap.Height);
+                }
+            }
+
+            viewportBitmap.UnlockBits(bmpData);
+            getBlockSw.Stop();
+            stats.GetBlockMs = getBlockSw.ElapsedMilliseconds;
 
             totalSw.Stop();
             stats.TotalMs = totalSw.ElapsedMilliseconds;

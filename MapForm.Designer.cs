@@ -704,6 +704,7 @@ namespace L1FlyMapViewer
             // chkLayer2
             //
             this.chkLayer2.AutoSize = true;
+            this.chkLayer2.Checked = true;
             this.chkLayer2.Location = new Point(110, 10);
             this.chkLayer2.Name = "chkLayer2";
             this.chkLayer2.Size = new Size(60, 17);
@@ -998,6 +999,7 @@ namespace L1FlyMapViewer
             // chkFloatLayer2
             //
             this.chkFloatLayer2.AutoSize = true;
+            this.chkFloatLayer2.Checked = true;
             this.chkFloatLayer2.ForeColor = Color.LightGray;
             this.chkFloatLayer2.Location = new Point(8, 27);
             this.chkFloatLayer2.Name = "chkFloatLayer2";

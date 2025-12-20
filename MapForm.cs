@@ -5208,15 +5208,69 @@ namespace L1FlyMapViewer
                     return;
                 }
 
-                // 2. 平行渲染所有區塊
+                // 2. 收集所有 Layer 物件並計算絕對像素位置（全域 Layer 排序）
                 var getBlockSw = Stopwatch.StartNew();
-                var renderedBlocks = new System.Collections.Concurrent.ConcurrentBag<(Bitmap bmp, int drawX, int drawY)>();
+                var allTiles = new List<(int pixelX, int pixelY, int layer, int tileId, int indexId)>();
 
-                System.Threading.Tasks.Parallel.ForEach(blocksToRender, block =>
+                foreach (var (s32Data, filePath, offsetX, offsetY) in blocksToRender)
                 {
-                    Bitmap blockBmp = GetOrRenderS32Block(block.s32Data, showLayer1, showLayer2, showLayer4);
-                    renderedBlocks.Add((blockBmp, block.drawX, block.drawY));
-                });
+                    // Layer 1 (地板) - layer 值設為 -2 確保最先繪製
+                    if (showLayer1)
+                    {
+                        for (int y = 0; y < 64; y++)
+                        {
+                            for (int x = 0; x < 128; x++)
+                            {
+                                var cell = s32Data.Layer1[y, x];
+                                if (cell != null && cell.TileId > 0)
+                                {
+                                    int halfX = x / 2;
+                                    int baseX = -24 * halfX;
+                                    int baseY = 63 * 12 - 12 * halfX;
+                                    int pixelX = offsetX + baseX + x * 24 + y * 24;
+                                    int pixelY = offsetY + baseY + y * 12;
+
+                                    allTiles.Add((pixelX, pixelY, -2, cell.TileId, cell.IndexId));
+                                }
+                            }
+                        }
+                    }
+
+                    // Layer 2 - layer 值設為 -1 確保在 Layer1 之後、Layer4 之前繪製
+                    if (showLayer2)
+                    {
+                        foreach (var item in s32Data.Layer2)
+                        {
+                            if (item.TileId > 0)
+                            {
+                                int x = item.X;
+                                int y = item.Y;
+                                int halfX = x / 2;
+                                int baseX = -24 * halfX;
+                                int baseY = 63 * 12 - 12 * halfX;
+                                int pixelX = offsetX + baseX + x * 24 + y * 24;
+                                int pixelY = offsetY + baseY + y * 12;
+
+                                allTiles.Add((pixelX, pixelY, -1, item.TileId, item.IndexId));
+                            }
+                        }
+                    }
+
+                    // Layer 4 (物件) - 使用原始 Layer 值
+                    if (showLayer4)
+                    {
+                        foreach (var obj in s32Data.Layer4)
+                        {
+                            int halfX = obj.X / 2;
+                            int baseX = -24 * halfX;
+                            int baseY = 63 * 12 - 12 * halfX;
+                            int pixelX = offsetX + baseX + obj.X * 24 + obj.Y * 24;
+                            int pixelY = offsetY + baseY + obj.Y * 12;
+
+                            allTiles.Add((pixelX, pixelY, obj.Layer, obj.TileId, obj.IndexId));
+                        }
+                    }
+                }
                 getBlockSw.Stop();
                 totalGetBlockMs = getBlockSw.ElapsedMilliseconds;
                 renderedCount = blocksToRender.Count;
@@ -5224,19 +5278,32 @@ namespace L1FlyMapViewer
                 // 檢查取消
                 if (cancellationToken.IsCancellationRequested)
                 {
-                    LogPerf($"[RENDER-CANCELLED] after parallel render");
+                    LogPerf($"[RENDER-CANCELLED] after collecting tiles");
                     _isRendering = false;
                     viewportBitmap.Dispose();
                     return;
                 }
 
-                // 3. 順序複製到 viewport（按 drawY, drawX 排序確保正確繪製順序）
+                // 3. 按 Layer 全域排序後繪製
                 var drawSw = Stopwatch.StartNew();
-                var orderedBlocks = renderedBlocks.OrderBy(b => b.drawY).ThenBy(b => b.drawX).ToList();
-                foreach (var block in orderedBlocks)
+                var sortedTiles = allTiles.OrderBy(t => t.layer).ToList();
+
+                Rectangle rect = new Rectangle(0, 0, viewportBitmap.Width, viewportBitmap.Height);
+                BitmapData bmpData = viewportBitmap.LockBits(rect, ImageLockMode.ReadWrite, viewportBitmap.PixelFormat);
+                int rowpix = bmpData.Stride;
+
+                unsafe
                 {
-                    CopyBitmapDirect(block.bmp, viewportBitmap, block.drawX, block.drawY);
+                    byte* ptr = (byte*)bmpData.Scan0;
+
+                    foreach (var tile in sortedTiles)
+                    {
+                        DrawTilToBufferDirect(tile.pixelX, tile.pixelY, tile.tileId, tile.indexId,
+                            rowpix, ptr, viewportBitmap.Width, viewportBitmap.Height);
+                    }
                 }
+
+                viewportBitmap.UnlockBits(bmpData);
                 drawSw.Stop();
                 totalDrawImageMs = drawSw.ElapsedMilliseconds;
                 renderSw.Stop();
