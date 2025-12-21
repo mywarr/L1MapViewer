@@ -2,6 +2,7 @@ using System.Text;
 using L1FlyMapViewer;
 using L1MapViewer;
 using L1MapViewer.CLI;
+using L1MapViewer.Localization;
 using System.Text;
 
 using System.Diagnostics;
@@ -39,6 +40,12 @@ static class Program
 
         // GUI 模式
         LogPerf("[PROGRAM] Starting GUI mode");
+
+        // 初始化多語言支援
+        LogPerf("[PROGRAM] Initializing localization...");
+        LocalizationManager.Initialize();
+        LogPerf("[PROGRAM] Localization initialized: " + LocalizationManager.CurrentLanguage);
+
         ApplicationConfiguration.Initialize();
         LogPerf("[PROGRAM] ApplicationConfiguration.Initialize() done");
 

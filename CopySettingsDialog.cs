@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using L1MapViewer.Localization;
 
 namespace L1FlyMapViewer
 {
@@ -35,6 +36,16 @@ namespace L1FlyMapViewer
             CopyLayer5 = currentLayer5;
             CopyLayer6to8 = currentLayer6to8;
             InitializeComponent();
+            UpdateLocalization();
+            LocalizationManager.LanguageChanged += OnLanguageChanged;
+        }
+
+        private void OnLanguageChanged(object? sender, EventArgs e)
+        {
+            if (InvokeRequired)
+                Invoke(new Action(() => UpdateLocalization()));
+            else
+                UpdateLocalization();
         }
 
         // 舊版建構子（向後相容）
@@ -154,7 +165,8 @@ namespace L1FlyMapViewer
         {
             if (!chkLayer1.Checked && !chkLayer2.Checked && !chkLayer3.Checked && !chkLayer4.Checked && !chkLayer5.Checked && !chkLayer6to8.Checked)
             {
-                MessageBox.Show("請至少選擇一個圖層", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(LocalizationManager.L("Message_SelectAtLeastOneLayer"),
+                    LocalizationManager.L("Title_Info"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 this.DialogResult = DialogResult.None;
                 return;
             }
@@ -165,6 +177,20 @@ namespace L1FlyMapViewer
             CopyLayer4 = chkLayer4.Checked;
             CopyLayer5 = chkLayer5.Checked;
             CopyLayer6to8 = chkLayer6to8.Checked;
+        }
+
+        private void UpdateLocalization()
+        {
+            this.Text = LocalizationManager.L("Form_CopySettings_Title");
+            lblDescription.Text = LocalizationManager.L("CopySettings_SelectLayers");
+            chkLayer1.Text = LocalizationManager.L("CopySettings_Layer1_Desc");
+            chkLayer2.Text = LocalizationManager.L("CopySettings_Layer2_Desc");
+            chkLayer3.Text = LocalizationManager.L("CopySettings_Layer3_Desc");
+            chkLayer4.Text = LocalizationManager.L("CopySettings_Layer4_Desc");
+            chkLayer5.Text = LocalizationManager.L("CopySettings_Layer5_Desc");
+            chkLayer6to8.Text = LocalizationManager.L("CopySettings_Layer6to8_Desc");
+            btnOK.Text = LocalizationManager.L("Button_OK");
+            btnCancel.Text = LocalizationManager.L("Button_Cancel");
         }
     }
 }

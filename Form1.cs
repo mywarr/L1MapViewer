@@ -5,6 +5,7 @@
 // Assembly location: C:\workspaces\lineage\L1MapViewer\建置好的檔案\L1MapViewer.exe
 
 using L1MapViewer.Helper;
+using L1MapViewer.Localization;
 using L1MapViewer.Other;
 using System;
 using System.Collections;
@@ -105,6 +106,52 @@ namespace L1FlyMapViewer
 
             // 註冊 DataGridView 的 CellFormatting 事件，確保顏色格保持原色
             this.dataGridViewMonsters.CellFormatting += DataGridViewMonsters_CellFormatting!;
+
+            // 訂閱語言變更事件
+            LocalizationManager.LanguageChanged += OnLanguageChanged;
+            UpdateLanguageMenuCheckmarks();
+            UpdateLocalization();
+        }
+
+        // 語言變更事件處理
+        private void OnLanguageChanged(object sender, EventArgs e)
+        {
+            if (InvokeRequired)
+                Invoke(new Action(UpdateLocalization));
+            else
+                UpdateLocalization();
+        }
+
+        // 語言選單項目點擊事件
+        private void LanguageMenuItem_Click(object sender, EventArgs e)
+        {
+            if (sender is ToolStripMenuItem menuItem && menuItem.Tag is string langCode)
+            {
+                LocalizationManager.SetLanguage(langCode);
+                UpdateLanguageMenuCheckmarks();
+            }
+        }
+
+        // 更新語言選單勾選狀態
+        private void UpdateLanguageMenuCheckmarks()
+        {
+            string currentLang = LocalizationManager.CurrentLanguage;
+            langZhTWToolStripMenuItem.Checked = currentLang == "zh-TW";
+            langJaJPToolStripMenuItem.Checked = currentLang == "ja-JP";
+            langEnUSToolStripMenuItem.Checked = currentLang == "en-US";
+        }
+
+        // 更新所有 UI 文字
+        private void UpdateLocalization()
+        {
+            // 選單項目
+            openToolStripMenuItem.Text = LocalizationManager.L("Menu_File_OpenClient");
+            databaseToolStripMenuItem.Text = LocalizationManager.L("Menu_Database");
+            mapEditorToolStripMenuItem.Text = LocalizationManager.L("Menu_MapEditor");
+
+            // 狀態列
+            if (toolStripStatusLabel1.Text == "就緒" || toolStripStatusLabel1.Text == "Ready" || toolStripStatusLabel1.Text == "準備完了")
+                toolStripStatusLabel1.Text = LocalizationManager.L("Status_Ready");
         }
 
         private void Form1_Load(object? sender, EventArgs e)

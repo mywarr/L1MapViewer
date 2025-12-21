@@ -13,6 +13,10 @@ namespace L1FlyMapViewer
         private ToolStripMenuItem exportToolStripMenuItem;
         private ToolStripMenuItem importMaterialToolStripMenuItem;
         private ToolStripMenuItem discordToolStripMenuItem;
+        private ToolStripMenuItem languageToolStripMenuItem;
+        private ToolStripMenuItem langZhTWToolStripMenuItem;
+        private ToolStripMenuItem langJaJPToolStripMenuItem;
+        private ToolStripMenuItem langEnUSToolStripMenuItem;
         private StatusStrip statusStrip1;
         public ToolStripStatusLabel toolStripStatusLabel1;
         public ToolStripProgressBar toolStripProgressBar1;
@@ -148,6 +152,10 @@ namespace L1FlyMapViewer
             this.exportToolStripMenuItem = new ToolStripMenuItem();
             this.importMaterialToolStripMenuItem = new ToolStripMenuItem();
             this.discordToolStripMenuItem = new ToolStripMenuItem();
+            this.languageToolStripMenuItem = new ToolStripMenuItem();
+            this.langZhTWToolStripMenuItem = new ToolStripMenuItem();
+            this.langJaJPToolStripMenuItem = new ToolStripMenuItem();
+            this.langEnUSToolStripMenuItem = new ToolStripMenuItem();
 
             // StatusStrip
             this.statusStrip1 = new StatusStrip();
@@ -296,7 +304,8 @@ namespace L1FlyMapViewer
                 this.openToolStripMenuItem,
                 this.importMaterialToolStripMenuItem,
                 this.exportToolStripMenuItem,
-                this.discordToolStripMenuItem
+                this.discordToolStripMenuItem,
+                this.languageToolStripMenuItem
             });
             this.menuStrip1.Location = new Point(0, 0);
             this.menuStrip1.Name = "menuStrip1";
@@ -335,6 +344,45 @@ namespace L1FlyMapViewer
             this.discordToolStripMenuItem.Size = new Size(100, 20);
             this.discordToolStripMenuItem.Text = "到 Discord 討論";
             this.discordToolStripMenuItem.Click += new System.EventHandler(this.discordToolStripMenuItem_Click);
+
+            //
+            // languageToolStripMenuItem
+            //
+            this.languageToolStripMenuItem.Name = "languageToolStripMenuItem";
+            this.languageToolStripMenuItem.Size = new Size(54, 20);
+            this.languageToolStripMenuItem.Text = "Language";
+            this.languageToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] {
+                this.langZhTWToolStripMenuItem,
+                this.langJaJPToolStripMenuItem,
+                this.langEnUSToolStripMenuItem
+            });
+
+            //
+            // langZhTWToolStripMenuItem
+            //
+            this.langZhTWToolStripMenuItem.Name = "langZhTWToolStripMenuItem";
+            this.langZhTWToolStripMenuItem.Size = new Size(120, 22);
+            this.langZhTWToolStripMenuItem.Text = "繁體中文";
+            this.langZhTWToolStripMenuItem.Tag = "zh-TW";
+            this.langZhTWToolStripMenuItem.Click += new System.EventHandler(this.LanguageMenuItem_Click);
+
+            //
+            // langJaJPToolStripMenuItem
+            //
+            this.langJaJPToolStripMenuItem.Name = "langJaJPToolStripMenuItem";
+            this.langJaJPToolStripMenuItem.Size = new Size(120, 22);
+            this.langJaJPToolStripMenuItem.Text = "日本語";
+            this.langJaJPToolStripMenuItem.Tag = "ja-JP";
+            this.langJaJPToolStripMenuItem.Click += new System.EventHandler(this.LanguageMenuItem_Click);
+
+            //
+            // langEnUSToolStripMenuItem
+            //
+            this.langEnUSToolStripMenuItem.Name = "langEnUSToolStripMenuItem";
+            this.langEnUSToolStripMenuItem.Size = new Size(120, 22);
+            this.langEnUSToolStripMenuItem.Text = "English";
+            this.langEnUSToolStripMenuItem.Tag = "en-US";
+            this.langEnUSToolStripMenuItem.Click += new System.EventHandler(this.LanguageMenuItem_Click);
 
             //
             // statusStrip1

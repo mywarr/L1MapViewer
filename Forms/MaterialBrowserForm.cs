@@ -6,6 +6,7 @@ using System.Linq;
 using System.Windows.Forms;
 using L1MapViewer.CLI;
 using L1MapViewer.Helper;
+using L1MapViewer.Localization;
 using L1MapViewer.Models;
 
 namespace L1MapViewer.Forms
@@ -39,11 +40,27 @@ namespace L1MapViewer.Forms
         private ImageList imageList;
         private Label lblPath;
 
+        // Context menu items for localization
+        private ToolStripMenuItem menuUse;
+        private ToolStripMenuItem menuDelete;
+        private ToolStripMenuItem menuOpenFolder;
+        private ToolStripMenuItem menuRefresh;
+
         public MaterialBrowserForm()
         {
             _library = new MaterialLibrary();
             InitializeComponents();
             LoadMaterials();
+            UpdateLocalization();
+            LocalizationManager.LanguageChanged += OnLanguageChanged;
+        }
+
+        private void OnLanguageChanged(object? sender, EventArgs e)
+        {
+            if (InvokeRequired)
+                Invoke(new Action(() => UpdateLocalization()));
+            else
+                UpdateLocalization();
         }
 
         private void InitializeComponents()
@@ -118,10 +135,10 @@ namespace L1MapViewer.Forms
 
             // 右鍵選單
             var contextMenu = new ContextMenuStrip();
-            var menuUse = new ToolStripMenuItem("使用此素材", null, (s, e) => BtnOK_Click(s, e));
-            var menuDelete = new ToolStripMenuItem("刪除", null, (s, e) => BtnDelete_Click(s, e));
-            var menuOpenFolder = new ToolStripMenuItem("開啟所在資料夾", null, (s, e) => OpenContainingFolder());
-            var menuRefresh = new ToolStripMenuItem("重新整理", null, (s, e) => { _library.ClearCache(); LoadMaterials(); });
+            menuUse = new ToolStripMenuItem("使用此素材", null, (s, e) => BtnOK_Click(s, e));
+            menuDelete = new ToolStripMenuItem("刪除", null, (s, e) => BtnDelete_Click(s, e));
+            menuOpenFolder = new ToolStripMenuItem("開啟所在資料夾", null, (s, e) => OpenContainingFolder());
+            menuRefresh = new ToolStripMenuItem("重新整理", null, (s, e) => { _library.ClearCache(); LoadMaterials(); });
             contextMenu.Items.AddRange(new ToolStripItem[] { menuUse, new ToolStripSeparator(), menuDelete, menuOpenFolder, new ToolStripSeparator(), menuRefresh });
             contextMenu.Opening += (s, e) =>
             {
@@ -506,6 +523,30 @@ namespace L1MapViewer.Forms
                 imageList?.Dispose();
             }
             base.Dispose(disposing);
+        }
+
+        private void UpdateLocalization()
+        {
+            // Form title
+            Text = LocalizationManager.L("Form_MaterialBrowser_Title");
+
+            // Buttons
+            btnSearch.Text = LocalizationManager.L("Button_Search");
+            btnSetPath.Text = LocalizationManager.L("Material_ChangePath");
+            btnOpen.Text = LocalizationManager.L("Material_OpenFile");
+            btnDelete.Text = LocalizationManager.L("Button_Delete");
+            btnOK.Text = LocalizationManager.L("Material_Use");
+            btnCancel.Text = LocalizationManager.L("Button_Cancel");
+
+            // Context menu
+            menuUse.Text = LocalizationManager.L("Material_UseThis");
+            menuDelete.Text = LocalizationManager.L("Button_Delete");
+            menuOpenFolder.Text = LocalizationManager.L("Material_OpenFolder");
+            menuRefresh.Text = LocalizationManager.L("Button_Refresh");
+
+            // Update lblPath with current library info
+            var materials = _library.GetAllMaterials();
+            lblPath.Text = $"{LocalizationManager.L("Material_Library")}: {_library.LibraryPath} ({materials.Count} {LocalizationManager.L("Material_Items")})";
         }
     }
 }

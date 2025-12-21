@@ -12,6 +12,7 @@ using L1MapViewer;
 using L1MapViewer.CLI;
 using L1MapViewer.Converter;
 using L1MapViewer.Helper;
+using L1MapViewer.Localization;
 using L1MapViewer.Models;
 using L1MapViewer.Other;
 using L1MapViewer.Reader;
@@ -471,7 +472,7 @@ namespace L1FlyMapViewer
                 ForeColor = Color.White,
                 Font = new Font("Microsoft JhengHei", 9, FontStyle.Regular),
                 Padding = new Padding(8),
-                Text = "滑鼠中鍵拖移 | Ctrl+滾輪縮放 | 左鍵選取格子",
+                Text = LocalizationManager.L("Hint_MouseControls"),
                 Visible = true,
                 BorderStyle = BorderStyle.FixedSingle
             };
@@ -523,7 +524,135 @@ namespace L1FlyMapViewer
             this.KeyPreview = true;
             this.KeyDown += MapForm_KeyDown;
 
+            // 訂閱語言變更事件
+            LocalizationManager.LanguageChanged += OnLanguageChanged;
+            UpdateLanguageMenuCheckmarks();
+            UpdateLocalization();
+
             LogPerf("[FORM-CTOR] End");
+        }
+
+        // 語言變更事件處理
+        private void OnLanguageChanged(object sender, EventArgs e)
+        {
+            if (InvokeRequired)
+                Invoke(new Action(UpdateLocalization));
+            else
+                UpdateLocalization();
+        }
+
+        // 語言選單項目點擊事件
+        private void LanguageMenuItem_Click(object sender, EventArgs e)
+        {
+            if (sender is ToolStripMenuItem menuItem && menuItem.Tag is string langCode)
+            {
+                LocalizationManager.SetLanguage(langCode);
+                UpdateLanguageMenuCheckmarks();
+            }
+        }
+
+        // 更新語言選單勾選狀態
+        private void UpdateLanguageMenuCheckmarks()
+        {
+            string currentLang = LocalizationManager.CurrentLanguage;
+            langZhTWToolStripMenuItem.Checked = currentLang == "zh-TW";
+            langJaJPToolStripMenuItem.Checked = currentLang == "ja-JP";
+            langEnUSToolStripMenuItem.Checked = currentLang == "en-US";
+        }
+
+        // 更新所有 UI 文字
+        private void UpdateLocalization()
+        {
+            // 選單項目
+            openToolStripMenuItem.Text = LocalizationManager.L("Menu_File_OpenClient");
+            importMaterialToolStripMenuItem.Text = LocalizationManager.L("Menu_Import_Material");
+            exportToolStripMenuItem.Text = LocalizationManager.L("Menu_File_Export");
+            discordToolStripMenuItem.Text = LocalizationManager.L("Menu_Help_Discord");
+
+            // 頁籤
+            tabMapPreview.Text = LocalizationManager.L("Tab_MapPreview");
+            tabS32Editor.Text = LocalizationManager.L("Tab_S32Editor");
+
+            // 左下角 Tab 頁籤
+            tabMapList.Text = LocalizationManager.L("Tab_MapList");
+            tabS32Files.Text = LocalizationManager.L("Tab_S32Files");
+            txtMapSearch.PlaceholderText = LocalizationManager.L("Placeholder_SearchMap");
+
+            // 圖層控制標籤
+            chkLayer1.Text = LocalizationManager.L("Layer_1");
+            chkLayer2.Text = LocalizationManager.L("Layer_2");
+            chkLayer3.Text = LocalizationManager.L("Layer_3");
+            chkLayer4.Text = LocalizationManager.L("Layer_4");
+            chkShowPassable.Text = LocalizationManager.L("Layer_Passable");
+            chkShowGrid.Text = LocalizationManager.L("Layer_Grid");
+            chkShowS32Boundary.Text = LocalizationManager.L("Layer_S32Border");
+            chkShowRegions.Text = LocalizationManager.L("Layer_Regions");
+
+            // S32 編輯面板按鈕
+            btnReloadMap.Text = LocalizationManager.L("Button_ReloadF5");
+            btnSaveS32.Text = LocalizationManager.L("Button_SaveS32");
+            btnCopySettings.Text = LocalizationManager.L("Button_CopySettings");
+            btnCopyMapCoords.Text = LocalizationManager.L("Button_CopyMapCoords");
+            btnImportFs32.Text = LocalizationManager.L("Button_ImportFs32");
+            btnSetPassable.Text = LocalizationManager.L("Button_SetPassable");
+            btnSetImpassable.Text = LocalizationManager.L("Button_SetImpassable");
+            btnEditLayer5.Text = LocalizationManager.L("Button_EditLayer5");
+            btnRegionEdit.Text = LocalizationManager.L("Button_RegionEdit");
+
+            // S32 檔案列表按鈕
+            btnS32SelectAll.Text = LocalizationManager.L("Button_SelectAll");
+            btnS32SelectNone.Text = LocalizationManager.L("Button_SelectNone");
+
+            // 工具列項目
+            toolStripJumpLabel.Text = LocalizationManager.L("Label_GameCoord") + ":";
+            toolStripJumpButton.Text = LocalizationManager.L("Button_JumpToCoord");
+
+            // 右側工具按鈕 - 上方工具
+            btnToolCopy.Text = LocalizationManager.L("Button_Copy");
+            btnToolPaste.Text = LocalizationManager.L("Button_Paste");
+            btnToolDelete.Text = LocalizationManager.L("Button_Delete");
+            btnToolUndo.Text = LocalizationManager.L("Button_Undo");
+            btnToolRedo.Text = LocalizationManager.L("Button_Redo");
+            btnToolSave.Text = LocalizationManager.L("Button_Save");
+            btnToolCellInfo.Text = LocalizationManager.L("Button_Details");
+            btnToolReplaceTile.Text = LocalizationManager.L("Button_Replace");
+            btnToolAddS32.Text = LocalizationManager.L("Button_New");
+            btnToolClearLayer7.Text = LocalizationManager.L("Button_ClearL7");
+            btnToolClearCell.Text = LocalizationManager.L("Button_ClearCell");
+            // 右側工具按鈕 - 下方查詢
+            btnToolCheckL1.Text = LocalizationManager.L("Button_CheckL1");
+            btnToolCheckL2.Text = LocalizationManager.L("Button_ClearL2");
+            btnToolCheckL4.Text = LocalizationManager.L("Button_CheckL4");
+            btnToolCheckL5.Text = LocalizationManager.L("Button_CheckL5");
+            btnToolCheckL6.Text = LocalizationManager.L("Button_CheckL6");
+            btnToolCheckL7.Text = LocalizationManager.L("Button_CheckL7");
+            btnToolCheckL8.Text = LocalizationManager.L("Button_CheckL8");
+
+            // 浮動圖層面板
+            lblLayerIcon.Text = "📑 " + LocalizationManager.L("Label_Layers");
+            chkFloatLayer1.Text = LocalizationManager.L("Layer_FloatL1");
+            chkFloatLayer2.Text = LocalizationManager.L("Layer_FloatL2");
+            chkFloatLayer4.Text = LocalizationManager.L("Layer_FloatL4");
+            chkFloatLayer5.Text = LocalizationManager.L("Layer_FloatL5");
+            chkFloatPassable.Text = LocalizationManager.L("Layer_FloatPassable");
+            chkFloatGrid.Text = LocalizationManager.L("Layer_FloatGrid");
+            chkFloatS32Boundary.Text = LocalizationManager.L("Layer_FloatS32Border");
+            chkFloatRegions.Text = LocalizationManager.L("Layer_FloatRegions");
+
+            // Tile 面板
+            txtTileSearch.PlaceholderText = LocalizationManager.L("Placeholder_SearchTileId");
+            lblTileList.Text = string.Format(LocalizationManager.L("Label_TileListCount"), lvTiles.Items.Count);
+            lblMaterials.Text = LocalizationManager.L("Label_RecentMaterials");
+            lblGroupThumbnails.Text = LocalizationManager.L("Label_GroupThumbnails");
+            btnMoreMaterials.Text = LocalizationManager.L("Button_More");
+            btnShowAllGroups.Text = LocalizationManager.L("Button_ShowAll");
+
+            // 滑鼠操作提示
+            lblDefaultHint.Text = LocalizationManager.L("Hint_MouseControls");
+
+            // 狀態列
+            if (toolStripStatusLabel1.Text == "就緒" || toolStripStatusLabel1.Text == "Ready" || toolStripStatusLabel1.Text == "準備完了")
+                toolStripStatusLabel1.Text = LocalizationManager.L("Status_Ready");
         }
 
         // 處理快捷鍵
@@ -7935,7 +8064,7 @@ namespace L1FlyMapViewer
                         lvTiles.EndUpdate();  // 恢復重繪
                     }
 
-                    lblTileList.Text = $"Tile 列表 ({lvTiles.Items.Count})";
+                    lblTileList.Text = string.Format(LocalizationManager.L("Label_TileListCount"), lvTiles.Items.Count);
                 });
             });
         }
@@ -8076,8 +8205,8 @@ namespace L1FlyMapViewer
                 lvTiles.Items.AddRange(items.ToArray());
 
                 string statusText = string.IsNullOrWhiteSpace(searchText)
-                    ? $"Tile 列表 ({lvTiles.Items.Count})"
-                    : $"搜尋結果: {lvTiles.Items.Count}/{totalCount}";
+                    ? string.Format(LocalizationManager.L("Label_TileListCount"), lvTiles.Items.Count)
+                    : $"{LocalizationManager.L("Label_SearchResult")}: {lvTiles.Items.Count}/{totalCount}";
                 lblTileList.Text = statusText;
             }
             finally
@@ -13207,7 +13336,7 @@ namespace L1FlyMapViewer
 
             if (nearbyGroups.Count == 0)
             {
-                lblGroupThumbnails.Text = "附近群組 (0)";
+                lblGroupThumbnails.Text = string.Format(LocalizationManager.L("Label_NearbyGroupsCount"), 0);
                 lvGroupThumbnails.Items.Clear();
                 return;
             }
@@ -13230,7 +13359,7 @@ namespace L1FlyMapViewer
             int l5Count = sortedGroups.Count(g => g.Value.hasLayer5);
 
             // 更新群組縮圖列表
-            lblGroupThumbnails.Text = $"附近群組 ({sortedGroups.Count}, L5:{l5Count}) 載入中...";
+            lblGroupThumbnails.Text = string.Format(LocalizationManager.L("Label_NearbyGroupsLoading"), sortedGroups.Count, l5Count);
 
             // 取消之前的縮圖產生任務
             if (_groupThumbnailCts != null)
@@ -13334,7 +13463,7 @@ namespace L1FlyMapViewer
                         {
                             lvGroupThumbnails.EndUpdate();  // 恢復重繪
                         }
-                        lblGroupThumbnails.Text = $"附近群組 ({totalGroups}) [{elapsedMs}ms]";
+                        lblGroupThumbnails.Text = string.Format(LocalizationManager.L("Label_NearbyGroupsTime"), totalGroups, elapsedMs);
                     });
                 }
                 catch { }
@@ -14541,7 +14670,7 @@ namespace L1FlyMapViewer
 
             if (_document.S32Files.Count == 0)
             {
-                lblGroupThumbnails.Text = "群組縮圖列表";
+                lblGroupThumbnails.Text = LocalizationManager.L("Label_GroupThumbnails");
                 return;
             }
 
@@ -14549,8 +14678,8 @@ namespace L1FlyMapViewer
 
             // 顯示載入中狀態
             lblGroupThumbnails.Text = isSelectedMode
-                ? "選取區域群組 (收集中...)"
-                : "群組縮圖列表 (收集中...)";
+                ? $"{LocalizationManager.L("Label_SelectedAreaGroups")} ({LocalizationManager.L("Status_Collecting")}...)"
+                : $"{LocalizationManager.L("Label_GroupThumbnails")} ({LocalizationManager.L("Status_Collecting")}...)";
 
             // 複製需要的資料到背景執行緒
             var s32FilesSnapshot = _document.S32Files.Values.ToList();
@@ -14625,7 +14754,9 @@ namespace L1FlyMapViewer
                     {
                         this.BeginInvoke((MethodInvoker)delegate
                         {
-                            string label = isSelectedMode ? "選取區域群組 (0)" : "群組縮圖列表 (0)";
+                            string label = isSelectedMode
+                                ? string.Format(LocalizationManager.L("Label_SelectedAreaGroupsCount"), 0)
+                                : string.Format(LocalizationManager.L("Label_GroupThumbnailsCount"), 0);
                             lblGroupThumbnails.Text = label;
                         });
                     }
@@ -14679,8 +14810,8 @@ namespace L1FlyMapViewer
                     this.BeginInvoke((MethodInvoker)delegate
                     {
                         lblGroupThumbnails.Text = isSelectedMode
-                            ? $"選取區域群組 (載入中 0/{totalGroups})"
-                            : $"群組縮圖列表 (載入中 0/{totalGroups})";
+                            ? $"{LocalizationManager.L("Label_SelectedAreaGroups")} ({LocalizationManager.L("Status_Loading")} 0/{totalGroups})"
+                            : string.Format(LocalizationManager.L("Label_GroupThumbnailsLoading"), 0, totalGroups);
                     });
                 }
                 catch { }
@@ -14728,8 +14859,8 @@ namespace L1FlyMapViewer
                                 if (!cancellationToken.IsCancellationRequested)
                                 {
                                     lblGroupThumbnails.Text = isSelectedMode
-                                        ? $"選取區域群組 (載入中 {current}/{totalGroups})"
-                                        : $"群組縮圖列表 (載入中 {current}/{totalGroups})";
+                                        ? $"{LocalizationManager.L("Label_SelectedAreaGroups")} ({LocalizationManager.L("Status_Loading")} {current}/{totalGroups})"
+                                        : string.Format(LocalizationManager.L("Label_GroupThumbnailsLoading"), current, totalGroups);
                                 }
                             });
                         }
@@ -14820,8 +14951,8 @@ namespace L1FlyMapViewer
                         uiSw.Stop();
 
                         string labelText = isSelectedMode
-                            ? $"選取區域群組 ({totalGroups}) [{elapsedMs}ms]"
-                            : $"群組縮圖列表 ({totalGroups}) [{elapsedMs}ms]";
+                            ? $"{LocalizationManager.L("Label_SelectedAreaGroups")} ({totalGroups}) [{elapsedMs}ms]"
+                            : string.Format(LocalizationManager.L("Label_GroupThumbnailsTime"), totalGroups, elapsedMs);
                         lblGroupThumbnails.Text = labelText;
 
                         // 更新狀態列，將「background」替換為實際時間
@@ -20389,16 +20520,16 @@ namespace L1FlyMapViewer
             if (layer8ExtendedS32.Count > 0)
             {
                 int totalL8Items = layer8ExtendedS32.Sum(x => x.layer8Count);
-                msgParts.Add($"• {layer8ExtendedS32.Count} 個 S32 使用 Layer8 擴展格式（共 {totalL8Items} 個項目，可能導致閃退）");
+                msgParts.Add(string.Format(LocalizationManager.L("AbnormalCheck_Layer8Extended"), layer8ExtendedS32.Count, totalL8Items));
             }
             if (overLimitTileIds.Count > 0)
             {
-                msgParts.Add($"• {overLimitTileIds.Count} 個 Tile 超過上限 (上限={tileLimit}, 最大={maxTileId})，將無法顯示或導致閃退");
+                msgParts.Add(string.Format(LocalizationManager.L("AbnormalCheck_TileOverLimit"), overLimitTileIds.Count, tileLimit, maxTileId));
             }
 
             // 顯示確認對話框
-            string message = $"發現以下異常：\n\n{string.Join("\n", msgParts)}\n\n是否要查看詳細資訊？";
-            var confirmResult = MessageBox.Show(message, "異常檢查結果",
+            string message = $"{LocalizationManager.L("AbnormalCheck_FoundIssues")}\n\n{string.Join("\n", msgParts)}\n\n{LocalizationManager.L("AbnormalCheck_ViewDetails")}";
+            var confirmResult = MessageBox.Show(message, LocalizationManager.L("AbnormalCheck_Title"),
                 MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
 
             if (confirmResult != DialogResult.Yes)
@@ -20406,7 +20537,7 @@ namespace L1FlyMapViewer
 
             // 顯示清單讓使用者選擇要清除的項目
             Form resultForm = new Form();
-            resultForm.Text = $"異常檢查結果";
+            resultForm.Text = LocalizationManager.L("AbnormalCheck_Title");
             resultForm.Size = new Size(850, 600);
             resultForm.FormBorderStyle = FormBorderStyle.Sizable;
             resultForm.StartPosition = FormStartPosition.CenterParent;
@@ -20421,11 +20552,11 @@ namespace L1FlyMapViewer
             // ===== Tab 1: Layer5 異常 =====
             if (invalidL5Items.Count > 0)
             {
-                TabPage tabL5 = new TabPage($"Layer5 異常 ({invalidL5Items.Count})");
+                TabPage tabL5 = new TabPage(string.Format(LocalizationManager.L("AbnormalCheck_Tab_Layer5"), invalidL5Items.Count));
                 tabControl.TabPages.Add(tabL5);
 
                 Label lblL5Summary = new Label();
-                lblL5Summary.Text = $"以下 {invalidL5Items.Count} 個 Layer5 項目異常（GroupId不存在或周圍一格內無對應物件）：";
+                lblL5Summary.Text = string.Format(LocalizationManager.L("AbnormalCheck_Layer5Summary"), invalidL5Items.Count);
                 lblL5Summary.Location = new Point(5, 5);
                 lblL5Summary.Size = new Size(tabL5.ClientSize.Width - 10, 20);
                 lblL5Summary.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
@@ -20452,19 +20583,19 @@ namespace L1FlyMapViewer
                 pnlL5Buttons.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
                 tabL5.Controls.Add(pnlL5Buttons);
 
-                Button btnL5SelectAll = new Button { Text = "全選", Location = new Point(0, 0), Size = new Size(80, 30) };
+                Button btnL5SelectAll = new Button { Text = LocalizationManager.L("Button_SelectAll"), Location = new Point(0, 0), Size = new Size(80, 30) };
                 btnL5SelectAll.Click += (s, args) => { for (int i = 0; i < clbL5Items.Items.Count; i++) clbL5Items.SetItemChecked(i, true); };
                 pnlL5Buttons.Controls.Add(btnL5SelectAll);
 
-                Button btnL5DeselectAll = new Button { Text = "取消全選", Location = new Point(90, 0), Size = new Size(80, 30) };
+                Button btnL5DeselectAll = new Button { Text = LocalizationManager.L("AbnormalCheck_DeselectAll"), Location = new Point(90, 0), Size = new Size(80, 30) };
                 btnL5DeselectAll.Click += (s, args) => { for (int i = 0; i < clbL5Items.Items.Count; i++) clbL5Items.SetItemChecked(i, false); };
                 pnlL5Buttons.Controls.Add(btnL5DeselectAll);
 
-                Button btnL5ClearSelected = new Button { Text = "清除勾選", Location = new Point(0, 35), Size = new Size(100, 30), BackColor = Color.LightCoral };
+                Button btnL5ClearSelected = new Button { Text = LocalizationManager.L("AbnormalCheck_ClearSelected"), Location = new Point(0, 35), Size = new Size(100, 30), BackColor = Color.LightCoral };
                 btnL5ClearSelected.Click += (s, args) =>
                 {
-                    if (clbL5Items.CheckedIndices.Count == 0) { MessageBox.Show("請先勾選要清除的項目", "提示"); return; }
-                    if (MessageBox.Show($"確定要清除勾選的 {clbL5Items.CheckedIndices.Count} 個項目嗎？", "確認刪除", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                    if (clbL5Items.CheckedIndices.Count == 0) { MessageBox.Show(LocalizationManager.L("AbnormalCheck_PleaseSelectItems"), LocalizationManager.L("AbnormalCheck_Notice")); return; }
+                    if (MessageBox.Show(string.Format(LocalizationManager.L("AbnormalCheck_ConfirmClearSelected"), clbL5Items.CheckedIndices.Count), LocalizationManager.L("AbnormalCheck_ConfirmDelete"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
 
                     var toDelete = new Dictionary<string, List<Layer5Item>>();
                     foreach (int idx in clbL5Items.CheckedIndices)
@@ -20482,15 +20613,15 @@ namespace L1FlyMapViewer
                             s32Data.IsModified = true;
                         }
                     }
-                    MessageBox.Show($"已清除 {deletedCount} 個異常的 Layer5 項目", "清除完成");
+                    MessageBox.Show(string.Format(LocalizationManager.L("AbnormalCheck_ClearedLayer5"), deletedCount), LocalizationManager.L("AbnormalCheck_ClearComplete"));
                     ClearS32BlockCache(); resultForm.Close(); RenderS32Map();
                 };
                 pnlL5Buttons.Controls.Add(btnL5ClearSelected);
 
-                Button btnL5ClearAll = new Button { Text = "清除全部", Location = new Point(110, 35), Size = new Size(100, 30), BackColor = Color.Salmon };
+                Button btnL5ClearAll = new Button { Text = LocalizationManager.L("AbnormalCheck_ClearAll"), Location = new Point(110, 35), Size = new Size(100, 30), BackColor = Color.Salmon };
                 btnL5ClearAll.Click += (s, args) =>
                 {
-                    if (MessageBox.Show($"確定要清除所有 {invalidL5Items.Count} 個異常項目嗎？", "確認刪除全部", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                    if (MessageBox.Show(string.Format(LocalizationManager.L("AbnormalCheck_ConfirmClearAll"), invalidL5Items.Count), LocalizationManager.L("AbnormalCheck_ConfirmDeleteAll"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
                     var toDelete = new Dictionary<string, List<Layer5Item>>();
                     foreach (var (filePath, _, item, _, _) in invalidL5Items)
                     {
@@ -20506,7 +20637,7 @@ namespace L1FlyMapViewer
                             s32Data.IsModified = true;
                         }
                     }
-                    MessageBox.Show($"已清除 {deletedCount} 個異常的 Layer5 項目", "清除完成");
+                    MessageBox.Show(string.Format(LocalizationManager.L("AbnormalCheck_ClearedLayer5"), deletedCount), LocalizationManager.L("AbnormalCheck_ClearComplete"));
                     ClearS32BlockCache(); resultForm.Close(); RenderS32Map();
                 };
                 pnlL5Buttons.Controls.Add(btnL5ClearAll);
@@ -20515,7 +20646,7 @@ namespace L1FlyMapViewer
             // ===== Tab 2: 無效 TileId =====
             if (invalidTileItems.Count > 0)
             {
-                TabPage tabTile = new TabPage($"無效 TileId ({invalidTileItems.Count})");
+                TabPage tabTile = new TabPage(string.Format(LocalizationManager.L("AbnormalCheck_Tab_InvalidTile"), invalidTileItems.Count));
                 tabControl.TabPages.Add(tabTile);
 
                 // 統計資訊
@@ -20524,7 +20655,7 @@ namespace L1FlyMapViewer
                 int l4Count = invalidTileItems.Count(t => t.Layer == "Layer4");
 
                 Label lblTileSummary = new Label();
-                lblTileSummary.Text = $"發現 {invalidTileItems.Count} 個無效 TileId (L1:{l1Count}, L2:{l2Count}, L4:{l4Count})。這些 Tile 檔案不存在或 IndexId 超出範圍：";
+                lblTileSummary.Text = string.Format(LocalizationManager.L("AbnormalCheck_TileSummary"), invalidTileItems.Count, l1Count, l2Count, l4Count);
                 lblTileSummary.Location = new Point(5, 5);
                 lblTileSummary.Size = new Size(tabTile.ClientSize.Width - 10, 20);
                 lblTileSummary.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
@@ -20551,34 +20682,33 @@ namespace L1FlyMapViewer
                 pnlTileButtons.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
                 tabTile.Controls.Add(pnlTileButtons);
 
-                Button btnTileSelectAll = new Button { Text = "全選", Location = new Point(0, 0), Size = new Size(80, 30) };
+                Button btnTileSelectAll = new Button { Text = LocalizationManager.L("Button_SelectAll"), Location = new Point(0, 0), Size = new Size(80, 30) };
                 btnTileSelectAll.Click += (s, args) => { for (int i = 0; i < clbTileItems.Items.Count; i++) clbTileItems.SetItemChecked(i, true); };
                 pnlTileButtons.Controls.Add(btnTileSelectAll);
 
-                Button btnTileDeselectAll = new Button { Text = "取消全選", Location = new Point(90, 0), Size = new Size(80, 30) };
+                Button btnTileDeselectAll = new Button { Text = LocalizationManager.L("AbnormalCheck_DeselectAll"), Location = new Point(90, 0), Size = new Size(80, 30) };
                 btnTileDeselectAll.Click += (s, args) => { for (int i = 0; i < clbTileItems.Items.Count; i++) clbTileItems.SetItemChecked(i, false); };
                 pnlTileButtons.Controls.Add(btnTileDeselectAll);
 
                 // 篩選按鈕
-                Button btnFilterL1 = new Button { Text = "只選L1", Location = new Point(180, 0), Size = new Size(70, 30) };
+                Button btnFilterL1 = new Button { Text = LocalizationManager.L("AbnormalCheck_SelectL1Only"), Location = new Point(180, 0), Size = new Size(70, 30) };
                 btnFilterL1.Click += (s, args) => { for (int i = 0; i < invalidTileItems.Count; i++) clbTileItems.SetItemChecked(i, invalidTileItems[i].Layer == "Layer1"); };
                 pnlTileButtons.Controls.Add(btnFilterL1);
 
-                Button btnFilterL2 = new Button { Text = "只選L2", Location = new Point(255, 0), Size = new Size(70, 30) };
+                Button btnFilterL2 = new Button { Text = LocalizationManager.L("AbnormalCheck_SelectL2Only"), Location = new Point(255, 0), Size = new Size(70, 30) };
                 btnFilterL2.Click += (s, args) => { for (int i = 0; i < invalidTileItems.Count; i++) clbTileItems.SetItemChecked(i, invalidTileItems[i].Layer == "Layer2"); };
                 pnlTileButtons.Controls.Add(btnFilterL2);
 
-                Button btnFilterL4 = new Button { Text = "只選L4", Location = new Point(330, 0), Size = new Size(70, 30) };
+                Button btnFilterL4 = new Button { Text = LocalizationManager.L("AbnormalCheck_SelectL4Only"), Location = new Point(330, 0), Size = new Size(70, 30) };
                 btnFilterL4.Click += (s, args) => { for (int i = 0; i < invalidTileItems.Count; i++) clbTileItems.SetItemChecked(i, invalidTileItems[i].Layer == "Layer4"); };
                 pnlTileButtons.Controls.Add(btnFilterL4);
 
-                Button btnTileClearSelected = new Button { Text = "清除勾選", Location = new Point(0, 35), Size = new Size(100, 30), BackColor = Color.LightCoral };
+                Button btnTileClearSelected = new Button { Text = LocalizationManager.L("AbnormalCheck_ClearSelected"), Location = new Point(0, 35), Size = new Size(100, 30), BackColor = Color.LightCoral };
                 btnTileClearSelected.Click += (s, args) =>
                 {
-                    if (clbTileItems.CheckedIndices.Count == 0) { MessageBox.Show("請先勾選要清除的項目", "提示"); return; }
-                    if (MessageBox.Show($"確定要清除勾選的 {clbTileItems.CheckedIndices.Count} 個無效 Tile 嗎？\n\n" +
-                        "• Layer1: 將 TileId 設為 0\n• Layer2: 移除該項目\n• Layer4: 移除該物件",
-                        "確認刪除", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                    if (clbTileItems.CheckedIndices.Count == 0) { MessageBox.Show(LocalizationManager.L("AbnormalCheck_PleaseSelectItems"), LocalizationManager.L("AbnormalCheck_Notice")); return; }
+                    if (MessageBox.Show(string.Format(LocalizationManager.L("AbnormalCheck_ConfirmClearTiles"), clbTileItems.CheckedIndices.Count),
+                        LocalizationManager.L("AbnormalCheck_ConfirmDelete"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
 
                     int deletedCount = 0;
                     var checkedIndices = clbTileItems.CheckedIndices.Cast<int>().OrderByDescending(i => i).ToList();
@@ -20605,17 +20735,16 @@ namespace L1FlyMapViewer
                             s32Data.IsModified = true;
                         }
                     }
-                    MessageBox.Show($"已清除 {deletedCount} 個無效 Tile", "清除完成");
+                    MessageBox.Show(string.Format(LocalizationManager.L("AbnormalCheck_ClearedTiles"), deletedCount), LocalizationManager.L("AbnormalCheck_ClearComplete"));
                     ClearS32BlockCache(); resultForm.Close(); RenderS32Map();
                 };
                 pnlTileButtons.Controls.Add(btnTileClearSelected);
 
-                Button btnTileClearAll = new Button { Text = "清除全部", Location = new Point(110, 35), Size = new Size(100, 30), BackColor = Color.Salmon };
+                Button btnTileClearAll = new Button { Text = LocalizationManager.L("AbnormalCheck_ClearAll"), Location = new Point(110, 35), Size = new Size(100, 30), BackColor = Color.Salmon };
                 btnTileClearAll.Click += (s, args) =>
                 {
-                    if (MessageBox.Show($"確定要清除所有 {invalidTileItems.Count} 個無效 Tile 嗎？\n\n" +
-                        "• Layer1: 將 TileId 設為 0\n• Layer2: 移除該項目\n• Layer4: 移除該物件",
-                        "確認刪除全部", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                    if (MessageBox.Show(string.Format(LocalizationManager.L("AbnormalCheck_ConfirmClearAllTiles"), invalidTileItems.Count),
+                        LocalizationManager.L("AbnormalCheck_ConfirmDeleteAll"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
 
                     int deletedCount = 0;
                     foreach (var tile in invalidTileItems)
@@ -20640,7 +20769,7 @@ namespace L1FlyMapViewer
                             s32Data.IsModified = true;
                         }
                     }
-                    MessageBox.Show($"已清除 {deletedCount} 個無效 Tile", "清除完成");
+                    MessageBox.Show(string.Format(LocalizationManager.L("AbnormalCheck_ClearedTiles"), deletedCount), LocalizationManager.L("AbnormalCheck_ClearComplete"));
                     ClearS32BlockCache(); resultForm.Close(); RenderS32Map();
                 };
                 pnlTileButtons.Controls.Add(btnTileClearAll);
@@ -20650,11 +20779,11 @@ namespace L1FlyMapViewer
             if (layer8ExtendedS32.Count > 0)
             {
                 int totalL8Items = layer8ExtendedS32.Sum(x => x.layer8Count);
-                TabPage tabL8 = new TabPage($"L8 擴展格式 ({layer8ExtendedS32.Count})");
+                TabPage tabL8 = new TabPage(string.Format(LocalizationManager.L("AbnormalCheck_Tab_Layer8"), layer8ExtendedS32.Count));
                 tabControl.TabPages.Add(tabL8);
 
                 Label lblL8Summary = new Label();
-                lblL8Summary.Text = $"以下 {layer8ExtendedS32.Count} 個 S32 使用 Layer8 擴展格式（共 {totalL8Items} 個項目）。擴展格式可能導致遊戲閃退：";
+                lblL8Summary.Text = string.Format(LocalizationManager.L("AbnormalCheck_Layer8Summary"), layer8ExtendedS32.Count, totalL8Items);
                 lblL8Summary.Location = new Point(5, 5);
                 lblL8Summary.Size = new Size(tabL8.ClientSize.Width - 10, 20);
                 lblL8Summary.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
@@ -20669,7 +20798,7 @@ namespace L1FlyMapViewer
 
                 foreach (var (filePath, fileName, layer8Count) in layer8ExtendedS32)
                 {
-                    string displayText = $"[{fileName}] Layer8 項目數: {layer8Count}";
+                    string displayText = string.Format(LocalizationManager.L("AbnormalCheck_Layer8ItemCount"), fileName, layer8Count);
                     clbL8Items.Items.Add(displayText);
                 }
                 tabL8.Controls.Add(clbL8Items);
@@ -20681,20 +20810,20 @@ namespace L1FlyMapViewer
                 pnlL8Buttons.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
                 tabL8.Controls.Add(pnlL8Buttons);
 
-                Button btnL8SelectAll = new Button { Text = "全選", Location = new Point(0, 0), Size = new Size(80, 30) };
+                Button btnL8SelectAll = new Button { Text = LocalizationManager.L("Button_SelectAll"), Location = new Point(0, 0), Size = new Size(80, 30) };
                 btnL8SelectAll.Click += (s, args) => { for (int i = 0; i < clbL8Items.Items.Count; i++) clbL8Items.SetItemChecked(i, true); };
                 pnlL8Buttons.Controls.Add(btnL8SelectAll);
 
-                Button btnL8DeselectAll = new Button { Text = "取消全選", Location = new Point(90, 0), Size = new Size(80, 30) };
+                Button btnL8DeselectAll = new Button { Text = LocalizationManager.L("AbnormalCheck_DeselectAll"), Location = new Point(90, 0), Size = new Size(80, 30) };
                 btnL8DeselectAll.Click += (s, args) => { for (int i = 0; i < clbL8Items.Items.Count; i++) clbL8Items.SetItemChecked(i, false); };
                 pnlL8Buttons.Controls.Add(btnL8DeselectAll);
 
-                Button btnL8ResetSelected = new Button { Text = "重設勾選為一般格式", Location = new Point(0, 35), Size = new Size(150, 30), BackColor = Color.LightCoral };
+                Button btnL8ResetSelected = new Button { Text = LocalizationManager.L("AbnormalCheck_ResetSelectedFormat"), Location = new Point(0, 35), Size = new Size(150, 30), BackColor = Color.LightCoral };
                 btnL8ResetSelected.Click += (s, args) =>
                 {
-                    if (clbL8Items.CheckedIndices.Count == 0) { MessageBox.Show("請先勾選要重設的項目", "提示"); return; }
-                    if (MessageBox.Show($"確定要將勾選的 {clbL8Items.CheckedIndices.Count} 個 S32 重設為一般格式嗎？\n\n這會清除這些 S32 所有 Layer8 項目的 ExtendedData。",
-                        "確認重設", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                    if (clbL8Items.CheckedIndices.Count == 0) { MessageBox.Show(LocalizationManager.L("AbnormalCheck_PleaseSelectReset"), LocalizationManager.L("AbnormalCheck_Notice")); return; }
+                    if (MessageBox.Show(string.Format(LocalizationManager.L("AbnormalCheck_ConfirmResetSelected"), clbL8Items.CheckedIndices.Count),
+                        LocalizationManager.L("AbnormalCheck_ConfirmReset"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
 
                     int resetCount = 0;
                     int clearedItems = 0;
@@ -20713,17 +20842,17 @@ namespace L1FlyMapViewer
                             resetCount++;
                         }
                     }
-                    MessageBox.Show($"已重設 {resetCount} 個 S32 為一般格式，清除了 {clearedItems} 個項目的 ExtendedData。\n\n請記得儲存 S32 檔案。", "重設完成");
+                    MessageBox.Show(string.Format(LocalizationManager.L("AbnormalCheck_ResetComplete"), resetCount, clearedItems), LocalizationManager.L("AbnormalCheck_ResetDone"));
                     UpdateLayer5InvalidButton();
                     resultForm.Close();
                 };
                 pnlL8Buttons.Controls.Add(btnL8ResetSelected);
 
-                Button btnL8ResetAll = new Button { Text = "全部重設為一般格式", Location = new Point(160, 35), Size = new Size(150, 30), BackColor = Color.Salmon };
+                Button btnL8ResetAll = new Button { Text = LocalizationManager.L("AbnormalCheck_ResetAllFormat"), Location = new Point(160, 35), Size = new Size(150, 30), BackColor = Color.Salmon };
                 btnL8ResetAll.Click += (s, args) =>
                 {
-                    if (MessageBox.Show($"確定要將所有 {layer8ExtendedS32.Count} 個 S32 重設為一般格式嗎？\n\n這會清除所有 Layer8 項目的 ExtendedData。",
-                        "確認重設全部", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                    if (MessageBox.Show(string.Format(LocalizationManager.L("AbnormalCheck_ConfirmResetAll"), layer8ExtendedS32.Count),
+                        LocalizationManager.L("AbnormalCheck_ConfirmResetAll_Title"), MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
 
                     int resetCount = 0;
                     int clearedItems = 0;
@@ -20741,7 +20870,7 @@ namespace L1FlyMapViewer
                             resetCount++;
                         }
                     }
-                    MessageBox.Show($"已重設 {resetCount} 個 S32 為一般格式，清除了 {clearedItems} 個項目的 ExtendedData。\n\n請記得儲存 S32 檔案。", "重設完成");
+                    MessageBox.Show(string.Format(LocalizationManager.L("AbnormalCheck_ResetComplete"), resetCount, clearedItems), LocalizationManager.L("AbnormalCheck_ResetDone"));
                     UpdateLayer5InvalidButton();
                     resultForm.Close();
                 };
@@ -20751,12 +20880,11 @@ namespace L1FlyMapViewer
             // ===== Tab 4: Tile 超過上限 =====
             if (overLimitTileIds.Count > 0)
             {
-                TabPage tabOverLimit = new TabPage($"Tile超上限 ({overLimitTileIds.Count})");
+                TabPage tabOverLimit = new TabPage(string.Format(LocalizationManager.L("AbnormalCheck_Tab_OverLimit"), overLimitTileIds.Count));
                 tabControl.TabPages.Add(tabOverLimit);
 
                 Label lblOverLimitSummary = new Label();
-                lblOverLimitSummary.Text = $"Tile.idx 中有 {overLimitTileIds.Count} 個 Tile ID 超過 list.til 上限 ({tileLimit})。\n" +
-                                           $"最大 Tile ID: {maxTileId}。這些 Tile 將無法顯示或導致閃退：";
+                lblOverLimitSummary.Text = string.Format(LocalizationManager.L("AbnormalCheck_OverLimitSummary"), overLimitTileIds.Count, tileLimit, maxTileId);
                 lblOverLimitSummary.Location = new Point(5, 5);
                 lblOverLimitSummary.Size = new Size(tabOverLimit.ClientSize.Width - 10, 40);
                 lblOverLimitSummary.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;

@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 using L1MapViewer.Helper;
+using L1MapViewer.Localization;
 
 namespace L1FlyMapViewer
 {
@@ -11,6 +12,7 @@ namespace L1FlyMapViewer
         private ListBox lstMonsters = null!;
         private Button btnConfirm = null!;
         private Button btnCancel = null!;
+        private Label lblSearch = null!;
 
         public int SelectedMonsterId { get; private set; }
         public string SelectedMonsterName { get; private set; } = string.Empty;
@@ -19,6 +21,16 @@ namespace L1FlyMapViewer
         {
             InitializeComponent();
             LoadMonsters();
+            UpdateLocalization();
+            LocalizationManager.LanguageChanged += OnLanguageChanged;
+        }
+
+        private void OnLanguageChanged(object? sender, EventArgs e)
+        {
+            if (InvokeRequired)
+                Invoke(new Action(() => UpdateLocalization()));
+            else
+                UpdateLocalization();
         }
 
         private void InitializeComponent()
@@ -31,7 +43,7 @@ namespace L1FlyMapViewer
             this.StartPosition = FormStartPosition.CenterParent;
 
             // 搜尋框
-            Label lblSearch = new Label
+            lblSearch = new Label
             {
                 Text = "搜尋:",
                 Location = new Point(10, 15),
@@ -131,6 +143,14 @@ namespace L1FlyMapViewer
             {
                 return $"[{Id}] {Name}";
             }
+        }
+
+        private void UpdateLocalization()
+        {
+            this.Text = LocalizationManager.L("Form_MonsterSearch_Title");
+            lblSearch.Text = LocalizationManager.L("Button_Search") + ":";
+            btnConfirm.Text = LocalizationManager.L("Button_OK");
+            btnCancel.Text = LocalizationManager.L("Button_Cancel");
         }
     }
 }

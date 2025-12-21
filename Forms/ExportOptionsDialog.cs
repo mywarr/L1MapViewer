@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using L1MapViewer.Localization;
 
 namespace L1MapViewer.Forms
 {
@@ -61,6 +62,8 @@ namespace L1MapViewer.Forms
         private Label lblMaterialName;
         private Button btnExport;
         private Button btnCancel;
+        private GroupBox grpMode;
+        private GroupBox grpLayers;
 
         private bool _isFs3p;
         private bool _hasSelection;
@@ -75,6 +78,16 @@ namespace L1MapViewer.Forms
             _isFs3p = isFs3p;
             _hasSelection = hasSelection;
             InitializeComponents();
+            UpdateLocalization();
+            LocalizationManager.LanguageChanged += OnLanguageChanged;
+        }
+
+        private void OnLanguageChanged(object? sender, EventArgs e)
+        {
+            if (InvokeRequired)
+                Invoke(new Action(() => UpdateLocalization()));
+            else
+                UpdateLocalization();
         }
 
         private void InitializeComponents()
@@ -112,7 +125,7 @@ namespace L1MapViewer.Forms
             // 模式選擇 (fs32 only)
             if (!_isFs3p)
             {
-                var grpMode = new GroupBox
+                grpMode = new GroupBox
                 {
                     Text = "匯出模式",
                     Location = new Point(15, y),
@@ -152,7 +165,7 @@ namespace L1MapViewer.Forms
             }
 
             // 圖層選擇
-            var grpLayers = new GroupBox
+            grpLayers = new GroupBox
             {
                 Text = "包含圖層",
                 Location = new Point(15, y),
@@ -320,6 +333,45 @@ namespace L1MapViewer.Forms
 
             IncludeTiles = cbIncludeTiles.Checked;
             IncludeLayer5 = _isFs3p && cbIncludeLayer5?.Checked == true;
+        }
+
+        private void UpdateLocalization()
+        {
+            // Form title
+            Text = _isFs3p ? LocalizationManager.L("Export_SaveAsMaterial") : LocalizationManager.L("Form_ExportOptions_Title");
+
+            // Material name label (fs3p)
+            if (lblMaterialName != null)
+                lblMaterialName.Text = LocalizationManager.L("Export_MaterialName") + ":";
+
+            // Export mode group (fs32 only)
+            if (grpMode != null)
+            {
+                grpMode.Text = LocalizationManager.L("Export_Mode");
+                rbWholeMap.Text = LocalizationManager.L("Export_WholeMap");
+                rbSelectedBlocks.Text = LocalizationManager.L("Export_SelectedBlocks");
+                rbSelectedRegion.Text = LocalizationManager.L("Export_SelectedRegion");
+            }
+
+            // Layers group
+            grpLayers.Text = LocalizationManager.L("Export_IncludeLayers");
+            cbLayer1.Text = LocalizationManager.L("Export_Layer1");
+            cbLayer2.Text = LocalizationManager.L("Export_Layer2");
+            cbLayer3.Text = LocalizationManager.L("Export_Layer3");
+            cbLayer4.Text = LocalizationManager.L("Export_Layer4");
+
+            if (cbLayer5 != null) cbLayer5.Text = "Layer5";
+            if (cbLayer6 != null) cbLayer6.Text = "Layer6";
+            if (cbLayer7 != null) cbLayer7.Text = "Layer7";
+            if (cbLayer8 != null) cbLayer8.Text = "Layer8";
+
+            cbIncludeTiles.Text = LocalizationManager.L("Export_IncludeTiles");
+            if (cbIncludeLayer5 != null)
+                cbIncludeLayer5.Text = LocalizationManager.L("Export_IncludeLayer5Events");
+
+            // Buttons
+            btnExport.Text = _isFs3p ? LocalizationManager.L("Button_Save") : LocalizationManager.L("Export_Export");
+            btnCancel.Text = LocalizationManager.L("Button_Cancel");
         }
     }
 }

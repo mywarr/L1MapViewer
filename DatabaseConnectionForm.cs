@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using MySql.Data.MySqlClient;
 using L1MapViewer.Helper;
+using L1MapViewer.Localization;
 
 namespace L1FlyMapViewer
 {
@@ -47,6 +48,15 @@ namespace L1FlyMapViewer
         private Button btnCancel = null!;
         private Label lblStatus = null!;
 
+        // Labels for localization
+        private Label lblConnections = null!;
+        private Label lblName = null!;
+        private Label lblServer = null!;
+        private Label lblPort = null!;
+        private Label lblDatabase = null!;
+        private Label lblUsername = null!;
+        private Label lblPassword = null!;
+
         private List<DatabaseConnection> connections = new List<DatabaseConnection>();
         private DatabaseConnection? selectedConnection;
         private bool isEditing = false;
@@ -56,6 +66,20 @@ namespace L1FlyMapViewer
             InitializeComponent();
             LoadConnections();
             UpdateUI();
+            UpdateLocalization();
+            LocalizationManager.LanguageChanged += OnLanguageChanged;
+        }
+
+        private void OnLanguageChanged(object? sender, EventArgs e)
+        {
+            if (InvokeRequired)
+            {
+                Invoke(new Action(() => UpdateLocalization()));
+            }
+            else
+            {
+                UpdateLocalization();
+            }
         }
 
         private void InitializeComponent()
@@ -68,7 +92,7 @@ namespace L1FlyMapViewer
             this.StartPosition = FormStartPosition.CenterParent;
 
             // 左側連線列表
-            Label lblConnections = new Label
+            lblConnections = new Label
             {
                 Text = "已儲存的連線:",
                 Location = new Point(10, 10),
@@ -138,7 +162,7 @@ namespace L1FlyMapViewer
             int width = 320;
 
             // Name
-            Label lblName = new Label
+            lblName = new Label
             {
                 Text = "連線名稱:",
                 Location = new Point(labelX, startY),
@@ -151,7 +175,7 @@ namespace L1FlyMapViewer
             };
 
             // Server
-            Label lblServer = new Label
+            lblServer = new Label
             {
                 Text = "伺服器位址:",
                 Location = new Point(labelX, startY + spacing),
@@ -164,7 +188,7 @@ namespace L1FlyMapViewer
             };
 
             // Port
-            Label lblPort = new Label
+            lblPort = new Label
             {
                 Text = "埠號:",
                 Location = new Point(labelX, startY + spacing * 2),
@@ -178,7 +202,7 @@ namespace L1FlyMapViewer
             };
 
             // Database
-            Label lblDatabase = new Label
+            lblDatabase = new Label
             {
                 Text = "資料庫名稱:",
                 Location = new Point(labelX, startY + spacing * 3),
@@ -191,7 +215,7 @@ namespace L1FlyMapViewer
             };
 
             // Username
-            Label lblUsername = new Label
+            lblUsername = new Label
             {
                 Text = "使用者名稱:",
                 Location = new Point(labelX, startY + spacing * 4),
@@ -204,7 +228,7 @@ namespace L1FlyMapViewer
             };
 
             // Password
-            Label lblPassword = new Label
+            lblPassword = new Label
             {
                 Text = "密碼:",
                 Location = new Point(labelX, startY + spacing * 5),
@@ -522,6 +546,32 @@ namespace L1FlyMapViewer
         private void UpdateUI()
         {
             SetEditMode(false);
+        }
+
+        private void UpdateLocalization()
+        {
+            // Form title
+            this.Text = LocalizationManager.L("Form_DatabaseConnection_Title");
+
+            // Labels
+            lblConnections.Text = LocalizationManager.L("Label_SavedConnections");
+            grpConnectionInfo.Text = LocalizationManager.L("Group_ConnectionInfo");
+            lblName.Text = LocalizationManager.L("Label_ConnectionName");
+            lblServer.Text = LocalizationManager.L("Label_ServerAddress");
+            lblPort.Text = LocalizationManager.L("Label_Port");
+            lblDatabase.Text = LocalizationManager.L("Label_Database");
+            lblUsername.Text = LocalizationManager.L("Label_Username");
+            lblPassword.Text = LocalizationManager.L("Label_Password");
+
+            // Buttons
+            btnNew.Text = LocalizationManager.L("Button_New");
+            btnEdit.Text = LocalizationManager.L("Button_Edit");
+            btnDelete.Text = LocalizationManager.L("Button_Delete");
+            btnConnect.Text = LocalizationManager.L("Button_Connect");
+            btnClose.Text = LocalizationManager.L("Button_Close");
+            btnTestConnection.Text = LocalizationManager.L("Button_TestConnection");
+            btnSave.Text = LocalizationManager.L("Button_Save");
+            btnCancel.Text = LocalizationManager.L("Button_Cancel");
         }
     }
 }
