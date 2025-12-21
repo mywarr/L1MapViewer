@@ -4565,22 +4565,14 @@ namespace L1FlyMapViewer
                                          $"• 來源地圖: {fs32.SourceMapId}\n" +
                                          $"• 區塊數量: {fs32.Blocks.Count}\n" +
                                          $"• 圖塊數量: {fs32.Tiles.Count}\n\n" +
-                                         $"將匯入至當前地圖: {_document.MapId}\n\n" +
-                                         $"請選擇匯入模式：\n\n" +
-                                         $"【部份取代】只覆蓋相同座標的區塊（推薦）\n" +
-                                         $"【全部取代】刪除既有區塊，完全使用匯入的地圖";
+                                         $"將匯入至當前地圖: {_document.MapId}";
 
-                    var importModeResult = MessageBox.Show(
-                        infoMessage + "\n\n按「是」= 部份取代（預設）\n按「否」= 全部取代\n按「取消」= 取消匯入",
-                        "選擇匯入模式",
-                        MessageBoxButtons.YesNoCancel,
-                        MessageBoxIcon.Question,
-                        MessageBoxDefaultButton.Button1);
+                    var importModeResult = ShowImportModeDialog(infoMessage);
 
-                    if (importModeResult == DialogResult.Cancel)
+                    if (importModeResult == null)
                         return;
 
-                    bool isFullReplace = (importModeResult == DialogResult.No);
+                    bool isFullReplace = importModeResult.Value;
 
                     // 全部取代需要二次確認
                     if (isFullReplace)
@@ -13928,22 +13920,14 @@ namespace L1FlyMapViewer
                                      $"• 來源地圖: {fs32.SourceMapId}\n" +
                                      $"• 區塊數量: {fs32.Blocks.Count}\n" +
                                      $"• 圖塊數量: {fs32.Tiles.Count}\n\n" +
-                                     $"將匯入至當前地圖: {_document.MapId}\n\n" +
-                                     $"請選擇匯入模式：\n\n" +
-                                     $"【部份取代】只覆蓋相同座標的區塊（推薦）\n" +
-                                     $"【全部取代】刪除既有區塊，完全使用匯入的地圖";
+                                     $"將匯入至當前地圖: {_document.MapId}";
 
-                var importModeResult = MessageBox.Show(
-                    infoMessage + "\n\n按「是」= 部份取代（預設）\n按「否」= 全部取代\n按「取消」= 取消匯入",
-                    "選擇匯入模式",
-                    MessageBoxButtons.YesNoCancel,
-                    MessageBoxIcon.Question,
-                    MessageBoxDefaultButton.Button1);
+                var importModeResult = ShowImportModeDialog(infoMessage);
 
-                if (importModeResult == DialogResult.Cancel)
+                if (importModeResult == null)
                     return;
 
-                bool isFullReplace = (importModeResult == DialogResult.No);
+                bool isFullReplace = importModeResult.Value;
 
                 // 全部取代需要二次確認
                 if (isFullReplace)
@@ -14129,6 +14113,64 @@ namespace L1FlyMapViewer
                 form.CancelButton = cancelButton;
 
                 return form.ShowDialog() == DialogResult.OK ? textBox.Text : defaultValue;
+            }
+        }
+
+        // 匯入模式選擇對話框 (返回 true=全部取代, false=部份取代, null=取消)
+        private bool? ShowImportModeDialog(string infoMessage)
+        {
+            using (var form = new Form())
+            {
+                form.Text = "選擇匯入模式";
+                form.Size = new Size(420, 220);
+                form.FormBorderStyle = FormBorderStyle.FixedDialog;
+                form.StartPosition = FormStartPosition.CenterParent;
+                form.MaximizeBox = false;
+                form.MinimizeBox = false;
+
+                var lblInfo = new Label
+                {
+                    Text = infoMessage,
+                    Location = new Point(15, 15),
+                    Size = new Size(380, 100),
+                    AutoSize = false
+                };
+                form.Controls.Add(lblInfo);
+
+                var btnPartial = new Button
+                {
+                    Text = "部份取代（推薦）",
+                    Location = new Point(30, 130),
+                    Size = new Size(140, 35),
+                    DialogResult = DialogResult.Yes
+                };
+                form.Controls.Add(btnPartial);
+
+                var btnFull = new Button
+                {
+                    Text = "全部取代",
+                    Location = new Point(180, 130),
+                    Size = new Size(100, 35),
+                    DialogResult = DialogResult.No
+                };
+                form.Controls.Add(btnFull);
+
+                var btnCancel = new Button
+                {
+                    Text = "取消",
+                    Location = new Point(290, 130),
+                    Size = new Size(80, 35),
+                    DialogResult = DialogResult.Cancel
+                };
+                form.Controls.Add(btnCancel);
+
+                form.AcceptButton = btnPartial;
+                form.CancelButton = btnCancel;
+
+                var result = form.ShowDialog();
+                if (result == DialogResult.Cancel)
+                    return null;
+                return result == DialogResult.No; // No = 全部取代
             }
         }
 
