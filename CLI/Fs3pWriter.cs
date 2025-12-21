@@ -149,13 +149,49 @@ namespace L1MapViewer.CLI
                     }
                 }
 
-                // 寫入 Tiles
-                foreach (var tile in fs3p.Tiles.Values)
+                // 寫入 Layer5
+                if (fs3p.HasLayer5 && fs3p.Layer5Items.Count > 0)
                 {
-                    var entry = archive.CreateEntry($"tiles/{tile.OriginalTileId}.til");
+                    var entry = archive.CreateEntry("layers/layer5.bin");
                     using (var stream = entry.Open())
+                    using (var bw = new BinaryWriter(stream))
                     {
-                        stream.Write(tile.TilData, 0, tile.TilData.Length);
+                        bw.Write(fs3p.Layer5Items.Count);
+                        foreach (var item in fs3p.Layer5Items)
+                        {
+                            bw.Write(item.RelativeX);
+                            bw.Write(item.RelativeY);
+                            bw.Write(item.GroupId);
+                            bw.Write(item.Type);
+                        }
+                    }
+                }
+
+                // 寫入 Tiles
+                if (fs3p.Tiles.Count > 0)
+                {
+                    var tileIndex = new TileIndex();
+
+                    foreach (var tile in fs3p.Tiles.Values)
+                    {
+                        var entry = archive.CreateEntry($"tiles/{tile.OriginalTileId}.til");
+                        using (var stream = entry.Open())
+                        {
+                            stream.Write(tile.TilData, 0, tile.TilData.Length);
+                        }
+
+                        // 記錄 MD5
+                        tileIndex.Tiles[tile.OriginalTileId.ToString()] = TileHashManager.Md5ToHex(tile.Md5Hash);
+                    }
+
+                    // 寫入 tiles/index.json
+                    var indexEntry = archive.CreateEntry("tiles/index.json");
+                    using (var stream = indexEntry.Open())
+                    using (var writer = new StreamWriter(stream, Encoding.UTF8))
+                    {
+                        var options = new JsonSerializerOptions { WriteIndented = true };
+                        string json = JsonSerializer.Serialize(tileIndex, options);
+                        writer.Write(json);
                     }
                 }
             }
@@ -164,16 +200,30 @@ namespace L1MapViewer.CLI
         /// <summary>
         /// 從選取的格子建立 fs3p
         /// </summary>
+        /// <param name="selectedCells">選取的格子</param>
+        /// <param name="s32Files">S32 檔案字典</param>
+        /// <param name="name">素材名稱</param>
+        /// <param name="layerFlags">要包含的圖層</param>
+        /// <param name="includeTiles">是否包含 Tile 資料</param>
+        /// <param name="includeLayer5">是否包含 Layer5 (對應 Layer4 物件的事件資料)</param>
+        /// <param name="thumbnail">縮圖</param>
         public static Fs3pData CreateFromSelection(
             List<SelectedCell> selectedCells,
             Dictionary<string, S32Data> s32Files,
             string name,
             ushort layerFlags = 0x0F,
             bool includeTiles = true,
+            bool includeLayer5 = false,
             Bitmap thumbnail = null)
         {
             if (selectedCells == null || selectedCells.Count == 0)
                 return null;
+
+            // 如果要包含 Layer5，設定 LayerFlags
+            if (includeLayer5)
+            {
+                layerFlags |= Fs3pData.FLAG_LAYER5;
+            }
 
             var fs3p = new Fs3pData
             {
@@ -293,6 +343,55 @@ namespace L1MapViewer.CLI
                         });
                         if (obj.TileId > 0)
                             usedTileIds.Add(obj.TileId);
+                    }
+                }
+            }
+
+            // Layer5 - 收集對應 Layer4 GroupId 的事件資料
+            // 注意：Layer5 不參與邊界計算，僅隨 Layer4 物件一起複製
+            // 只收集選取範圍周圍 +-20 格內的項目
+            const int Layer5SearchRadius = 20;
+            if (fs3p.HasLayer5 && groupIdMapping.Count > 0)
+            {
+                // 收集所有選取格子涉及的 S32Data
+                var processedS32 = new HashSet<S32Data>();
+                foreach (var cell in selectedCells)
+                {
+                    if (cell.S32Data != null && !processedS32.Contains(cell.S32Data))
+                    {
+                        processedS32.Add(cell.S32Data);
+
+                        // 遍歷該 S32 的所有 Layer5 項目
+                        foreach (var l5Item in cell.S32Data.Layer5)
+                        {
+                            // 檢查 ObjectIndex 是否在我們收集的 GroupId 中
+                            if (groupIdMapping.TryGetValue(l5Item.ObjectIndex, out int newGroupId))
+                            {
+                                // 計算相對座標 (Layer5 座標是區塊內座標)
+                                int worldX = cell.S32Data.SegInfo.nLinBeginX * 2 + l5Item.X;
+                                int worldY = cell.S32Data.SegInfo.nLinBeginY + l5Item.Y;
+                                int relX = worldX - fs3p.OriginOffsetX;
+                                int relY = worldY - fs3p.OriginOffsetY;
+
+                                // 檢查是否在選取範圍 +-20 格內
+                                bool inRange = relX >= -Layer5SearchRadius && relX < fs3p.Width + Layer5SearchRadius &&
+                                               relY >= -Layer5SearchRadius && relY < fs3p.Height + Layer5SearchRadius;
+                                if (!inRange)
+                                    continue;
+
+                                // 檢查是否已經添加過（避免重複）
+                                if (!fs3p.Layer5Items.Any(l => l.RelativeX == relX && l.RelativeY == relY && l.GroupId == newGroupId))
+                                {
+                                    fs3p.Layer5Items.Add(new Fs3pLayer5Item
+                                    {
+                                        RelativeX = relX,
+                                        RelativeY = relY,
+                                        GroupId = newGroupId,
+                                        Type = l5Item.Type
+                                    });
+                                }
+                            }
+                        }
                     }
                 }
             }

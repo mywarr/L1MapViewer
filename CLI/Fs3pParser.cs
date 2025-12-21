@@ -159,6 +159,43 @@ namespace L1MapViewer.CLI
                     }
                 }
 
+                // 讀取 Layer5
+                if (fs3p.HasLayer5)
+                {
+                    var entry = archive.GetEntry("layers/layer5.bin");
+                    if (entry != null)
+                    {
+                        using (var stream = entry.Open())
+                        using (var br = new BinaryReader(stream))
+                        {
+                            int count = br.ReadInt32();
+                            for (int i = 0; i < count; i++)
+                            {
+                                fs3p.Layer5Items.Add(new Fs3pLayer5Item
+                                {
+                                    RelativeX = br.ReadInt32(),
+                                    RelativeY = br.ReadInt32(),
+                                    GroupId = br.ReadInt32(),
+                                    Type = br.ReadByte()
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // 讀取 Tile 索引
+                TileIndex tileIndex = null;
+                var tileIndexEntry = archive.GetEntry("tiles/index.json");
+                if (tileIndexEntry != null)
+                {
+                    using (var stream = tileIndexEntry.Open())
+                    using (var reader = new StreamReader(stream, Encoding.UTF8))
+                    {
+                        string json = reader.ReadToEnd();
+                        tileIndex = JsonSerializer.Deserialize<TileIndex>(json);
+                    }
+                }
+
                 // 讀取 Tiles
                 foreach (var entry in archive.Entries)
                 {
@@ -173,10 +210,21 @@ namespace L1MapViewer.CLI
                                 stream.CopyTo(ms);
                                 byte[] tilData = ms.ToArray();
 
+                                // 從 index.json 取得 MD5，否則計算
+                                byte[] md5Hash;
+                                if (tileIndex != null && tileIndex.Tiles.TryGetValue(tileId.ToString(), out string md5Hex))
+                                {
+                                    md5Hash = Helper.TileHashManager.HexToMd5(md5Hex);
+                                }
+                                else
+                                {
+                                    md5Hash = Helper.TileHashManager.CalculateMd5(tilData);
+                                }
+
                                 fs3p.Tiles[tileId] = new TilePackageData
                                 {
                                     OriginalTileId = tileId,
-                                    Md5Hash = Helper.TileHashManager.CalculateMd5(tilData),
+                                    Md5Hash = md5Hash,
                                     TilData = tilData
                                 };
                             }
@@ -277,6 +325,7 @@ namespace L1MapViewer.CLI
         public bool HasLayer2 => (LayerFlags & 0x02) != 0;
         public bool HasLayer3 => (LayerFlags & 0x04) != 0;
         public bool HasLayer4 => (LayerFlags & 0x08) != 0;
+        public bool HasLayer5 => (LayerFlags & 0x10) != 0;
     }
 
     /// <summary>

@@ -492,6 +492,7 @@ namespace L1FlyMapViewer
             this.lstMaps.Size = new Size(254, 304);
             this.lstMaps.TabIndex = 1;
             this.lstMaps.SelectedIndexChanged += new System.EventHandler(this.lstMaps_SelectedIndexChanged);
+            this.lstMaps.MouseUp += new System.Windows.Forms.MouseEventHandler(this.lstMaps_MouseUp);
 
             //
             // tabS32Files (S32 檔案清單)

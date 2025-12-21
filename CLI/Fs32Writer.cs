@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using L1MapViewer.Helper;
 using L1MapViewer.Models;
 using L1MapViewer.Reader;
@@ -10,71 +12,97 @@ using L1MapViewer.Reader;
 namespace L1MapViewer.CLI
 {
     /// <summary>
-    /// fs32 格式寫入器
+    /// fs32 格式寫入器 (ZIP 結構)
     /// </summary>
     public static class Fs32Writer
     {
+        private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
+        {
+            WriteIndented = true
+        };
+
         /// <summary>
         /// 寫入 fs32 到檔案
         /// </summary>
         public static void Write(Fs32Data fs32, string filePath)
         {
-            byte[] data = ToBytes(fs32);
-            File.WriteAllBytes(filePath, data);
-        }
-
-        /// <summary>
-        /// 轉換為二進位資料
-        /// </summary>
-        public static byte[] ToBytes(Fs32Data fs32)
-        {
-            using (var ms = new MemoryStream())
-            using (var bw = new BinaryWriter(ms, Encoding.UTF8))
+            // 確保目錄存在
+            string dir = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             {
-                // 寫入 Header
-                bw.Write(Fs32Data.MAGIC);
-                bw.Write(fs32.Version);
-                bw.Write(fs32.LayerFlags);
-                bw.Write((byte)fs32.Mode);
+                Directory.CreateDirectory(dir);
+            }
 
-                // 寫入 MapId
-                byte[] mapIdBytes = Encoding.UTF8.GetBytes(fs32.SourceMapId ?? string.Empty);
-                bw.Write(mapIdBytes.Length);
-                if (mapIdBytes.Length > 0)
+            // 如果檔案已存在，先刪除
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
+
+            using (var zipArchive = ZipFile.Open(filePath, ZipArchiveMode.Create))
+            {
+                // 1. 寫入 manifest.json
+                var manifest = new Fs32Manifest
                 {
-                    bw.Write(mapIdBytes);
-                }
+                    Version = fs32.Version,
+                    LayerFlags = fs32.LayerFlags,
+                    Mode = (int)fs32.Mode,
+                    SourceMapId = fs32.SourceMapId ?? string.Empty,
+                    SelectionOriginX = fs32.SelectionOriginX,
+                    SelectionOriginY = fs32.SelectionOriginY,
+                    SelectionWidth = fs32.SelectionWidth,
+                    SelectionHeight = fs32.SelectionHeight
+                };
 
-                // 選取區域資訊 (Mode=2 時)
-                if (fs32.Mode == Fs32Mode.SelectedRegion)
-                {
-                    bw.Write(fs32.SelectionOriginX);
-                    bw.Write(fs32.SelectionOriginY);
-                    bw.Write(fs32.SelectionWidth);
-                    bw.Write(fs32.SelectionHeight);
-                }
-
-                // 寫入區塊列表
-                bw.Write(fs32.Blocks.Count);
+                // 2. 寫入區塊 (使用標準 s32 檔名格式: 7fff8000.s32)
                 foreach (var block in fs32.Blocks)
                 {
-                    bw.Write(block.BlockX);
-                    bw.Write(block.BlockY);
-                    bw.Write(block.S32Data.Length);
-                    bw.Write(block.S32Data);
+                    string blockName = $"{block.BlockX:x4}{block.BlockY:x4}";
+                    manifest.Blocks.Add(blockName);
+
+                    var entry = zipArchive.CreateEntry($"blocks/{blockName}.s32", CompressionLevel.Optimal);
+                    using (var stream = entry.Open())
+                    {
+                        stream.Write(block.S32Data, 0, block.S32Data.Length);
+                    }
                 }
 
-                // 寫入 Tile 資料
-                bw.Write(fs32.Tiles.Count);
-                foreach (var tile in fs32.Tiles.Values)
+                // 寫入 manifest
+                var manifestEntry = zipArchive.CreateEntry("manifest.json", CompressionLevel.Optimal);
+                using (var stream = manifestEntry.Open())
+                using (var writer = new StreamWriter(stream, Encoding.UTF8))
                 {
-                    bw.Write(tile.OriginalTileId);
-                    bw.Write(tile.Md5Hash);
-                    bw.Write(tile.TilData.Length);
-                    bw.Write(tile.TilData);
+                    string json = JsonSerializer.Serialize(manifest, JsonOptions);
+                    writer.Write(json);
                 }
 
-                return ms.ToArray();
+                // 3. 寫入 Tiles
+                if (fs32.Tiles.Count > 0)
+                {
+                    var tileIndex = new TileIndex();
+
+                    foreach (var tile in fs32.Tiles.Values)
+                    {
+                        // 寫入 .til 檔案
+                        var tileEntry = zipArchive.CreateEntry($"tiles/{tile.OriginalTileId}.til", CompressionLevel.Optimal);
+                        using (var stream = tileEntry.Open())
+                        {
+                            stream.Write(tile.TilData, 0, tile.TilData.Length);
+                        }
+
+                        // 記錄 MD5
+                        tileIndex.Tiles[tile.OriginalTileId.ToString()] = TileHashManager.Md5ToHex(tile.Md5Hash);
+                    }
+
+                    // 寫入 tiles/index.json
+                    var indexEntry = zipArchive.CreateEntry("tiles/index.json", CompressionLevel.Optimal);
+                    using (var stream = indexEntry.Open())
+                    using (var writer = new StreamWriter(stream, Encoding.UTF8))
+                    {
+                        string json = JsonSerializer.Serialize(tileIndex, JsonOptions);
+                        writer.Write(json);
+                    }
+                }
             }
         }
 

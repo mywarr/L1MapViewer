@@ -4,13 +4,12 @@ using System.Collections.Generic;
 namespace L1MapViewer.Models
 {
     /// <summary>
-    /// fs3p 格式 - 素材庫格式
+    /// fs3p 格式 - 素材庫格式 (ZIP 結構)
     /// 可選 Layer 1-4 + Tiles，用於跨地圖共享
     /// </summary>
     public class Fs3pData
     {
-        public const uint MAGIC = 0x50335346; // "FS3P" little-endian
-        public const ushort CURRENT_VERSION = 1;
+        public const ushort CURRENT_VERSION = 2; // v2 = ZIP 格式
 
         public ushort Version { get; set; } = CURRENT_VERSION;
 
@@ -36,6 +35,7 @@ namespace L1MapViewer.Models
         public List<Fs3pLayer2Item> Layer2Items { get; set; } = new List<Fs3pLayer2Item>();
         public List<Fs3pLayer3Item> Layer3Items { get; set; } = new List<Fs3pLayer3Item>();
         public List<Fs3pLayer4Item> Layer4Items { get; set; } = new List<Fs3pLayer4Item>();
+        public List<Fs3pLayer5Item> Layer5Items { get; set; } = new List<Fs3pLayer5Item>();
 
         /// <summary>
         /// Tile 資料 (TileId -> TilePackageData)
@@ -52,11 +52,13 @@ namespace L1MapViewer.Models
         public const ushort FLAG_LAYER2 = 0x02;
         public const ushort FLAG_LAYER3 = 0x04;
         public const ushort FLAG_LAYER4 = 0x08;
+        public const ushort FLAG_LAYER5 = 0x10;
 
         public bool HasLayer1 => (LayerFlags & FLAG_LAYER1) != 0;
         public bool HasLayer2 => (LayerFlags & FLAG_LAYER2) != 0;
         public bool HasLayer3 => (LayerFlags & FLAG_LAYER3) != 0;
         public bool HasLayer4 => (LayerFlags & FLAG_LAYER4) != 0;
+        public bool HasLayer5 => (LayerFlags & FLAG_LAYER5) != 0;
 
         /// <summary>
         /// 設定建立時間為現在
@@ -121,5 +123,17 @@ namespace L1MapViewer.Models
         public byte Layer { get; set; }  // 渲染順序
         public byte IndexId { get; set; }
         public ushort TileId { get; set; }
+    }
+
+    /// <summary>
+    /// fs3p Layer5 項目 (事件/透明化)
+    /// 注意：Layer5 不參與邊界計算，僅隨 Layer4 物件一起複製
+    /// </summary>
+    public class Fs3pLayer5Item
+    {
+        public int RelativeX { get; set; }
+        public int RelativeY { get; set; }
+        public int GroupId { get; set; }  // 對應 Layer4 的相對 GroupId
+        public byte Type { get; set; }
     }
 }

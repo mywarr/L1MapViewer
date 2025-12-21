@@ -4,13 +4,12 @@ using System.Collections.Generic;
 namespace L1MapViewer.Models
 {
     /// <summary>
-    /// fs32 格式 - 地圖打包格式
+    /// fs32 格式 - 地圖打包格式 (ZIP 結構)
     /// 包含 S32 資料 + Tiles
     /// </summary>
     public class Fs32Data
     {
-        public const uint MAGIC = 0x32335346; // "FS32" little-endian
-        public const ushort CURRENT_VERSION = 1;
+        public const ushort CURRENT_VERSION = 2; // v2 = ZIP 格式
 
         public ushort Version { get; set; } = CURRENT_VERSION;
 
@@ -106,5 +105,34 @@ namespace L1MapViewer.Models
 
         /// <summary>.til 檔案原始資料</summary>
         public byte[] TilData { get; set; } = Array.Empty<byte>();
+    }
+
+    /// <summary>
+    /// fs32 ZIP 格式的 manifest.json 結構
+    /// </summary>
+    public class Fs32Manifest
+    {
+        public int Version { get; set; } = Fs32Data.CURRENT_VERSION;
+        public int LayerFlags { get; set; } = 0xFF;
+        public int Mode { get; set; } = 0;
+        public string SourceMapId { get; set; } = string.Empty;
+
+        // 選取區域資訊
+        public int SelectionOriginX { get; set; }
+        public int SelectionOriginY { get; set; }
+        public int SelectionWidth { get; set; }
+        public int SelectionHeight { get; set; }
+
+        // 區塊列表 (BlockX_BlockY 格式)
+        public List<string> Blocks { get; set; } = new List<string>();
+    }
+
+    /// <summary>
+    /// tiles/index.json 結構
+    /// </summary>
+    public class TileIndex
+    {
+        /// <summary>TileId -> MD5 Hex</summary>
+        public Dictionary<string, string> Tiles { get; set; } = new Dictionary<string, string>();
     }
 }

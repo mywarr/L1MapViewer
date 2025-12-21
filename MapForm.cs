@@ -2626,6 +2626,119 @@ namespace L1FlyMapViewer
             }
         }
 
+        // 地圖列表右鍵選單
+        private void lstMaps_MouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Right)
+                return;
+
+            int index = lstMaps.IndexFromPoint(e.Location);
+            if (index < 0 || index >= lstMaps.Items.Count)
+                return;
+
+            // 選取該項目
+            lstMaps.SelectedIndex = index;
+            string selectedMapName = lstMaps.Items[index].ToString();
+
+            // 取得地圖 ID
+            string mapId = selectedMapName;
+            if (mapId.Contains("-"))
+                mapId = mapId.Split('-')[0].Trim();
+
+            // 建立右鍵選單
+            var menu = new ContextMenuStrip();
+
+            // 匯出為地圖包選項
+            var exportItem = new ToolStripMenuItem("匯出為地圖包 (fs32)...");
+            exportItem.Click += (s, args) => ExportMapAsFs32(mapId);
+            menu.Items.Add(exportItem);
+
+            menu.Show(lstMaps, e.Location);
+        }
+
+        // 匯出整張地圖為 fs32
+        private void ExportMapAsFs32(string mapId)
+        {
+            // 檢查地圖是否存在
+            if (!Share.MapDataList.ContainsKey(mapId))
+            {
+                MessageBox.Show($"地圖 {mapId} 不存在", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // 顯示匯出選項對話框
+            using (var dialog = new L1MapViewer.Forms.ExportOptionsDialog(isFs3p: false, hasSelection: false))
+            {
+                if (dialog.ShowDialog() != DialogResult.OK)
+                    return;
+
+                using (var saveDialog = new SaveFileDialog())
+                {
+                    saveDialog.Filter = "FS32 地圖包|*.fs32";
+                    saveDialog.FileName = $"{mapId}.fs32";
+
+                    if (saveDialog.ShowDialog() != DialogResult.OK)
+                        return;
+
+                    try
+                    {
+                        toolStripStatusLabel1.Text = $"正在匯出地圖 {mapId}...";
+                        Application.DoEvents();
+
+                        // 從 Share.MapDataList 取得地圖資料
+                        var currentMap = Share.MapDataList[mapId];
+                        var tempDocument = new MapDocument { MapId = mapId };
+
+                        // 讀取所有 S32 檔案
+                        int loadedCount = 0;
+                        foreach (var kvp in currentMap.FullFileNameList)
+                        {
+                            string filePath = kvp.Key;
+                            var segInfo = kvp.Value;
+
+                            if (segInfo.isS32 && File.Exists(filePath))
+                            {
+                                var s32Data = S32Parser.ParseFile(filePath);
+                                if (s32Data != null)
+                                {
+                                    tempDocument.S32Files[filePath] = s32Data;
+                                    loadedCount++;
+                                    if (loadedCount % 10 == 0)
+                                    {
+                                        toolStripStatusLabel1.Text = $"正在載入 S32 檔案... ({loadedCount})";
+                                        Application.DoEvents();
+                                    }
+                                }
+                            }
+                        }
+
+                        if (tempDocument.S32Files.Count == 0)
+                        {
+                            MessageBox.Show($"地圖 {mapId} 沒有 S32 檔案", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
+                        }
+
+                        // 檢查 Layer5 異常
+                        if (!CheckLayer5IssuesAndConfirm(tempDocument.S32Files, "匯出"))
+                            return;
+
+                        toolStripStatusLabel1.Text = $"正在建立 fs32 檔案...";
+                        Application.DoEvents();
+
+                        // 建立 fs32
+                        var fs32 = Fs32Writer.CreateFromMap(tempDocument, dialog.LayerFlags, dialog.IncludeTiles);
+                        Fs32Writer.Write(fs32, saveDialog.FileName);
+
+                        toolStripStatusLabel1.Text = $"已匯出至 {saveDialog.FileName} ({fs32.Blocks.Count} 區塊, {fs32.Tiles.Count} 圖塊)";
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"匯出失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
+        }
+
         private void comboBox1_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (isFiltering) return;  // 過濾中不觸發
@@ -4028,7 +4141,123 @@ namespace L1FlyMapViewer
             };
             menu.Items.Add(detailItem);
 
+            menu.Items.Add(new ToolStripSeparator());
+
+            // 匯出整張地圖
+            ToolStripMenuItem exportMapItem = new ToolStripMenuItem("匯出整張地圖為 fs32 地圖包...");
+            exportMapItem.Click += (s, args) => ExportCurrentMapAsFs32();
+            menu.Items.Add(exportMapItem);
+
+            // 匯出已勾選的 S32 檔案
+            int checkedCount = lstS32Files.CheckedItems.Count;
+            if (checkedCount > 0)
+            {
+                ToolStripMenuItem exportCheckedItem = new ToolStripMenuItem($"匯出已勾選的 {checkedCount} 個區塊為 fs32 地圖包...");
+                exportCheckedItem.Click += (s, args) => ExportCheckedS32AsFs32();
+                menu.Items.Add(exportCheckedItem);
+            }
+
             menu.Show(lstS32Files, e.Location);
+        }
+
+        // 匯出當前地圖為 fs32
+        private void ExportCurrentMapAsFs32()
+        {
+            if (string.IsNullOrEmpty(_document.MapId) || _document.S32Files.Count == 0)
+            {
+                MessageBox.Show("請先載入地圖", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 檢查 Layer5 異常
+            if (!CheckLayer5IssuesAndConfirm(_document.S32Files, "匯出"))
+                return;
+
+            using (var dialog = new L1MapViewer.Forms.ExportOptionsDialog(isFs3p: false, hasSelection: false))
+            {
+                if (dialog.ShowDialog() != DialogResult.OK)
+                    return;
+
+                using (var saveDialog = new SaveFileDialog())
+                {
+                    saveDialog.Filter = "FS32 地圖包|*.fs32";
+                    saveDialog.FileName = $"{_document.MapId}.fs32";
+
+                    if (saveDialog.ShowDialog() != DialogResult.OK)
+                        return;
+
+                    try
+                    {
+                        toolStripStatusLabel1.Text = $"正在匯出地圖...";
+                        Application.DoEvents();
+
+                        var fs32 = Fs32Writer.CreateFromMap(_document, dialog.LayerFlags, dialog.IncludeTiles);
+                        Fs32Writer.Write(fs32, saveDialog.FileName);
+
+                        toolStripStatusLabel1.Text = $"已匯出至 {saveDialog.FileName} ({fs32.Blocks.Count} 區塊, {fs32.Tiles.Count} 圖塊)";
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"匯出失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
+        }
+
+        // 匯出已勾選的 S32 為 fs32
+        private void ExportCheckedS32AsFs32()
+        {
+            var checkedS32s = new Dictionary<string, S32Data>();
+            for (int i = 0; i < lstS32Files.Items.Count; i++)
+            {
+                if (lstS32Files.GetItemChecked(i) && lstS32Files.Items[i] is S32FileItem item)
+                {
+                    if (_document.S32Files.TryGetValue(item.FilePath, out var s32Data))
+                    {
+                        checkedS32s[item.FilePath] = s32Data;
+                    }
+                }
+            }
+
+            if (checkedS32s.Count == 0)
+            {
+                MessageBox.Show("沒有已勾選的 S32 檔案", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 檢查 Layer5 異常
+            if (!CheckLayer5IssuesAndConfirm(checkedS32s, "匯出"))
+                return;
+
+            using (var dialog = new L1MapViewer.Forms.ExportOptionsDialog(isFs3p: false, hasSelection: true))
+            {
+                if (dialog.ShowDialog() != DialogResult.OK)
+                    return;
+
+                using (var saveDialog = new SaveFileDialog())
+                {
+                    saveDialog.Filter = "FS32 地圖包|*.fs32";
+                    saveDialog.FileName = $"{_document.MapId}_partial.fs32";
+
+                    if (saveDialog.ShowDialog() != DialogResult.OK)
+                        return;
+
+                    try
+                    {
+                        toolStripStatusLabel1.Text = $"正在匯出 {checkedS32s.Count} 個區塊...";
+                        Application.DoEvents();
+
+                        var fs32 = Fs32Writer.CreateFromS32List(checkedS32s.Values.ToList(), _document.MapId, dialog.LayerFlags, dialog.IncludeTiles);
+                        Fs32Writer.Write(fs32, saveDialog.FileName);
+
+                        toolStripStatusLabel1.Text = $"已匯出至 {saveDialog.FileName} ({fs32.Blocks.Count} 區塊, {fs32.Tiles.Count} 圖塊)";
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"匯出失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
         }
 
         // 跳轉至指定 S32 區塊
@@ -8628,7 +8857,7 @@ namespace L1FlyMapViewer
         {
             var menu = new ContextMenuStrip();
 
-            var exportFs32Item = new ToolStripMenuItem("匯出為 fs32...");
+            var exportFs32Item = new ToolStripMenuItem("匯出為 fs32 地圖包...");
             exportFs32Item.Click += (s, e) => ExportSelectionAsFs32();
             menu.Items.Add(exportFs32Item);
 
@@ -8658,6 +8887,22 @@ namespace L1FlyMapViewer
                 return;
             }
 
+            // 收集選取區域涉及的 S32 檔案
+            var involvedS32s = new Dictionary<string, S32Data>();
+            foreach (var cell in _editState.SelectedCells)
+            {
+                if (cell.S32Data != null)
+                {
+                    string key = cell.S32Data.FilePath;
+                    if (!string.IsNullOrEmpty(key) && !involvedS32s.ContainsKey(key))
+                        involvedS32s[key] = cell.S32Data;
+                }
+            }
+
+            // 檢查 Layer5 異常
+            if (!CheckLayer5IssuesAndConfirm(involvedS32s, "匯出"))
+                return;
+
             using (var dialog = new L1MapViewer.Forms.ExportOptionsDialog(isFs3p: false, hasSelection: true))
             {
                 if (dialog.ShowDialog() != DialogResult.OK)
@@ -8665,7 +8910,7 @@ namespace L1FlyMapViewer
 
                 using (var saveDialog = new SaveFileDialog())
                 {
-                    saveDialog.Filter = "FS32 檔案|*.fs32";
+                    saveDialog.Filter = "FS32 地圖包|*.fs32";
                     saveDialog.FileName = $"{_document.MapId}_export.fs32";
 
                     if (saveDialog.ShowDialog() != DialogResult.OK)
@@ -8673,12 +8918,6 @@ namespace L1FlyMapViewer
 
                     try
                     {
-                        // 收集選取區域涉及的 S32 檔案
-                        var involvedS32s = _editState.SelectedCells
-                            .Select(c => c.S32Data)
-                            .Distinct()
-                            .ToList();
-
                         Fs32Data fs32;
                         if (dialog.SelectedMode == L1MapViewer.Forms.ExportOptionsDialog.ExportMode.WholeMap)
                         {
@@ -8686,7 +8925,7 @@ namespace L1FlyMapViewer
                         }
                         else
                         {
-                            fs32 = Fs32Writer.CreateFromS32List(involvedS32s, _document.MapId, dialog.LayerFlags, dialog.IncludeTiles);
+                            fs32 = Fs32Writer.CreateFromS32List(involvedS32s.Values.ToList(), _document.MapId, dialog.LayerFlags, dialog.IncludeTiles);
                         }
 
                         Fs32Writer.Write(fs32, saveDialog.FileName);
@@ -8726,6 +8965,7 @@ namespace L1FlyMapViewer
                         dialog.MaterialName,
                         dialog.LayerFlags,
                         dialog.IncludeTiles,
+                        dialog.IncludeLayer5,
                         thumbnail);
 
                     if (fs3p == null)
@@ -11815,13 +12055,17 @@ namespace L1FlyMapViewer
         private void btnSaveS32_Click(object sender, EventArgs e)
         {
             // 找出所有被修改的 S32 檔案
-            var modifiedFiles = _document.S32Files.Where(kvp => kvp.Value.IsModified).ToList();
+            var modifiedFiles = _document.S32Files.Where(kvp => kvp.Value.IsModified).ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
             if (modifiedFiles.Count == 0)
             {
                 this.toolStripStatusLabel1.Text = "沒有需要保存的修改";
                 return;
             }
+
+            // 檢查 Layer5 異常
+            if (!CheckLayer5IssuesAndConfirm(modifiedFiles, "保存"))
+                return;
 
             int successCount = 0;
             int failCount = 0;
@@ -13036,21 +13280,21 @@ namespace L1FlyMapViewer
                     }
                 }
 
+                // 計算新的 GroupId 起始值（Layer4 和 Layer5 共用）
+                int maxGroupId = 0;
+                foreach (var s32 in _document.S32Files.Values)
+                {
+                    foreach (var obj in s32.Layer4)
+                    {
+                        if (obj.GroupId > maxGroupId)
+                            maxGroupId = obj.GroupId;
+                    }
+                }
+                int baseGroupId = maxGroupId + 1;
+
                 // 貼上 Layer4 資料（物件）
                 if (material.HasLayer4)
                 {
-                    // 取得新的 GroupId 起始值
-                    int maxGroupId = 0;
-                    foreach (var s32 in _document.S32Files.Values)
-                    {
-                        foreach (var obj in s32.Layer4)
-                        {
-                            if (obj.GroupId > maxGroupId)
-                                maxGroupId = obj.GroupId;
-                        }
-                    }
-                    int baseGroupId = maxGroupId + 1;
-
                     foreach (var item in material.Layer4Items)
                     {
                         // 套用偏移修正（舊素材的 RelativeX/Y 可能不是從 0 開始）
@@ -13105,6 +13349,52 @@ namespace L1FlyMapViewer
                     }
                 }
 
+                // 貼上 Layer5 資料（事件/透明化）
+                int layer5Count = 0;
+                if (material.HasLayer5 && material.Layer5Items.Count > 0)
+                {
+                    foreach (var item in material.Layer5Items)
+                    {
+                        // 套用偏移修正（與 Layer4 相同）
+                        int targetGlobalX = pasteOriginX + item.RelativeX - offsetFixX;
+                        int targetGlobalY = pasteOriginY + item.RelativeY - offsetFixY;
+                        int targetGameX = targetGlobalX / 2;
+                        int targetGameY = targetGlobalY;
+
+                        S32Data targetS32 = GetS32DataByGameCoords(targetGameX, targetGameY);
+                        if (targetS32 == null)
+                        {
+                            continue;
+                        }
+
+                        // Layer5 的 X 是 0-127 (Layer1 座標)，Y 是 0-63
+                        int localX = targetGlobalX - targetS32.SegInfo.nLinBeginX * 2;
+                        int localY = targetGlobalY - targetS32.SegInfo.nLinBeginY;
+
+                        if (localX < 0 || localX >= 128 || localY < 0 || localY >= 64)
+                        {
+                            continue;
+                        }
+
+                        // 計算新的 GroupId（與 Layer4 相同映射）
+                        int newGroupId = baseGroupId + item.GroupId;
+
+                        // 檢查是否已存在相同的 Layer5 項目
+                        if (!targetS32.Layer5.Any(l => l.X == localX && l.Y == localY && l.ObjectIndex == newGroupId))
+                        {
+                            targetS32.Layer5.Add(new Layer5Item
+                            {
+                                X = (byte)localX,
+                                Y = (byte)localY,
+                                ObjectIndex = (ushort)newGroupId,
+                                Type = item.Type
+                            });
+                            layer5Count++;
+                            targetS32.IsModified = true;
+                        }
+                    }
+                }
+
                 // 加入 Undo 記錄
                 if (undoAction.ModifiedLayer1.Count > 0 || undoAction.ModifiedLayer3.Count > 0 ||
                     undoAction.AddedObjects.Count > 0)
@@ -13116,11 +13406,18 @@ namespace L1FlyMapViewer
                 // 重新渲染
                 RenderS32Map();
 
+                // 更新 Layer5 異常檢查按鈕
+                if (layer5Count > 0)
+                {
+                    UpdateLayer5InvalidButton();
+                }
+
                 // 更新狀態（包含座標資訊以便偵錯）
                 string info = $"已貼上素材: {material.Name} 於 ({gameX}, {gameY})";
                 if (layer1Count > 0) info += $", {layer1Count} 地板";
                 if (layer3Count > 0) info += $", {layer3Count} 屬性";
                 if (layer4Count > 0) info += $", {layer4Count} 物件";
+                if (layer5Count > 0) info += $", {layer5Count} 事件";
                 if (skippedCount > 0) info += $" (跳過 {skippedCount})";
                 toolStripStatusLabel1.Text = info;
 
@@ -18970,6 +19267,43 @@ namespace L1FlyMapViewer
 
             // 轉換為舊格式
             return results.Select(r => (r.FilePath, r.FileName, r.Item, r.ItemIndex, r.Reason)).ToList();
+        }
+
+        /// <summary>
+        /// 檢查指定的 S32 檔案是否有 Layer5 異常，如果有則提示用戶確認
+        /// </summary>
+        /// <param name="s32Files">要檢查的 S32 檔案字典</param>
+        /// <param name="operationName">操作名稱（用於顯示訊息）</param>
+        /// <returns>true = 繼續操作, false = 取消操作</returns>
+        private bool CheckLayer5IssuesAndConfirm(Dictionary<string, S32Data> s32Files, string operationName)
+        {
+            if (s32Files == null || s32Files.Count == 0)
+                return true;
+
+            // 使用 Layer5Checker 檢查
+            var results = Layer5Checker.Check(
+                s32Files,
+                radius: -1,
+                getSegInfo: s32 => (s32.SegInfo.nLinBeginX, s32.SegInfo.nLinBeginY));
+
+            if (results.Count == 0)
+                return true;
+
+            // 統計異常類型
+            int noGroupCount = results.Count(r => r.Reason == "GroupId不存在");
+            int noObjCount = results.Count(r => r.Reason == "周圍無對應物件");
+
+            var msgParts = new List<string>();
+            if (noGroupCount > 0) msgParts.Add($"GroupId 不存在: {noGroupCount}");
+            if (noObjCount > 0) msgParts.Add($"周圍無對應物件: {noObjCount}");
+
+            string message = $"發現 {results.Count} 個 Layer5 異常：\n\n• {string.Join("\n• ", msgParts)}\n\n" +
+                             $"這些異常可能導致遊戲中出現問題。\n是否仍要繼續{operationName}？";
+
+            var result = MessageBox.Show(message, "Layer5 異常警告",
+                MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+
+            return result == DialogResult.Yes;
         }
 
         // 無效 TileId 資訊類別

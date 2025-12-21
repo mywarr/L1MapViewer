@@ -35,6 +35,11 @@ namespace L1MapViewer.Forms
         public bool IncludeTiles { get; private set; }
 
         /// <summary>
+        /// 是否包含 Layer5 事件資料 (隨 Layer4 物件的 GroupId 一起複製)
+        /// </summary>
+        public bool IncludeLayer5 { get; private set; }
+
+        /// <summary>
         /// 素材名稱 (fs3p 使用)
         /// </summary>
         public string MaterialName { get; private set; }
@@ -51,6 +56,7 @@ namespace L1MapViewer.Forms
         private CheckBox cbLayer7;
         private CheckBox cbLayer8;
         private CheckBox cbIncludeTiles;
+        private CheckBox cbIncludeLayer5;
         private TextBox txtMaterialName;
         private Label lblMaterialName;
         private Button btnExport;
@@ -74,7 +80,7 @@ namespace L1MapViewer.Forms
         private void InitializeComponents()
         {
             Text = _isFs3p ? "儲存為素材" : "匯出選項";
-            Size = new Size(320, _isFs3p ? 400 : 380);
+            Size = new Size(320, _isFs3p ? 425 : 380);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
             MaximizeBox = false;
@@ -150,7 +156,7 @@ namespace L1MapViewer.Forms
             {
                 Text = "包含圖層",
                 Location = new Point(15, y),
-                Size = new Size(270, _isFs3p ? 130 : 160)
+                Size = new Size(270, _isFs3p ? 155 : 160)
             };
             Controls.Add(grpLayers);
 
@@ -224,7 +230,7 @@ namespace L1MapViewer.Forms
                     Text = "Layer8",
                     Location = new Point(140, 91),
                     Size = new Size(110, 20),
-                    Checked = true
+                    Checked = false  // 預設不勾選 Layer8
                 };
                 grpLayers.Controls.Add(cbLayer8);
             }
@@ -239,6 +245,19 @@ namespace L1MapViewer.Forms
                 Checked = true
             };
             grpLayers.Controls.Add(cbIncludeTiles);
+
+            // Layer5 選項 (僅 fs3p)
+            if (_isFs3p)
+            {
+                cbIncludeLayer5 = new CheckBox
+                {
+                    Text = "包含 Layer5 事件 (隨 Layer4 物件)",
+                    Location = new Point(15, tilesY + 23),
+                    Size = new Size(240, 20),
+                    Checked = false
+                };
+                grpLayers.Controls.Add(cbIncludeLayer5);
+            }
 
             y += grpLayers.Height + 15;
 
@@ -300,6 +319,7 @@ namespace L1MapViewer.Forms
             LayerFlags = flags;
 
             IncludeTiles = cbIncludeTiles.Checked;
+            IncludeLayer5 = _isFs3p && cbIncludeLayer5?.Checked == true;
         }
     }
 }
