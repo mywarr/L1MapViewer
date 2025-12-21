@@ -1212,6 +1212,32 @@ L1MapViewer CLI - S32 檔案解析工具
                 Console.WriteLine($"  Hybrid (混合):    {hybridCount}");
             if (unknownCount > 0)
                 Console.WriteLine($"  Unknown (未知):   {unknownCount}");
+
+            // 列出各版本的 TileId
+            if (remasterCount > 0)
+            {
+                var remasterTiles = tileVersions.Where(kv => kv.Value == L1Til.TileVersion.Remaster)
+                                                 .Select(kv => kv.Key).OrderBy(t => t).ToList();
+                Console.WriteLine();
+                Console.WriteLine($"Remaster TileIds ({remasterTiles.Count}):");
+                Console.WriteLine($"  {string.Join(", ", remasterTiles)}");
+            }
+            if (hybridCount > 0)
+            {
+                var hybridTiles = tileVersions.Where(kv => kv.Value == L1Til.TileVersion.Hybrid)
+                                               .Select(kv => kv.Key).OrderBy(t => t).ToList();
+                Console.WriteLine();
+                Console.WriteLine($"Hybrid TileIds ({hybridTiles.Count}):");
+                Console.WriteLine($"  {string.Join(", ", hybridTiles)}");
+            }
+            if (unknownCount > 0)
+            {
+                var unknownTiles = tileVersions.Where(kv => kv.Value == L1Til.TileVersion.Unknown)
+                                                .Select(kv => kv.Key).OrderBy(t => t).ToList();
+                Console.WriteLine();
+                Console.WriteLine($"Unknown TileIds ({unknownTiles.Count}):");
+                Console.WriteLine($"  {string.Join(", ", unknownTiles)}");
+            }
             Console.WriteLine();
 
             // 解析 S32 區塊，收集使用的 TileId 和 IndexId
