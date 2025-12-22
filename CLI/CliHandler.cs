@@ -696,24 +696,29 @@ L1MapViewer CLI - S32 檔案解析工具
         {
             if (args.Length < 2)
             {
-                Console.WriteLine("用法: -cli export-fs32 <地圖資料夾> <輸出.fs32> [--downscale]");
+                Console.WriteLine("用法: -cli export-fs32 <地圖資料夾> <輸出.fs32> [選項]");
                 Console.WriteLine();
                 Console.WriteLine("將地圖匯出為 fs32 格式");
                 Console.WriteLine();
                 Console.WriteLine("參數:");
                 Console.WriteLine("  <地圖資料夾>    包含 S32 檔案的地圖資料夾");
                 Console.WriteLine("  <輸出.fs32>     輸出的 fs32 檔案路徑");
+                Console.WriteLine();
+                Console.WriteLine("選項:");
                 Console.WriteLine("  --downscale     將 Remaster 版 Tile (48x48) 降級為 Classic 版 (24x24)");
+                Console.WriteLine("  --no-l8ext      移除 Layer8 擴展資料");
                 Console.WriteLine();
                 Console.WriteLine("範例:");
                 Console.WriteLine("  export-fs32 C:\\client\\map\\100002 C:\\output\\100002.fs32");
                 Console.WriteLine("  export-fs32 C:\\client\\map\\100002 C:\\output\\100002.fs32 --downscale");
+                Console.WriteLine("  export-fs32 C:\\client\\map\\100002 C:\\output\\100002.fs32 --no-l8ext");
                 return 1;
             }
 
             string mapPath = args[0];
             string outputPath = args[1];
             bool downscale = args.Contains("--downscale");
+            bool noL8Ext = args.Contains("--no-l8ext");
 
             if (!Directory.Exists(mapPath))
             {
@@ -760,6 +765,7 @@ L1MapViewer CLI - S32 檔案解析工具
             Console.WriteLine($"S32 檔案數: {s32Files.Length}");
             Console.WriteLine($"輸出路徑: {outputPath}");
             Console.WriteLine($"Tile 降級: {(downscale ? "是" : "否")}");
+            Console.WriteLine($"移除 L8 擴展: {(noL8Ext ? "是" : "否")}");
             Console.WriteLine();
 
             var sw = Stopwatch.StartNew();
@@ -772,6 +778,18 @@ L1MapViewer CLI - S32 檔案解析工具
                 try
                 {
                     var s32Data = S32Parser.ParseFile(filePath);
+
+                    // 移除 Layer8 擴展資料
+                    if (noL8Ext && s32Data.Layer8HasExtendedData)
+                    {
+                        s32Data.Layer8HasExtendedData = false;
+                        foreach (var item in s32Data.Layer8)
+                        {
+                            item.ExtendedData = 0;
+                        }
+                        s32Data.OriginalFileData = null; // 強制重新序列化
+                    }
+
                     s32DataList.Add(s32Data);
                 }
                 catch (Exception ex)
@@ -2304,7 +2322,7 @@ L1MapViewer CLI - S32 檔案解析工具
             Console.WriteLine($"掃描 {s32Files.Length} 個 S32 檔案...");
 
             // 正常的 Block Type
-            var normalTypes = new HashSet<byte> { 0, 1, 2, 3, 6, 7, 16, 17, 18, 19 };
+            var normalTypes = new HashSet<byte> { 0, 1, 2, 3, 6, 7, 8, 9, 16, 17, 18, 19, 22, 23, 34, 35 };
 
             foreach (var s32File in s32Files)
             {
@@ -2445,7 +2463,7 @@ L1MapViewer CLI - S32 檔案解析工具
             }
             else
             {
-                Console.WriteLine("\n所有 Tile 的 Block Type 都是正常的 (0,1,2,3,6,7,16,17,18,19)");
+                Console.WriteLine("\n所有 Tile 的 Block Type 都是正常的 (0,1,2,3,6,7,8,9,16,17,18,19,22,23,34,35)");
             }
 
             return 0;
@@ -2458,8 +2476,10 @@ L1MapViewer CLI - S32 檔案解析工具
         {
             if (args.Length < 1)
             {
-                Console.WriteLine("用法: -cli scan-tiles <客戶端路徑或til目錄>");
+                Console.WriteLine("用法: -cli scan-tiles <客戶端路徑或til目錄> [--type <types>]");
                 Console.WriteLine("掃描 Tile.idx 或目錄中所有 Tile 的 Block Type");
+                Console.WriteLine("選項:");
+                Console.WriteLine("  --type <types>  查找包含指定 Block Type 的 Tile (例如: --type 6,7)");
                 return 1;
             }
 
@@ -2467,9 +2487,25 @@ L1MapViewer CLI - S32 檔案解析工具
             bool isDirectory = Directory.Exists(inputPath);
             bool hasIdx = File.Exists(Path.Combine(inputPath, "Tile.idx"));
 
+            // 解析 --type 參數
+            HashSet<byte> searchTypes = null;
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (args[i] == "--type" && i + 1 < args.Length)
+                {
+                    searchTypes = new HashSet<byte>();
+                    foreach (var t in args[i + 1].Split(','))
+                    {
+                        if (byte.TryParse(t.Trim(), out byte bt))
+                            searchTypes.Add(bt);
+                    }
+                    break;
+                }
+            }
+
             // 正常的 Block Type
-            var normalTypes = new HashSet<byte> { 0, 1, 2, 3, 6, 7, 16, 17, 18, 19 };
-            var abnormalTiles = new Dictionary<int, List<byte>>();
+            var normalTypes = new HashSet<byte> { 0, 1, 2, 3, 6, 7, 8, 9, 16, 17, 18, 19, 22, 23, 34, 35 };
+            var matchedTiles = new Dictionary<int, List<byte>>();
             int scanned = 0;
 
             if (isDirectory && !hasIdx)
@@ -2479,6 +2515,8 @@ L1MapViewer CLI - S32 檔案解析工具
                 Console.WriteLine($"=== 掃描目錄中的 Tile 檔案 ===");
                 Console.WriteLine($"目錄: {inputPath}");
                 Console.WriteLine($"找到 {tilFiles.Length} 個 .til 檔案");
+                if (searchTypes != null)
+                    Console.WriteLine($"查找 Block Type: {string.Join(", ", searchTypes.OrderBy(x => x))}");
                 Console.WriteLine("掃描中...\n");
 
                 foreach (var tilFile in tilFiles.OrderBy(f => f))
@@ -2494,7 +2532,7 @@ L1MapViewer CLI - S32 檔案解析工具
                     scanned++;
 
                     var blocks = Converter.L1Til.Parse(tilData);
-                    var tileAbnormalTypes = new HashSet<byte>();
+                    var tileMatchedTypes = new HashSet<byte>();
 
                     foreach (var block in blocks)
                     {
@@ -2502,12 +2540,22 @@ L1MapViewer CLI - S32 檔案解析工具
                             continue;
 
                         byte blockType = block[0];
-                        if (!normalTypes.Contains(blockType))
-                            tileAbnormalTypes.Add(blockType);
+                        if (searchTypes != null)
+                        {
+                            // 查找特定類型
+                            if (searchTypes.Contains(blockType))
+                                tileMatchedTypes.Add(blockType);
+                        }
+                        else
+                        {
+                            // 查找異常類型
+                            if (!normalTypes.Contains(blockType))
+                                tileMatchedTypes.Add(blockType);
+                        }
                     }
 
-                    if (tileAbnormalTypes.Count > 0)
-                        abnormalTiles[tileId] = tileAbnormalTypes.OrderBy(x => x).ToList();
+                    if (tileMatchedTypes.Count > 0)
+                        matchedTiles[tileId] = tileMatchedTypes.OrderBy(x => x).ToList();
                 }
             }
             else
@@ -2522,7 +2570,10 @@ L1MapViewer CLI - S32 檔案解析工具
                     return 1;
                 }
 
-                Console.WriteLine($"=== 掃描 Tile.idx 異常 Block Type ===");
+                if (searchTypes != null)
+                    Console.WriteLine($"=== 掃描 Tile.idx - 查找 Block Type: {string.Join(", ", searchTypes.OrderBy(x => x))} ===");
+                else
+                    Console.WriteLine($"=== 掃描 Tile.idx 異常 Block Type ===");
                 Console.WriteLine($"客戶端: {clientPath}");
                 Console.WriteLine();
 
@@ -2559,7 +2610,7 @@ L1MapViewer CLI - S32 檔案解析工具
                         Console.Write($"\r已掃描 {scanned} / {allTileIds.Count}...");
 
                     var blocks = Converter.L1Til.Parse(tilData);
-                    var tileAbnormalTypes = new HashSet<byte>();
+                    var tileMatchedTypes = new HashSet<byte>();
 
                     foreach (var block in blocks)
                     {
@@ -2567,24 +2618,42 @@ L1MapViewer CLI - S32 檔案解析工具
                             continue;
 
                         byte blockType = block[0];
-                        if (!normalTypes.Contains(blockType))
-                            tileAbnormalTypes.Add(blockType);
+                        if (searchTypes != null)
+                        {
+                            // 查找特定類型
+                            if (searchTypes.Contains(blockType))
+                                tileMatchedTypes.Add(blockType);
+                        }
+                        else
+                        {
+                            // 查找異常類型
+                            if (!normalTypes.Contains(blockType))
+                                tileMatchedTypes.Add(blockType);
+                        }
                     }
 
-                    if (tileAbnormalTypes.Count > 0)
-                        abnormalTiles[tileId] = tileAbnormalTypes.OrderBy(x => x).ToList();
+                    if (tileMatchedTypes.Count > 0)
+                        matchedTiles[tileId] = tileMatchedTypes.OrderBy(x => x).ToList();
                 }
             }
 
             Console.WriteLine($"\r已掃描 {scanned} 個 Tile                    ");
             Console.WriteLine();
 
-            if (abnormalTiles.Count > 0)
+            if (matchedTiles.Count > 0)
             {
-                Console.WriteLine($"=== 包含異常 Block Type 的 Tile ({abnormalTiles.Count} 個) ===");
-                Console.WriteLine($"{"TileId",-10} {"異常 Block Types"}");
+                if (searchTypes != null)
+                {
+                    Console.WriteLine($"=== 包含 Block Type {string.Join(", ", searchTypes.OrderBy(x => x))} 的 Tile ({matchedTiles.Count} 個) ===");
+                    Console.WriteLine($"{"TileId",-10} {"匹配的 Block Types"}");
+                }
+                else
+                {
+                    Console.WriteLine($"=== 包含異常 Block Type 的 Tile ({matchedTiles.Count} 個) ===");
+                    Console.WriteLine($"{"TileId",-10} {"異常 Block Types"}");
+                }
                 Console.WriteLine(new string('-', 60));
-                foreach (var kvp in abnormalTiles.OrderBy(x => x.Key))
+                foreach (var kvp in matchedTiles.OrderBy(x => x.Key))
                 {
                     string types = string.Join(", ", kvp.Value);
                     Console.WriteLine($"{kvp.Key,-10} {types}");
@@ -2592,7 +2661,10 @@ L1MapViewer CLI - S32 檔案解析工具
             }
             else
             {
-                Console.WriteLine("所有 Tile 的 Block Type 都是正常的 (0,1,2,3,6,7,16,17,18,19)");
+                if (searchTypes != null)
+                    Console.WriteLine($"沒有找到包含 Block Type {string.Join(", ", searchTypes.OrderBy(x => x))} 的 Tile");
+                else
+                    Console.WriteLine("所有 Tile 的 Block Type 都是正常的 (0,1,2,3,6,7,8,9,16,17,18,19,22,23,34,35)");
             }
 
             return 0;
@@ -2656,8 +2728,7 @@ L1MapViewer CLI - S32 檔案解析工具
             Console.WriteLine();
 
             // 正常的 Block Type
-            var normalTypes = new HashSet<byte> { 0, 1, 2, 3, 6, 7, 16, 17, 18, 19 };
-            var compressedVariants = new HashSet<byte> { 34, 35 }; // 常見的壓縮變體
+            var normalTypes = new HashSet<byte> { 0, 1, 2, 3, 6, 7, 8, 9, 16, 17, 18, 19, 22, 23, 34, 35 };
 
             Console.WriteLine($"=== Block Type 統計 ===");
             Console.WriteLine($"{"Type",-6} {"Count",-8} {"Status"}");
@@ -2665,19 +2736,12 @@ L1MapViewer CLI - S32 檔案解析工具
 
             foreach (var kvp in typeCount.OrderBy(x => x.Key))
             {
-                string status;
-                if (normalTypes.Contains(kvp.Key))
-                    status = "正常";
-                else if (compressedVariants.Contains(kvp.Key))
-                    status = "壓縮變體";
-                else
-                    status = "異常";
-
+                string status = normalTypes.Contains(kvp.Key) ? "正常" : "異常";
                 Console.WriteLine($"{kvp.Key,-6} {kvp.Value,-8} {status}");
             }
 
             // 檢查是否有異常
-            var abnormalTypes = typeCount.Keys.Where(t => !normalTypes.Contains(t) && !compressedVariants.Contains(t)).ToList();
+            var abnormalTypes = typeCount.Keys.Where(t => !normalTypes.Contains(t)).ToList();
             if (abnormalTypes.Count > 0)
             {
                 Console.WriteLine();

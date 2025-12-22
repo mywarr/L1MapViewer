@@ -2882,7 +2882,7 @@ namespace L1FlyMapViewer
                         Application.DoEvents();
 
                         // 建立 fs32
-                        var fs32 = Fs32Writer.CreateFromMap(tempDocument, dialog.LayerFlags, dialog.IncludeTiles);
+                        var fs32 = Fs32Writer.CreateFromMap(tempDocument, dialog.LayerFlags, dialog.IncludeTiles, dialog.StripLayer8Ext);
 
                         // 檢查並處理 R版 tiles
                         if (dialog.IncludeTiles && fs32.Tiles.Count > 0)
@@ -4389,7 +4389,7 @@ namespace L1FlyMapViewer
                         toolStripStatusLabel1.Text = $"正在匯出地圖...";
                         Application.DoEvents();
 
-                        var fs32 = Fs32Writer.CreateFromMap(_document, dialog.LayerFlags, dialog.IncludeTiles);
+                        var fs32 = Fs32Writer.CreateFromMap(_document, dialog.LayerFlags, dialog.IncludeTiles, dialog.StripLayer8Ext);
 
                         // 檢查並處理 R版 tiles
                         if (dialog.IncludeTiles && fs32.Tiles.Count > 0)
@@ -4480,7 +4480,7 @@ namespace L1FlyMapViewer
                         toolStripStatusLabel1.Text = $"正在匯出 {checkedS32s.Count} 個區塊...";
                         Application.DoEvents();
 
-                        var fs32 = Fs32Writer.CreateFromS32List(checkedS32s.Values.ToList(), _document.MapId, dialog.LayerFlags, dialog.IncludeTiles);
+                        var fs32 = Fs32Writer.CreateFromS32List(checkedS32s.Values.ToList(), _document.MapId, dialog.LayerFlags, dialog.IncludeTiles, dialog.StripLayer8Ext);
 
                         // 檢查並處理 R版 tiles
                         if (dialog.IncludeTiles && fs32.Tiles.Count > 0)
@@ -9586,11 +9586,11 @@ namespace L1FlyMapViewer
                         Fs32Data fs32;
                         if (dialog.SelectedMode == L1MapViewer.Forms.ExportOptionsDialog.ExportMode.WholeMap)
                         {
-                            fs32 = Fs32Writer.CreateFromMap(_document, dialog.LayerFlags, dialog.IncludeTiles);
+                            fs32 = Fs32Writer.CreateFromMap(_document, dialog.LayerFlags, dialog.IncludeTiles, dialog.StripLayer8Ext);
                         }
                         else
                         {
-                            fs32 = Fs32Writer.CreateFromS32List(involvedS32s.Values.ToList(), _document.MapId, dialog.LayerFlags, dialog.IncludeTiles);
+                            fs32 = Fs32Writer.CreateFromS32List(involvedS32s.Values.ToList(), _document.MapId, dialog.LayerFlags, dialog.IncludeTiles, dialog.StripLayer8Ext);
                         }
 
                         // 檢查並處理 R版 tiles

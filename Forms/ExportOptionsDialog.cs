@@ -41,6 +41,11 @@ namespace L1MapViewer.Forms
         public bool IncludeLayer5 { get; private set; }
 
         /// <summary>
+        /// 是否移除 Layer8 擴展資料
+        /// </summary>
+        public bool StripLayer8Ext { get; private set; }
+
+        /// <summary>
         /// 素材名稱 (fs3p 使用)
         /// </summary>
         public string MaterialName { get; private set; }
@@ -58,6 +63,7 @@ namespace L1MapViewer.Forms
         private CheckBox cbLayer8;
         private CheckBox cbIncludeTiles;
         private CheckBox cbIncludeLayer5;
+        private CheckBox cbStripL8Ext;
         private TextBox txtMaterialName;
         private Label lblMaterialName;
         private Button btnExport;
@@ -271,6 +277,18 @@ namespace L1MapViewer.Forms
                 };
                 grpLayers.Controls.Add(cbIncludeLayer5);
             }
+            else
+            {
+                // 移除 Layer8 擴展選項 (僅 fs32)
+                cbStripL8Ext = new CheckBox
+                {
+                    Text = "移除 Layer8 擴展資料",
+                    Location = new Point(15, tilesY + 23),
+                    Size = new Size(240, 20),
+                    Checked = true  // 預設移除
+                };
+                grpLayers.Controls.Add(cbStripL8Ext);
+            }
 
             y += grpLayers.Height + 15;
 
@@ -333,6 +351,7 @@ namespace L1MapViewer.Forms
 
             IncludeTiles = cbIncludeTiles.Checked;
             IncludeLayer5 = _isFs3p && cbIncludeLayer5?.Checked == true;
+            StripLayer8Ext = !_isFs3p && cbStripL8Ext?.Checked == true;
         }
 
         private void UpdateLocalization()

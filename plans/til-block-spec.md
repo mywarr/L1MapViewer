@@ -36,17 +36,16 @@
 | 3 | Compressed | 24x24 壓縮格式 |
 | 6 | Compressed | 24x24 壓縮格式 |
 | 7 | Compressed | 24x24 壓縮格式 |
+| 8 | SimpleDiamond | 24x24 變體 |
+| 9 | SimpleDiamond | 24x24 變體 (有透明) |
 | 16 | SimpleDiamond | 48x48 R版 無透明 |
 | 17 | SimpleDiamond | 48x48 R版 有透明 |
 | 18 | Compressed | 48x48 R版 壓縮格式 |
 | 19 | Compressed | 48x48 R版 壓縮格式 |
-
-### 壓縮變體 (常見)
-
-| Type | 說明 |
-|------|------|
-| 34 | 壓縮變體 (Type 2 + 32) |
-| 35 | 壓縮變體 (Type 3 + 32) |
+| 22 | Compressed | 壓縮變體 |
+| 23 | Compressed | 壓縮變體 |
+| 34 | Compressed | 壓縮變體 (Type 2 + 32) |
+| 35 | Compressed | 壓縮變體 (Type 3 + 32) |
 
 ### 異常 Block Types
 
@@ -155,5 +154,4 @@ L1MapViewerCore.exe -cli scan-tiles <til目錄>
 
 - 程式碼: `Converter/L1Til.cs`
 - SimpleDiamond Types: `{ 0, 1, 8, 9, 16, 17 }`
-- Normal Types: `{ 0, 1, 2, 3, 6, 7, 16, 17, 18, 19 }`
-- Compressed Variants: `{ 34, 35 }`
+- Normal Types: `{ 0, 1, 2, 3, 6, 7, 8, 9, 16, 17, 18, 19, 22, 23, 34, 35 }`

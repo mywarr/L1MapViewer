@@ -109,7 +109,7 @@ namespace L1MapViewer.CLI
         /// <summary>
         /// 從 S32Data 建立 fs32 (單一區塊)
         /// </summary>
-        public static Fs32Data CreateFromS32(S32Data s32Data, string mapId, ushort layerFlags = 0xFF, bool includeTiles = true)
+        public static Fs32Data CreateFromS32(S32Data s32Data, string mapId, ushort layerFlags = 0xFF, bool includeTiles = true, bool stripL8Ext = false)
         {
             var fs32 = new Fs32Data
             {
@@ -123,7 +123,7 @@ namespace L1MapViewer.CLI
             {
                 BlockX = s32Data.SegInfo.nBlockX,
                 BlockY = s32Data.SegInfo.nBlockY,
-                S32Data = s32Data.OriginalFileData ?? S32Writer.ToBytes(s32Data)
+                S32Data = GetS32Bytes(s32Data, stripL8Ext)
             };
             fs32.Blocks.Add(block);
 
@@ -139,7 +139,7 @@ namespace L1MapViewer.CLI
         /// <summary>
         /// 從多個 S32Data 建立 fs32
         /// </summary>
-        public static Fs32Data CreateFromS32List(IEnumerable<S32Data> s32List, string mapId, ushort layerFlags = 0xFF, bool includeTiles = true)
+        public static Fs32Data CreateFromS32List(IEnumerable<S32Data> s32List, string mapId, ushort layerFlags = 0xFF, bool includeTiles = true, bool stripL8Ext = false)
         {
             var fs32 = new Fs32Data
             {
@@ -154,7 +154,7 @@ namespace L1MapViewer.CLI
                 {
                     BlockX = s32Data.SegInfo.nBlockX,
                     BlockY = s32Data.SegInfo.nBlockY,
-                    S32Data = s32Data.OriginalFileData ?? S32Writer.ToBytes(s32Data)
+                    S32Data = GetS32Bytes(s32Data, stripL8Ext)
                 };
                 fs32.Blocks.Add(block);
 
@@ -170,7 +170,7 @@ namespace L1MapViewer.CLI
         /// <summary>
         /// 從整張地圖建立 fs32
         /// </summary>
-        public static Fs32Data CreateFromMap(MapDocument mapDoc, ushort layerFlags = 0xFF, bool includeTiles = true)
+        public static Fs32Data CreateFromMap(MapDocument mapDoc, ushort layerFlags = 0xFF, bool includeTiles = true, bool stripL8Ext = false)
         {
             var fs32 = new Fs32Data
             {
@@ -185,7 +185,7 @@ namespace L1MapViewer.CLI
                 {
                     BlockX = s32Data.SegInfo.nBlockX,
                     BlockY = s32Data.SegInfo.nBlockY,
-                    S32Data = s32Data.OriginalFileData ?? S32Writer.ToBytes(s32Data)
+                    S32Data = GetS32Bytes(s32Data, stripL8Ext)
                 };
                 fs32.Blocks.Add(block);
 
@@ -196,6 +196,28 @@ namespace L1MapViewer.CLI
             }
 
             return fs32;
+        }
+
+        /// <summary>
+        /// 取得 S32 資料位元組，可選擇移除 Layer8 擴展資料
+        /// </summary>
+        private static byte[] GetS32Bytes(S32Data s32Data, bool stripL8Ext)
+        {
+            if (!stripL8Ext)
+            {
+                return s32Data.OriginalFileData ?? S32Writer.ToBytes(s32Data);
+            }
+
+            // 移除 Layer8 擴展資料
+            if (s32Data.Layer8HasExtendedData)
+            {
+                s32Data.Layer8HasExtendedData = false;
+                foreach (var item in s32Data.Layer8)
+                {
+                    item.ExtendedData = 0;
+                }
+            }
+            return S32Writer.ToBytes(s32Data);
         }
 
         /// <summary>
