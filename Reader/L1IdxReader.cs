@@ -50,7 +50,11 @@ namespace L1MapViewer.Reader {
 
                 //判斷idx的結構類型
                 IdxType structType = IdxType.OLD;
-                if (Encoding.Default.GetString(head).ToLower().Equals("_ext")) {
+                if (data.Length >= 6 && data[0] == '_' && data[1] == 'E' && data[2] == 'X' &&
+                    data[3] == 'T' && data[4] == 'B' && data[5] == '$') {
+                    // _EXTB$ 格式 (Extended Index Block)
+                    structType = IdxType.EXTB;
+                } else if (Encoding.Default.GetString(head).ToLower().Equals("_ext")) {
                     structType = IdxType.EXT;
                 } else if (Encoding.Default.GetString(head).ToLower().Equals("_rms")) {
                     structType = IdxType.RMS;
@@ -58,6 +62,13 @@ namespace L1MapViewer.Reader {
 
                 int nBaseOffset = 0;
                 bool isDesEncode = false;
+
+                // _EXTB$ 格式使用不同的解析邏輯
+                if (structType == IdxType.EXTB) {
+                    result = LoadExtB(data, szPakFullName);
+                    return Share.IdxDataList[szIdxType] = result;
+                }
+
                 //text.idx -->先用des解密出明碼
                 if (szIdxType.ToLower().Equals("text")) {
                     int nBeginIndex = (structType == IdxType.OLD) ? 4 : 8;
@@ -115,6 +126,82 @@ namespace L1MapViewer.Reader {
                 }
             }
             return Share.IdxDataList[szIdxType] = result;
+        }
+
+        /// <summary>
+        /// 載入 _EXTB$ 格式的索引檔案 (Extended Index Block)
+        /// 格式：
+        /// - Header: 16 bytes (magic "_EXTB$" + metadata)
+        /// - Entry: 128 bytes each
+        ///   - Offset 0-3: Unknown (sort key)
+        ///   - Offset 4-7: Compression (0=none, 1=zlib, 2=brotli)
+        ///   - Offset 8-119: FileName (112 bytes, null-padded)
+        ///   - Offset 120-123: PAK Offset
+        ///   - Offset 124-127: Uncompressed Size
+        /// </summary>
+        private static Dictionary<string, L1Idx> LoadExtB(byte[] data, string szPakFullName) {
+            var result = new Dictionary<string, L1Idx>();
+
+            const int headerSize = 0x10;  // 16 bytes
+            const int entrySize = 0x80;   // 128 bytes
+
+            int entryCount = (data.Length - headerSize) / entrySize;
+
+            // 建立排序的 offset 列表（用於計算壓縮大小）
+            var offsets = new List<int>();
+            for (int i = 0; i < entryCount; i++) {
+                int entryOffset = headerSize + i * entrySize;
+                int pakOffset = BitConverter.ToInt32(data, entryOffset + 120);
+                offsets.Add(pakOffset);
+            }
+            offsets.Sort();
+            offsets.Add(int.MaxValue);  // 用於計算最後一個檔案的大小
+
+            for (int i = 0; i < entryCount; i++) {
+                int entryOffset = headerSize + i * entrySize;
+
+                int pakOffset = BitConverter.ToInt32(data, entryOffset + 120);
+                int compression = BitConverter.ToInt32(data, entryOffset + 4);
+                int uncompressedSize = BitConverter.ToInt32(data, entryOffset + 124);
+
+                // 讀取檔案名稱 (offset 8-119, 112 bytes)
+                int nameStart = entryOffset + 8;
+                int nameEnd = nameStart;
+                while (nameEnd < entryOffset + 120 && data[nameEnd] != 0) {
+                    nameEnd++;
+                }
+
+                if (nameEnd <= nameStart) continue;
+
+                string fileName = Encoding.Default.GetString(data, nameStart, nameEnd - nameStart);
+                if (string.IsNullOrEmpty(fileName)) continue;
+
+                // 計算壓縮大小（找到下一個 offset）
+                int compressedSize = 0;
+                int idx = offsets.IndexOf(pakOffset);
+                if (idx >= 0 && idx < offsets.Count - 1) {
+                    compressedSize = offsets[idx + 1] - pakOffset;
+                    if (compressedSize == int.MaxValue - pakOffset) {
+                        compressedSize = uncompressedSize;  // 最後一個檔案，使用未壓縮大小
+                    }
+                }
+
+                var pIdx = new L1Idx(IdxType.EXTB) {
+                    szPakFullName = szPakFullName,
+                    szFileName = fileName,
+                    nPosition = pakOffset,
+                    nSize = uncompressedSize,
+                    nCompressType = compression,
+                    nCompressSize = compression > 0 ? compressedSize : 0,
+                    isDesEncode = false
+                };
+
+                if (!result.ContainsKey(fileName.ToLower())) {
+                    result.Add(fileName.ToLower(), pIdx);
+                }
+            }
+
+            return result;
         }
     }
 }

@@ -113,6 +113,8 @@ namespace L1MapViewer.CLI
                         return Commands.MaterialCommands.VerifyMaterialTiles(cmdArgs);
                     case "list-til":
                         return CmdListTil(cmdArgs);
+                    case "list-idx":
+                        return CmdListIdx(cmdArgs);
                     case "validate-tiles":
                         return CmdValidateTiles(cmdArgs);
                     case "export-fs32":
@@ -316,6 +318,169 @@ L1MapViewer CLI - S32 檔案解析工具
                 }
             }
             Console.WriteLine();
+
+            return 0;
+        }
+
+        /// <summary>
+        /// list-idx 命令 - 列出 idx 檔案中的內容（支援 _EXTB$ 格式）
+        /// </summary>
+        private static int CmdListIdx(string[] args)
+        {
+            if (args.Length < 1)
+            {
+                Console.WriteLine("用法: -cli list-idx <idx檔案路徑> [--limit <數量>]");
+                Console.WriteLine();
+                Console.WriteLine("列出 idx 檔案中的所有條目");
+                Console.WriteLine("支援格式: OLD, _EXT, _RMS, _EXTB$");
+                return 1;
+            }
+
+            string idxPath = args[0];
+            int limit = 50;
+
+            // 解析 --limit 參數
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (args[i] == "--limit" && i + 1 < args.Length)
+                {
+                    int.TryParse(args[i + 1], out limit);
+                }
+            }
+
+            if (!File.Exists(idxPath))
+            {
+                Console.WriteLine($"錯誤: 檔案不存在: {idxPath}");
+                return 1;
+            }
+
+            byte[] data = File.ReadAllBytes(idxPath);
+            Console.WriteLine($"=== IDX 檔案資訊 ===");
+            Console.WriteLine($"檔案: {Path.GetFileName(idxPath)}");
+            Console.WriteLine($"大小: {data.Length:N0} bytes");
+
+            // 檢測格式
+            string format = "OLD";
+            if (data.Length >= 6 && data[0] == '_' && data[1] == 'E' && data[2] == 'X' &&
+                data[3] == 'T' && data[4] == 'B' && data[5] == '$')
+            {
+                format = "_EXTB$";
+            }
+            else if (data.Length >= 4)
+            {
+                string header = Encoding.Default.GetString(data, 0, 4);
+                if (header.ToLower() == "_ext") format = "_EXT";
+                else if (header.ToLower() == "_rms") format = "_RMS";
+            }
+
+            Console.WriteLine($"格式: {format}");
+            Console.WriteLine($"Header: {string.Join(" ", data.Take(16).Select(b => $"{b:X2}"))}");
+            Console.WriteLine();
+
+            if (format == "_EXTB$")
+            {
+                // 解析 _EXTB$ 格式
+                const int headerSize = 0x10;
+                const int entrySize = 0x80;
+                int entryCount = (data.Length - headerSize) / entrySize;
+
+                Console.WriteLine($"Entry 數量: {entryCount}");
+                Console.WriteLine();
+                Console.WriteLine($"{"#",-6} {"Filename",-25} {"Offset",12} {"Size",10} {"Compression",-10}");
+                Console.WriteLine(new string('-', 70));
+
+                int shown = 0;
+                int zlibCount = 0, brotliCount = 0, noneCount = 0;
+
+                for (int i = 0; i < entryCount; i++)
+                {
+                    int entryOffset = headerSize + i * entrySize;
+                    int pakOffset = BitConverter.ToInt32(data, entryOffset + 120);
+                    int compression = BitConverter.ToInt32(data, entryOffset + 4);
+                    int uncompressedSize = BitConverter.ToInt32(data, entryOffset + 124);
+
+                    // 統計壓縮類型
+                    if (compression == 1) zlibCount++;
+                    else if (compression == 2) brotliCount++;
+                    else noneCount++;
+
+                    // 讀取檔案名稱
+                    int nameStart = entryOffset + 8;
+                    int nameEnd = nameStart;
+                    while (nameEnd < entryOffset + 120 && data[nameEnd] != 0)
+                        nameEnd++;
+
+                    string fileName = nameEnd > nameStart
+                        ? Encoding.Default.GetString(data, nameStart, nameEnd - nameStart)
+                        : "(empty)";
+
+                    string compStr = compression switch
+                    {
+                        0 => "none",
+                        1 => "zlib",
+                        2 => "brotli",
+                        _ => $"unknown({compression})"
+                    };
+
+                    if (shown < limit)
+                    {
+                        Console.WriteLine($"{i,-6} {fileName,-25} {pakOffset,12:N0} {uncompressedSize,10:N0} {compStr,-10}");
+                        shown++;
+                    }
+                }
+
+                if (entryCount > limit)
+                {
+                    Console.WriteLine($"... (共 {entryCount} 個條目，僅顯示前 {limit} 個)");
+                }
+
+                Console.WriteLine();
+                Console.WriteLine("=== 壓縮統計 ===");
+                Console.WriteLine($"  None:   {noneCount,6} ({100.0 * noneCount / entryCount:F1}%)");
+                Console.WriteLine($"  Zlib:   {zlibCount,6} ({100.0 * zlibCount / entryCount:F1}%)");
+                Console.WriteLine($"  Brotli: {brotliCount,6} ({100.0 * brotliCount / entryCount:F1}%)");
+            }
+            else
+            {
+                // 使用 L1IdxReader 解析其他格式
+                string pakPath = idxPath.Replace(".idx", ".pak");
+                Console.WriteLine($"PAK: {pakPath}");
+                Console.WriteLine();
+
+                // 設定路徑並讀取
+                string idxType = Path.GetFileNameWithoutExtension(idxPath);
+                string parentDir = Path.GetDirectoryName(idxPath);
+                Share.LineagePath = parentDir;
+
+                // 清除快取
+                if (Share.IdxDataList.ContainsKey(idxType))
+                    Share.IdxDataList.Remove(idxType);
+
+                var idxData = L1IdxReader.GetAll(idxType);
+                Console.WriteLine($"Entry 數量: {idxData.Count}");
+                Console.WriteLine();
+
+                int shown = 0;
+                foreach (var kvp in idxData.OrderBy(x => x.Key))
+                {
+                    if (shown >= limit) break;
+                    var idx = kvp.Value;
+                    string compStr = idx.nCompressType switch
+                    {
+                        0 => "none",
+                        1 => "zlib",
+                        2 => "brotli",
+                        _ => $"unknown({idx.nCompressType})"
+                    };
+                    Console.WriteLine($"{kvp.Key,-30} pos={idx.nPosition,10} size={idx.nSize,10} comp={compStr}");
+                    shown++;
+                }
+
+                if (idxData.Count > limit)
+                {
+                    Console.WriteLine($"... (共 {idxData.Count} 個條目，僅顯示前 {limit} 個)");
+                }
+            }
 
             return 0;
         }
@@ -2758,6 +2923,59 @@ L1MapViewer CLI - S32 檔案解析工具
             string version = hasRemaster && hasClassic ? "Hybrid" : hasRemaster ? "Remaster (48x48)" : "Classic (24x24)";
             Console.WriteLine();
             Console.WriteLine($"推測版本: {version}");
+
+            // 如果解析失敗 (0 blocks)，顯示原始資料分析
+            if (blocks.Count == 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine("=== 原始資料分析 (Block 數量為 0，可能是新格式) ===");
+
+                // Hex dump first 128 bytes
+                Console.WriteLine("\n前 128 bytes (hex):");
+                for (int i = 0; i < Math.Min(128, tilData.Length); i++)
+                {
+                    Console.Write($"{tilData[i]:X2} ");
+                    if ((i + 1) % 16 == 0) Console.WriteLine();
+                }
+                if (tilData.Length < 128 || tilData.Length % 16 != 0) Console.WriteLine();
+
+                // Try to interpret as integers
+                Console.WriteLine("\n前 32 bytes 解析為 Int32:");
+                using (var br = new BinaryReader(new MemoryStream(tilData)))
+                {
+                    for (int i = 0; i < 8 && br.BaseStream.Position + 4 <= tilData.Length; i++)
+                    {
+                        long pos = br.BaseStream.Position;
+                        int val = br.ReadInt32();
+                        Console.WriteLine($"  offset {pos,4}: {val,12} (0x{val:X8})");
+                    }
+                }
+
+                // Check for patterns
+                Console.WriteLine("\n資料特徵:");
+                Console.WriteLine($"  第一個 byte: 0x{tilData[0]:X2} ({tilData[0]})");
+                if (tilData.Length >= 4)
+                {
+                    uint sig = BitConverter.ToUInt32(tilData, 0);
+                    Console.WriteLine($"  前 4 bytes (uint32): {sig} (0x{sig:X8})");
+                }
+
+                // Look for text signature
+                bool hasText = true;
+                for (int i = 0; i < Math.Min(16, tilData.Length); i++)
+                {
+                    if (tilData[i] < 0x20 || tilData[i] > 0x7E)
+                    {
+                        hasText = false;
+                        break;
+                    }
+                }
+                if (hasText)
+                {
+                    string textStart = System.Text.Encoding.ASCII.GetString(tilData, 0, Math.Min(32, tilData.Length));
+                    Console.WriteLine($"  開頭似乎是文字: \"{textStart}\"");
+                }
+            }
 
             return 0;
         }

@@ -12,6 +12,7 @@ namespace L1MapViewer.Other {
             OLD,
             EXT,
             RMS,
+            EXTB,  // _EXTB$ 格式 (Extended Index Block with Brotli support)
         }
         //idx檔案的結構
         public class L1Idx {

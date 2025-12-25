@@ -1,10 +1,127 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 
 namespace L1MapViewer.Converter {
     class L1Til {
+
+        /// <summary>
+        /// 壓縮類型
+        /// </summary>
+        public enum CompressionType
+        {
+            /// <summary>無壓縮（原始 TIL 格式）</summary>
+            None,
+            /// <summary>Zlib 壓縮（0x78 開頭）</summary>
+            Zlib,
+            /// <summary>Brotli 壓縮（0x5B 或 0x1B 開頭）</summary>
+            Brotli
+        }
+
+        /// <summary>
+        /// 偵測資料的壓縮類型
+        /// </summary>
+        public static CompressionType DetectCompression(byte[] data)
+        {
+            if (data == null || data.Length < 4)
+                return CompressionType.None;
+
+            byte firstByte = data[0];
+
+            // Zlib: 0x78 開頭 (CMF byte)
+            if (firstByte == 0x78)
+                return CompressionType.Zlib;
+
+            // Brotli: 0x5B 或 0x1B 開頭（Brotli stream markers）
+            if (firstByte == 0x5B || firstByte == 0x1B)
+                return CompressionType.Brotli;
+
+            // 檢查是否為有效的 TIL 格式（第一個 int32 是 block count）
+            int possibleBlockCount = BitConverter.ToInt32(data, 0);
+            if (possibleBlockCount > 0 && possibleBlockCount <= 65536)
+            {
+                // 看起來是原始 TIL 格式
+                return CompressionType.None;
+            }
+
+            return CompressionType.None;
+        }
+
+        /// <summary>
+        /// 解壓縮資料（自動偵測壓縮類型）
+        /// </summary>
+        public static byte[] Decompress(byte[] data)
+        {
+            if (data == null || data.Length < 4)
+                return data;
+
+            var compressionType = DetectCompression(data);
+            return Decompress(data, compressionType);
+        }
+
+        /// <summary>
+        /// 解壓縮資料（指定壓縮類型）
+        /// </summary>
+        public static byte[] Decompress(byte[] data, CompressionType compressionType)
+        {
+            if (data == null || data.Length < 4)
+                return data;
+
+            switch (compressionType)
+            {
+                case CompressionType.Brotli:
+                    return DecompressBrotli(data);
+                case CompressionType.Zlib:
+                    return DecompressZlib(data);
+                default:
+                    return data;
+            }
+        }
+
+        /// <summary>
+        /// Brotli 解壓縮
+        /// </summary>
+        private static byte[] DecompressBrotli(byte[] data)
+        {
+            try
+            {
+                using var inputStream = new MemoryStream(data);
+                using var brotliStream = new BrotliStream(inputStream, CompressionMode.Decompress);
+                using var outputStream = new MemoryStream();
+                brotliStream.CopyTo(outputStream);
+                return outputStream.ToArray();
+            }
+            catch
+            {
+                // 解壓縮失敗，返回原始資料
+                return data;
+            }
+        }
+
+        /// <summary>
+        /// Zlib 解壓縮
+        /// </summary>
+        private static byte[] DecompressZlib(byte[] data)
+        {
+            try
+            {
+                // Zlib = 2 byte header + deflate data + 4 byte checksum
+                // 跳過 2 byte header，使用 DeflateStream 解壓縮
+                using var inputStream = new MemoryStream(data, 2, data.Length - 6); // 跳過 header 和 checksum
+                using var deflateStream = new DeflateStream(inputStream, CompressionMode.Decompress);
+                using var outputStream = new MemoryStream();
+                deflateStream.CopyTo(outputStream);
+                return outputStream.ToArray();
+            }
+            catch
+            {
+                // 解壓縮失敗，返回原始資料
+                return data;
+            }
+        }
 
         /// <summary>
         /// Tile 版本類型
@@ -91,6 +208,7 @@ namespace L1MapViewer.Converter {
 
         /// <summary>
         /// 取得 til 資料的版本
+        /// 自動偵測並解壓縮 Brotli/Zlib 壓縮的資料
         /// </summary>
         public static TileVersion GetVersion(byte[] tilData)
         {
@@ -99,7 +217,10 @@ namespace L1MapViewer.Converter {
 
             try
             {
-                using (var br = new BinaryReader(new MemoryStream(tilData)))
+                // 自動解壓縮
+                byte[] decompressed = Decompress(tilData);
+
+                using (var br = new BinaryReader(new MemoryStream(decompressed)))
                 {
                     int blockCount = br.ReadInt32();
                     if (blockCount <= 0)
@@ -1027,10 +1148,14 @@ namespace L1MapViewer.Converter {
 
         /// <summary>
         /// 解析 til 資料為 TileBlocks（支援共用 block 優化）
+        /// 自動偵測並解壓縮 Brotli/Zlib 壓縮的資料
         /// </summary>
         public static TileBlocks ParseToTileBlocks(byte[] srcData) {
             try {
-                using (BinaryReader br = new BinaryReader(new MemoryStream(srcData))) {
+                // 自動解壓縮
+                byte[] tilData = Decompress(srcData);
+
+                using (BinaryReader br = new BinaryReader(new MemoryStream(tilData))) {
 
                     // 取得Block數量
                     int nAllBlockCount = br.ReadInt32();
