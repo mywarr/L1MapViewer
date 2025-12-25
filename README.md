@@ -79,13 +79,6 @@ dotnet publish --configuration Release --runtime win-x64 --self-contained true -
 
 ## Credits
 
-感謝社群中各位大神分享的檔案加解密算法。
-
-原始流程：
-1. 讀取地圖檔（S32）
-2. 從地圖檔獲得所需的圖形資源檔及對應位置
-3. 從客戶端壓縮檔中解出圖形資源
-4. 將圖形資源轉成 BMP
-5. 拼接成完整地圖
-
-Demo 影片：https://youtu.be/UVRn_-dOmng
+* srwh1234   original project which I fork from.
+- **非誠勿擾** - 幫忙解決幾個非常棘手的 Bug！
+- 
