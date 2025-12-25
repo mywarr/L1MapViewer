@@ -19,6 +19,7 @@ namespace L1MapViewer.Localization
             { "Menu_Database", "資料庫設定" },
             { "Menu_MapEditor", "地圖編輯器" },
             { "Menu_Help_Discord", "到 Discord 討論" },
+            { "Menu_Help_About", "關於" },
             { "Menu_Language", "語言" },
             { "Menu_Export_ServerPassability", "輸出伺服器通行txt" },
             { "Menu_Export_L1JFormat", "L1J 格式" },
@@ -416,6 +417,15 @@ namespace L1MapViewer.Localization
             { "Misc_Unit_Pixels", "像素" },
             { "Misc_Unknown", "未知" },
             { "Misc_None", "無" },
+
+            // === About Dialog ===
+            { "About_Title", "關於 L1MapViewer" },
+            { "About_Version", "版本" },
+            { "About_Description", "天堂地圖編輯器 - 用於檢視與編輯天堂遊戲地圖檔案" },
+            { "About_Discord", "Discord 社群" },
+            { "About_GitHub", "GitHub 專案" },
+            { "About_DiscordLink", "https://discord.gg/lineage" },
+            { "About_GitHubLink", "https://github.com/tony1223/L1MapViewer" },
         };
     }
 }

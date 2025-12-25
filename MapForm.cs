@@ -571,6 +571,7 @@ namespace L1FlyMapViewer
             exportL1JToolStripMenuItem.Text = LocalizationManager.L("Menu_Export_L1JFormat");
             exportDIRToolStripMenuItem.Text = LocalizationManager.L("Menu_Export_DIRFormat");
             discordToolStripMenuItem.Text = LocalizationManager.L("Menu_Help_Discord");
+            aboutToolStripMenuItem.Text = LocalizationManager.L("Menu_Help_About");
 
             // 頁籤
             tabMapPreview.Text = LocalizationManager.L("Tab_MapPreview");
@@ -22241,6 +22242,91 @@ namespace L1FlyMapViewer
                 FileName = "https://discord.gg/vjSKGD95HB",
                 UseShellExecute = true
             });
+        }
+
+        private void aboutToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+            var versionStr = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0";
+
+            var aboutForm = new Form
+            {
+                Text = LocalizationManager.L("About_Title"),
+                Size = new Size(400, 280),
+                StartPosition = FormStartPosition.CenterParent,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false,
+                MinimizeBox = false,
+                BackColor = Color.White
+            };
+
+            var titleLabel = new Label
+            {
+                Text = "L1MapViewer",
+                Font = new Font("Segoe UI", 18, FontStyle.Bold),
+                Location = new Point(20, 20),
+                AutoSize = true
+            };
+
+            var versionLabel = new Label
+            {
+                Text = $"{LocalizationManager.L("About_Version")}: {versionStr}",
+                Font = new Font("Segoe UI", 10),
+                Location = new Point(20, 55),
+                AutoSize = true
+            };
+
+            var descLabel = new Label
+            {
+                Text = LocalizationManager.L("About_Description"),
+                Font = new Font("Segoe UI", 9),
+                Location = new Point(20, 85),
+                Size = new Size(350, 40)
+            };
+
+            var discordLink = new LinkLabel
+            {
+                Text = $"{LocalizationManager.L("About_Discord")}: discord.gg/vjSKGD95HB",
+                Font = new Font("Segoe UI", 9),
+                Location = new Point(20, 135),
+                AutoSize = true
+            };
+            discordLink.Click += (s, args) =>
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "https://discord.gg/vjSKGD95HB",
+                    UseShellExecute = true
+                });
+            };
+
+            var githubLink = new LinkLabel
+            {
+                Text = $"{LocalizationManager.L("About_GitHub")}: github.com/tony1223/L1MapViewer",
+                Font = new Font("Segoe UI", 9),
+                Location = new Point(20, 160),
+                AutoSize = true
+            };
+            githubLink.Click += (s, args) =>
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "https://github.com/tony1223/L1MapViewer",
+                    UseShellExecute = true
+                });
+            };
+
+            var okButton = new Button
+            {
+                Text = LocalizationManager.L("Button_OK"),
+                Location = new Point(150, 200),
+                Size = new Size(100, 30),
+                DialogResult = DialogResult.OK
+            };
+
+            aboutForm.Controls.AddRange(new Control[] { titleLabel, versionLabel, descLabel, discordLink, githubLink, okButton });
+            aboutForm.AcceptButton = okButton;
+            aboutForm.ShowDialog(this);
         }
     }
 }

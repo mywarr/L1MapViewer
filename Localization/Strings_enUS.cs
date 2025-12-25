@@ -19,6 +19,7 @@ namespace L1MapViewer.Localization
             { "Menu_Database", "Database Settings" },
             { "Menu_MapEditor", "Map Editor" },
             { "Menu_Help_Discord", "Discuss on Discord" },
+            { "Menu_Help_About", "About" },
             { "Menu_Language", "Language" },
             { "Menu_Export_ServerPassability", "Export Server Passability" },
             { "Menu_Export_L1JFormat", "L1J Format" },
@@ -416,6 +417,15 @@ namespace L1MapViewer.Localization
             { "Misc_Unit_Pixels", "pixels" },
             { "Misc_Unknown", "Unknown" },
             { "Misc_None", "None" },
+
+            // === About Dialog ===
+            { "About_Title", "About L1MapViewer" },
+            { "About_Version", "Version" },
+            { "About_Description", "Lineage Map Editor - View and edit Lineage game map files" },
+            { "About_Discord", "Discord Community" },
+            { "About_GitHub", "GitHub Project" },
+            { "About_DiscordLink", "https://discord.gg/lineage" },
+            { "About_GitHubLink", "https://github.com/tony1223/L1MapViewer" },
         };
     }
 }

@@ -147,6 +147,11 @@ namespace L1MapViewer.Controls
         public event EventHandler<MapMouseEventArgs> MapMouseUp;
 
         /// <summary>
+        /// 地圖滑鼠雙擊事件（轉發給 MapForm 處理編輯）
+        /// </summary>
+        public event EventHandler<MapMouseEventArgs> MapMouseDoubleClick;
+
+        /// <summary>
         /// 繪製覆蓋層事件（讓 MapForm 繪製編輯層）
         /// </summary>
         public event EventHandler<PaintEventArgs> PaintOverlay;
@@ -285,6 +290,7 @@ namespace L1MapViewer.Controls
             _mapPictureBox.MouseDown += MapPictureBox_MouseDown;
             _mapPictureBox.MouseMove += MapPictureBox_MouseMove;
             _mapPictureBox.MouseUp += MapPictureBox_MouseUp;
+            _mapPictureBox.MouseDoubleClick += MapPictureBox_MouseDoubleClick;
             _mapPanel.MouseWheel += MapPanel_MouseWheel;
             _mapPanel.Resize += MapPanel_Resize;
 
@@ -375,6 +381,15 @@ namespace L1MapViewer.Controls
                 MapMouseUp?.Invoke(this, new MapMouseEventArgs(
                     e.Button, e.Location, worldPoint, gameX, gameY, 0, Control.ModifierKeys));
             }
+        }
+
+        private void MapPictureBox_MouseDoubleClick(object sender, MouseEventArgs e)
+        {
+            // 轉發給外部處理雙擊
+            var worldPoint = ScreenToWorld(e.Location);
+            var (gameX, gameY) = WorldToGameCoords(worldPoint);
+            MapMouseDoubleClick?.Invoke(this, new MapMouseEventArgs(
+                e.Button, e.Location, worldPoint, gameX, gameY, 0, Control.ModifierKeys));
         }
 
         private void MapPanel_MouseWheel(object sender, MouseEventArgs e)

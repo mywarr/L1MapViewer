@@ -19,7 +19,9 @@ namespace L1FlyMapViewer
         private ToolStripMenuItem languageToolStripMenuItem;
         private ToolStripMenuItem langZhTWToolStripMenuItem;
         private ToolStripMenuItem langJaJPToolStripMenuItem;
+        private ToolStripMenuItem langKoKRToolStripMenuItem;
         private ToolStripMenuItem langEnUSToolStripMenuItem;
+        private ToolStripMenuItem aboutToolStripMenuItem;
         private StatusStrip statusStrip1;
         public ToolStripStatusLabel toolStripStatusLabel1;
         public ToolStripProgressBar toolStripProgressBar1;
@@ -161,7 +163,9 @@ namespace L1FlyMapViewer
             this.languageToolStripMenuItem = new ToolStripMenuItem();
             this.langZhTWToolStripMenuItem = new ToolStripMenuItem();
             this.langJaJPToolStripMenuItem = new ToolStripMenuItem();
+            this.langKoKRToolStripMenuItem = new ToolStripMenuItem();
             this.langEnUSToolStripMenuItem = new ToolStripMenuItem();
+            this.aboutToolStripMenuItem = new ToolStripMenuItem();
 
             // StatusStrip
             this.statusStrip1 = new StatusStrip();
@@ -312,6 +316,7 @@ namespace L1FlyMapViewer
                 this.importFs32ToNewMapToolStripMenuItem,
                 this.exportToolStripMenuItem,
                 this.discordToolStripMenuItem,
+                this.aboutToolStripMenuItem,
                 this.languageToolStripMenuItem
             });
             this.menuStrip1.Location = new Point(0, 0);
@@ -379,6 +384,14 @@ namespace L1FlyMapViewer
             this.discordToolStripMenuItem.Click += new System.EventHandler(this.discordToolStripMenuItem_Click);
 
             //
+            // aboutToolStripMenuItem
+            //
+            this.aboutToolStripMenuItem.Name = "aboutToolStripMenuItem";
+            this.aboutToolStripMenuItem.Size = new Size(50, 20);
+            this.aboutToolStripMenuItem.Text = "關於";
+            this.aboutToolStripMenuItem.Click += new System.EventHandler(this.aboutToolStripMenuItem_Click);
+
+            //
             // languageToolStripMenuItem
             //
             this.languageToolStripMenuItem.Name = "languageToolStripMenuItem";
@@ -387,6 +400,7 @@ namespace L1FlyMapViewer
             this.languageToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] {
                 this.langZhTWToolStripMenuItem,
                 this.langJaJPToolStripMenuItem,
+                this.langKoKRToolStripMenuItem,
                 this.langEnUSToolStripMenuItem
             });
 
@@ -407,6 +421,15 @@ namespace L1FlyMapViewer
             this.langJaJPToolStripMenuItem.Text = "日本語";
             this.langJaJPToolStripMenuItem.Tag = "ja-JP";
             this.langJaJPToolStripMenuItem.Click += new System.EventHandler(this.LanguageMenuItem_Click);
+
+            //
+            // langKoKRToolStripMenuItem
+            //
+            this.langKoKRToolStripMenuItem.Name = "langKoKRToolStripMenuItem";
+            this.langKoKRToolStripMenuItem.Size = new Size(120, 22);
+            this.langKoKRToolStripMenuItem.Text = "한국어";
+            this.langKoKRToolStripMenuItem.Tag = "ko-KR";
+            this.langKoKRToolStripMenuItem.Click += new System.EventHandler(this.LanguageMenuItem_Click);
 
             //
             // langEnUSToolStripMenuItem

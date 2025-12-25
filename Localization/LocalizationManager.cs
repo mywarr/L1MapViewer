@@ -17,6 +17,7 @@ namespace L1MapViewer.Localization
         {
             { "zh-TW", "繁體中文" },
             { "ja-JP", "日本語" },
+            { "ko-KR", "한국어" },
             { "en-US", "English" }
         };
 
@@ -65,6 +66,9 @@ namespace L1MapViewer.Localization
             // Load ja-JP (Japanese)
             _resources["ja-JP"] = Strings_jaJP.GetStrings();
 
+            // Load ko-KR (Korean)
+            _resources["ko-KR"] = Strings_koKR.GetStrings();
+
             // Load en-US (English)
             _resources["en-US"] = Strings_enUS.GetStrings();
         }
@@ -87,6 +91,8 @@ namespace L1MapViewer.Localization
                 return "zh-TW";
             if (twoLetterCode == "ja")
                 return "ja-JP";
+            if (twoLetterCode == "ko")
+                return "ko-KR";
 
             // Default to English for unsupported languages
             return "en-US";

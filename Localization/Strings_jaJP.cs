@@ -19,6 +19,7 @@ namespace L1MapViewer.Localization
             { "Menu_Database", "データベース設定" },
             { "Menu_MapEditor", "マップエディタ" },
             { "Menu_Help_Discord", "Discordで議論する" },
+            { "Menu_Help_About", "バージョン情報" },
             { "Menu_Language", "言語" },
             { "Menu_Export_ServerPassability", "サーバー通行データ出力" },
             { "Menu_Export_L1JFormat", "L1J 形式" },
@@ -416,6 +417,15 @@ namespace L1MapViewer.Localization
             { "Misc_Unit_Pixels", "ピクセル" },
             { "Misc_Unknown", "不明" },
             { "Misc_None", "なし" },
+
+            // === About Dialog ===
+            { "About_Title", "L1MapViewer について" },
+            { "About_Version", "バージョン" },
+            { "About_Description", "リネージュマップエディタ - リネージュゲームマップファイルの閲覧と編集" },
+            { "About_Discord", "Discord コミュニティ" },
+            { "About_GitHub", "GitHub プロジェクト" },
+            { "About_DiscordLink", "https://discord.gg/lineage" },
+            { "About_GitHubLink", "https://github.com/tony1223/L1MapViewer" },
         };
     }
 }
