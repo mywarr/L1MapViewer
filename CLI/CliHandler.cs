@@ -129,6 +129,10 @@ namespace L1MapViewer.CLI
                         return CmdDownscaleTile(cmdArgs);
                     case "export-passability":
                         return CmdExportPassability(cmdArgs);
+                    case "export-fullmap":
+                        return Commands.ExportCommands.ExportFullMap(cmdArgs);
+                    case "batch-export":
+                        return Commands.ExportCommands.BatchExport(cmdArgs);
                     case "help":
                     case "-h":
                     case "--help":
@@ -188,6 +192,10 @@ L1MapViewer CLI - S32 檔案解析工具
   check-fs32 <fs32檔案>       檢查 fs32 完整性（Tile 索引、Remaster/Classic 版本）
   export-passability <地圖資料夾> <輸出.txt> [--dir]
                               匯出地圖通行資料為 L1J/DIR 格式（預設 L1J）
+  export-fullmap <地圖資料夾> <輸出.png> [選項]
+                              匯出單張地圖全圖為 PNG/JPG
+  batch-export <map目錄> <輸出目錄> [選項]
+                              批次匯出所有地圖全圖
   help                        顯示此幫助資訊
 
 範例:
