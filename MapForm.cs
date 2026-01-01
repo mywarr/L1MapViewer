@@ -5590,6 +5590,47 @@ namespace L1FlyMapViewer
                 _viewState.ShowCombatZones = chkShowCombatZones.Checked;
             }
 
+            // 同步到浮動面板的 CheckBox（避免無限遞迴）
+            if (sender == chkLayer1 && chkFloatLayer1.Checked != chkLayer1.Checked)
+            {
+                chkFloatLayer1.Checked = chkLayer1.Checked;
+            }
+            else if (sender == chkLayer2 && chkFloatLayer2.Checked != chkLayer2.Checked)
+            {
+                chkFloatLayer2.Checked = chkLayer2.Checked;
+            }
+            else if (sender == chkLayer4 && chkFloatLayer4.Checked != chkLayer4.Checked)
+            {
+                chkFloatLayer4.Checked = chkLayer4.Checked;
+            }
+            else if (sender == chkShowPassable && chkFloatPassable.Checked != chkShowPassable.Checked)
+            {
+                chkFloatPassable.Checked = chkShowPassable.Checked;
+            }
+            else if (sender == chkShowGrid && chkFloatGrid.Checked != chkShowGrid.Checked)
+            {
+                chkFloatGrid.Checked = chkShowGrid.Checked;
+            }
+            else if (sender == chkShowS32Boundary && chkFloatS32Boundary.Checked != chkShowS32Boundary.Checked)
+            {
+                chkFloatS32Boundary.Checked = chkShowS32Boundary.Checked;
+            }
+            else if (sender == chkShowLayer5 && chkFloatLayer5.Checked != chkShowLayer5.Checked)
+            {
+                chkFloatLayer5.Checked = chkShowLayer5.Checked;
+            }
+            else if (sender == chkShowSafeZones && chkFloatSafeZones.Checked != chkShowSafeZones.Checked)
+            {
+                chkFloatSafeZones.Checked = chkShowSafeZones.Checked;
+            }
+            else if (sender == chkShowCombatZones && chkFloatCombatZones.Checked != chkShowCombatZones.Checked)
+            {
+                chkFloatCombatZones.Checked = chkShowCombatZones.Checked;
+            }
+
+            // 更新圖示顯示狀態
+            UpdateLayerIconText();
+
             // 清除快取（因為快取的 bitmap 是用特定圖層設定渲染的）
             ClearS32BlockCache();
 
