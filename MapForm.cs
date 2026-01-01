@@ -6168,7 +6168,7 @@ namespace L1FlyMapViewer
             {
                 lblLayer5Help = new Label();
                 lblLayer5Help.AutoSize = false;
-                lblLayer5Help.Size = new Size(200, 80);
+                lblLayer5Help.Size = new Size(200, 130);
                 lblLayer5Help.BackColor = Color.FromArgb(220, 30, 30, 50);
                 lblLayer5Help.ForeColor = Color.FromArgb(100, 180, 255);
                 lblLayer5Help.Font = new Font("Microsoft JhengHei", 9F, FontStyle.Regular);
@@ -6185,10 +6185,13 @@ namespace L1FlyMapViewer
             }
 
             lblLayer5Help.Text = "【透明編輯模式】\n" +
-                                 "• 左鍵：添加透明設定\n" +
-                                 "• 右鍵：刪除透明設定\n" +
+                                 "• 左鍵：選取地圖格子\n" +
+                                 "• 查看右側【附近群組】\n" +
+                                 "• 右鍵：設定半透明/消失\n" +
+                                 "  紫色 = 半透明區塊\n" +
+                                 "  紅色 = 消失區塊\n" +
                                  "• 再按按鈕：取消模式";
-            lblLayer5Help.Location = new Point(s32MapPanel.Width - lblLayer5Help.Width - 20, 200);
+            lblLayer5Help.Location = new Point(10, 10);
             lblLayer5Help.Visible = true;
             lblLayer5Help.BringToFront();
             lblDefaultHint.Visible = false;
