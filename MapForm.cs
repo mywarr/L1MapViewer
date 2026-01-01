@@ -6374,7 +6374,8 @@ namespace L1FlyMapViewer
             // 如果沒有任何編輯模式啟動，顯示預設提示
             bool anyModeActive = currentPassableEditMode != PassableEditMode.None ||
                                  currentRegionEditMode != RegionEditMode.None ||
-                                 _editState.IsLayer5EditMode;
+                                 _editState.IsLayer5EditMode ||
+                                 _pendingMaterial != null;  // 素材貼上模式
 
             lblDefaultHint.Visible = !anyModeActive;
             if (lblDefaultHint.Visible)
@@ -10387,6 +10388,24 @@ namespace L1FlyMapViewer
 
                 upSw.Stop();
                 LogPerf($"[MOUSE-UP-MIDDLE] total={upSw.ElapsedMilliseconds}ms");
+                return;
+            }
+
+            // 素材貼上模式：左鍵點擊貼上素材
+            if (_pendingMaterial != null && e.Button == MouseButtons.Left && !isSelectingRegion)
+            {
+                // 將螢幕座標轉換為世界座標
+                var worldPoint = S32ScreenToWorld(e.X, e.Y);
+                int worldX = worldPoint.X;
+                int worldY = worldPoint.Y;
+
+                // 找到點擊的格子
+                var result = CellFinder.FindCellOptimized(worldX, worldY, _document.S32Files.Values);
+                if (result.Found)
+                {
+                    var (gameX, gameY) = CoordinateHelper.LocalToGameCoords(result.S32Data, result.CellX, result.CellY);
+                    PasteMaterialAtPosition(gameX, gameY);
+                }
                 return;
             }
 
@@ -14696,12 +14715,14 @@ namespace L1FlyMapViewer
         }
 
         // 素材面板 - 雙擊選擇素材
-        private void lvMaterials_DoubleClick(object sender, EventArgs e)
+        private void lvMaterials_MouseDoubleClick(object sender, MouseEventArgs e)
         {
-            if (lvMaterials.SelectedItems.Count == 0)
+            // 使用 HitTest 確認點擊位置
+            var hitInfo = lvMaterials.HitTest(e.Location);
+            if (hitInfo.Item == null)
                 return;
 
-            var item = lvMaterials.SelectedItems[0];
+            var item = hitInfo.Item;
             if (item.Tag is string filePath)
             {
                 try
@@ -15933,6 +15954,9 @@ namespace L1FlyMapViewer
             // 更新素材列表並高亮選中項目
             RefreshMaterialsList();
             HighlightPendingMaterial();
+
+            // 隱藏預設提示
+            UpdateDefaultHintVisibility();
         }
 
         // 處理素材中的 Tiles - 檢查 MD5 並決定是否需要匯入
@@ -16273,6 +16297,9 @@ namespace L1FlyMapViewer
 
             // 清除高亮
             ClearMaterialHighlight();
+
+            // 顯示預設提示
+            UpdateDefaultHintVisibility();
         }
 
         // 高亮目前選中的素材
