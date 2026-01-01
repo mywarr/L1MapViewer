@@ -428,8 +428,8 @@ namespace L1FlyMapViewer
                     _layer8AnimFrame[key]++;
                 }
 
-                // 重繪
-                RenderS32Map();
+                // 只重繪 L8 動畫覆蓋層，不影響地圖和其他圖層
+                _mapViewerControl?.InvalidateAnimationOverlay();
             };
 
             // 註冊滑鼠滾輪事件用於縮放
@@ -6651,12 +6651,8 @@ namespace L1FlyMapViewer
                             DrawHighlightedCellViewport(viewportBitmap, currentMap, worldRect);
                         }
 
-                        // 繪製 Layer8 標記和啟用的 SPR 動畫
-                        Console.WriteLine($"[Layer8-Check] ShowLayer8={_viewState.ShowLayer8}, S32FilesCount={_document.S32Files.Count}");
-                        if (_viewState.ShowLayer8)
-                        {
-                            DrawLayer8MarkersAndSprites(viewportBitmap, worldRect);
-                        }
+                        // Layer8 標記和 SPR 動畫統一在 overlay 繪製（PaintOverlay 事件）
+                        // 這樣 marker 和動畫可以一起更新，不需要等完整重繪
 
                         // 保存渲染結果元數據
                         _viewState.SetRenderResult(worldRect.X, worldRect.Y, worldRect.Width, worldRect.Height, _viewState.ZoomLevel);
@@ -7863,25 +7859,40 @@ namespace L1FlyMapViewer
 
                         bool isEnabled = _editState.EnabledLayer8Items.Contains((s32Data.FilePath, i));
 
-                        // 如果已啟用，繪製 SPR 動畫
+                        // 繪製標記（圓點）
+                        // 啟用時：灰色半透明 (opacity 0.1)，在 SPR 下面
+                        // 停用時：橙色實心
+                        int markerRadius = 10;
+
                         if (isEnabled)
                         {
+                            // 啟用狀態：先畫灰色半透明 marker
+                            using (SolidBrush brush = new SolidBrush(Color.FromArgb(25, 128, 128, 128)))
+                            {
+                                g.FillEllipse(brush, x - markerRadius, y - markerRadius, markerRadius * 2, markerRadius * 2);
+                            }
+                            using (Pen pen = new Pen(Color.FromArgb(50, 255, 255, 255)))
+                            {
+                                g.DrawEllipse(pen, x - markerRadius, y - markerRadius, markerRadius * 2, markerRadius * 2);
+                            }
+
+                            // 繪製 SPR 動畫（在 marker 上面）
                             DrawLayer8Sprite(g, item.SprId, x, y, s32Data.FilePath, i);
                         }
-
-                        // 繪製標記（圓點）- 加大尺寸
-                        Color markerColor = isEnabled ? Color.Lime : Color.Orange;
-                        int markerRadius = 10;
-                        using (SolidBrush brush = new SolidBrush(markerColor))
+                        else
                         {
-                            g.FillEllipse(brush, x - markerRadius, y - markerRadius, markerRadius * 2, markerRadius * 2);
-                        }
-                        g.DrawEllipse(Pens.White, x - markerRadius, y - markerRadius, markerRadius * 2, markerRadius * 2);
+                            // 停用狀態：橙色實心 marker
+                            using (SolidBrush brush = new SolidBrush(Color.Orange))
+                            {
+                                g.FillEllipse(brush, x - markerRadius, y - markerRadius, markerRadius * 2, markerRadius * 2);
+                            }
+                            g.DrawEllipse(Pens.White, x - markerRadius, y - markerRadius, markerRadius * 2, markerRadius * 2);
 
-                        // 在標記旁顯示 SprId
-                        using (Font font = new Font("Arial", 8, FontStyle.Bold))
-                        {
-                            g.DrawString(item.SprId.ToString(), font, Brushes.White, x + markerRadius + 2, y - 6);
+                            // 只有停用狀態才顯示 SprId
+                            using (Font font = new Font("Arial", 8, FontStyle.Bold))
+                            {
+                                g.DrawString(item.SprId.ToString(), font, Brushes.White, x + markerRadius + 2, y - 6);
+                            }
                         }
                         drawnCount++;
                     }
@@ -9139,6 +9150,45 @@ namespace L1FlyMapViewer
         // MapViewerControl 滑鼠按下事件 - 轉發給編輯處理
         private void MapViewerControl_MapMouseDown(object sender, MapMouseEventArgs e)
         {
+            // 先直接用世界座標處理 Layer8 marker 點擊（避免座標轉換誤差）
+            if (e.Button == MouseButtons.Left && Control.ModifierKeys == Keys.None && _viewState.ShowLayer8)
+            {
+                var clickedMarker = FindLayer8MarkerAtPosition(e.WorldLocation.X, e.WorldLocation.Y);
+                if (clickedMarker.HasValue)
+                {
+                    var (s32Path, index) = clickedMarker.Value;
+                    Console.WriteLine($"[Layer8-MapViewer] Clicked marker: {s32Path} index={index}");
+
+                    // 切換顯示狀態
+                    if (_editState.EnabledLayer8Items.Contains((s32Path, index)))
+                    {
+                        _editState.EnabledLayer8Items.Remove((s32Path, index));
+                        _layer8AnimFrame.Remove((s32Path, index));
+
+                        if (_editState.EnabledLayer8Items.Count == 0 && _layer8AnimTimer != null)
+                        {
+                            _layer8AnimTimer.Stop();
+                        }
+                        Console.WriteLine($"[Layer8-MapViewer] Disabled marker");
+                    }
+                    else
+                    {
+                        _editState.EnabledLayer8Items.Add((s32Path, index));
+                        _layer8AnimFrame[(s32Path, index)] = 0;
+
+                        if (_layer8AnimTimer != null && !_layer8AnimTimer.Enabled)
+                        {
+                            _layer8AnimTimer.Start();
+                        }
+                        Console.WriteLine($"[Layer8-MapViewer] Enabled marker, total enabled: {_editState.EnabledLayer8Items.Count}");
+                    }
+
+                    // 只重繪 L8 動畫覆蓋層，不影響地圖和其他圖層
+                    _mapViewerControl.InvalidateAnimationOverlay();
+                    return;
+                }
+            }
+
             // 使用 MapViewerControl 提供的世界座標，轉換回螢幕座標給現有邏輯
             var screenLocation = _mapViewerControl.WorldToScreen(e.WorldLocation);
             var me = new MouseEventArgs(e.Button, 1, screenLocation.X, screenLocation.Y, e.Delta);
@@ -9161,11 +9211,141 @@ namespace L1FlyMapViewer
             s32PictureBox_MouseUp(sender, me);
         }
 
-        // MapViewerControl 繪製覆蓋層 - 繪製選取框、多邊形等
+        // MapViewerControl 繪製覆蓋層 - 繪製 L8 動畫、選取框、多邊形等
         private void MapViewerControl_PaintOverlay(object sender, PaintEventArgs e)
         {
+            // 繪製 Layer8 標記和 SPR 動畫
+            if (_viewState.ShowLayer8)
+            {
+                DrawLayer8OverlayOnControl(e.Graphics);
+            }
+
             // 轉發給原有的 Paint 處理（跳過 bitmap 繪製部分，只繪製編輯層）
             DrawEditingOverlay(e.Graphics);
+        }
+
+        // 在 MapViewerControl 的覆蓋層上繪製 Layer8 標記
+        private void DrawLayer8OverlayOnControl(Graphics g)
+        {
+            if (_document.S32Files.Count == 0) return;
+
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                if (s32Data.Layer8.Count == 0) continue;
+
+                int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                int mx = loc[0];
+                int my = loc[1];
+
+                for (int i = 0; i < s32Data.Layer8.Count; i++)
+                {
+                    var item = s32Data.Layer8[i];
+
+                    // Layer8 X,Y 是絕對遊戲座標，先轉為本地座標
+                    int localLayer3X = item.X - s32Data.SegInfo.nLinBeginX;
+                    int localLayer3Y = item.Y - s32Data.SegInfo.nLinBeginY;
+
+                    if (localLayer3X < 0 || localLayer3X > 63 || localLayer3Y < 0 || localLayer3Y > 63)
+                        continue;
+
+                    int layer1X = localLayer3X * 2;
+                    int layer1Y = localLayer3Y;
+
+                    int baseX = -24 * (layer1X / 2);
+                    int baseY = 63 * 12 - 12 * (layer1X / 2);
+
+                    // Marker 位置：原始 L8 座標位置
+                    int markerWorldX = mx + baseX + layer1X * 24 + layer1Y * 24 + 12;
+                    int markerWorldY = my + baseY + layer1Y * 12 + 12;
+
+                    // SPR 位置：偏移 (20, 30)
+                    int sprWorldX = markerWorldX + 20;
+                    int sprWorldY = markerWorldY + 30;
+
+                    // 轉為螢幕座標
+                    var markerScreenPoint = _mapViewerControl.WorldToScreen(new Point(markerWorldX, markerWorldY));
+                    int markerX = markerScreenPoint.X;
+                    int markerY = markerScreenPoint.Y;
+
+                    var sprScreenPoint = _mapViewerControl.WorldToScreen(new Point(sprWorldX, sprWorldY));
+                    int sprX = sprScreenPoint.X;
+                    int sprY = sprScreenPoint.Y;
+
+                    // 檢查是否在可見範圍內
+                    if (markerX < -50 || markerX > _mapViewerControl.Width + 50 || markerY < -50 || markerY > _mapViewerControl.Height + 50)
+                        continue;
+
+                    bool isEnabled = _editState.EnabledLayer8Items.Contains((s32Data.FilePath, i));
+
+                    // 繪製標記（圓點）
+                    // 啟用時：灰色半透明 (opacity 0.1)，在 SPR 下面
+                    // 停用時：橙色實心
+                    int markerRadius = (int)(10 * _viewState.ZoomLevel);
+                    if (markerRadius < 5) markerRadius = 5;
+
+                    if (isEnabled)
+                    {
+                        // 啟用狀態：先畫灰色半透明 marker
+                        using (SolidBrush brush = new SolidBrush(Color.FromArgb(25, 128, 128, 128)))
+                        {
+                            g.FillEllipse(brush, markerX - markerRadius, markerY - markerRadius, markerRadius * 2, markerRadius * 2);
+                        }
+                        using (Pen pen = new Pen(Color.FromArgb(50, 255, 255, 255)))
+                        {
+                            g.DrawEllipse(pen, markerX - markerRadius, markerY - markerRadius, markerRadius * 2, markerRadius * 2);
+                        }
+
+                        // 繪製 SPR 動畫（在 marker 上面，但位置往左偏移）
+                        DrawLayer8SpriteOnOverlay(g, item.SprId, sprX, sprY, s32Data.FilePath, i);
+                    }
+                    else
+                    {
+                        // 停用狀態：橙色實心 marker
+                        using (SolidBrush brush = new SolidBrush(Color.Orange))
+                        {
+                            g.FillEllipse(brush, markerX - markerRadius, markerY - markerRadius, markerRadius * 2, markerRadius * 2);
+                        }
+                        g.DrawEllipse(Pens.White, markerX - markerRadius, markerY - markerRadius, markerRadius * 2, markerRadius * 2);
+                    }
+
+                    // 所有狀態都顯示 SprId
+                    using (Font font = new Font("Arial", (float)Math.Max(6, 8 * _viewState.ZoomLevel), FontStyle.Bold))
+                    {
+                        g.DrawString(item.SprId.ToString(), font, Brushes.White, markerX + markerRadius + 2, markerY - 6);
+                    }
+                }
+            }
+        }
+
+        // 在覆蓋層上繪製 Layer8 SPR 動畫帧
+        private void DrawLayer8SpriteOnOverlay(Graphics g, int sprId, int x, int y, string s32Path, int itemIndex)
+        {
+            if (!_layer8SprCache.TryGetValue(sprId, out var frames))
+            {
+                frames = LoadLayer8SprFrames(sprId);
+                _layer8SprCache[sprId] = frames;
+            }
+
+            if (frames == null || frames.Count == 0) return;
+
+            var key = (s32Path, itemIndex);
+            if (!_layer8AnimFrame.TryGetValue(key, out int frameIdx))
+            {
+                frameIdx = 0;
+                _layer8AnimFrame[key] = 0;
+            }
+
+            Image frame = frames[frameIdx % frames.Count];
+            float scale = (float)_viewState.ZoomLevel;
+            int drawW = (int)(frame.Width * scale);
+            int drawH = (int)(frame.Height * scale);
+
+            // 基準點：下中 (anchor = 2)
+            int drawX = x - drawW / 2;
+            int drawY = y - drawH;
+            g.DrawImage(frame, drawX, drawY, drawW, drawH);
         }
 
         // MapViewerControl 座標變更事件 - 更新狀態列
@@ -20277,6 +20457,75 @@ namespace L1FlyMapViewer
 
             // 使用非模態對話框，可以平行瀏覽地圖
             resultForm.Show();
+        }
+
+        // 啟用畫面中所有可見的 L8 特效
+        private void btnEnableVisibleL8_Click(object sender, EventArgs e)
+        {
+            if (_document.S32Files.Count == 0)
+            {
+                MessageBox.Show(LocalizationManager.L("Message_PleaseLoadMap"), LocalizationManager.L("Title_Info"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            int enabledCount = 0;
+
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                if (s32Data.Layer8.Count == 0) continue;
+
+                int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                int mx = loc[0];
+                int my = loc[1];
+
+                for (int i = 0; i < s32Data.Layer8.Count; i++)
+                {
+                    var item = s32Data.Layer8[i];
+
+                    // Layer8 X,Y 是絕對遊戲座標，先轉為本地座標
+                    int localLayer3X = item.X - s32Data.SegInfo.nLinBeginX;
+                    int localLayer3Y = item.Y - s32Data.SegInfo.nLinBeginY;
+
+                    if (localLayer3X < 0 || localLayer3X > 63 || localLayer3Y < 0 || localLayer3Y > 63)
+                        continue;
+
+                    int layer1X = localLayer3X * 2;
+                    int layer1Y = localLayer3Y;
+
+                    int baseX = -24 * (layer1X / 2);
+                    int baseY = 63 * 12 - 12 * (layer1X / 2);
+
+                    int markerWorldX = mx + baseX + layer1X * 24 + layer1Y * 24 + 12;
+                    int markerWorldY = my + baseY + layer1Y * 12 + 12;
+
+                    // 轉為螢幕座標
+                    var markerScreenPoint = _mapViewerControl.WorldToScreen(new Point(markerWorldX, markerWorldY));
+                    int markerX = markerScreenPoint.X;
+                    int markerY = markerScreenPoint.Y;
+
+                    // 檢查是否在可見範圍內
+                    if (markerX >= -50 && markerX <= _mapViewerControl.Width + 50 &&
+                        markerY >= -50 && markerY <= _mapViewerControl.Height + 50)
+                    {
+                        var key = (s32Data.FilePath, i);
+                        if (!_editState.EnabledLayer8Items.Contains(key))
+                        {
+                            _editState.EnabledLayer8Items.Add(key);
+                            enabledCount++;
+                        }
+                    }
+                }
+            }
+
+            // 重繪 L8 動畫覆蓋層
+            _mapViewerControl?.InvalidateAnimationOverlay();
+
+            // 顯示啟用數量
+            if (enabledCount > 0)
+            {
+                // 可選：顯示提示訊息
+                // MessageBox.Show($"已啟用 {enabledCount} 個 L8 特效", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
         }
 
         // 查看與編輯第一層（地板圖塊）資料

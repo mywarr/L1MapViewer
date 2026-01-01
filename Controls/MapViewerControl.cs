@@ -152,7 +152,7 @@ namespace L1MapViewer.Controls
         public event EventHandler<MapMouseEventArgs> MapMouseDoubleClick;
 
         /// <summary>
-        /// 繪製覆蓋層事件（讓 MapForm 繪製編輯層）
+        /// 繪製覆蓋層事件（讓 MapForm 繪製編輯層和動畫）
         /// </summary>
         public event EventHandler<PaintEventArgs> PaintOverlay;
 
@@ -267,6 +267,15 @@ namespace L1MapViewer.Controls
         public void InvalidateOverlay()
         {
             _mapPictureBox.Invalidate();
+        }
+
+        /// <summary>
+        /// 只重繪動畫覆蓋層（用於 L8 動畫等持續更新的內容）
+        /// 不重新渲染地圖，只觸發 Paint 事件
+        /// </summary>
+        public void InvalidateAnimationOverlay()
+        {
+            _mapPictureBox?.Invalidate();
         }
 
         /// <summary>

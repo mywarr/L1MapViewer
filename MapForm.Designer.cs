@@ -86,6 +86,7 @@ namespace L1FlyMapViewer
         private Button btnToolCheckL6;
         private Button btnToolCheckL7;
         private Button btnToolCheckL8;
+        private Button btnEnableVisibleL8;
         private ToolTip toolTip1;
 
         // 中間 TabControl
@@ -234,6 +235,7 @@ namespace L1FlyMapViewer
             this.btnToolCheckL6 = new Button();
             this.btnToolCheckL7 = new Button();
             this.btnToolCheckL8 = new Button();
+            this.btnEnableVisibleL8 = new Button();
             this.toolTip1 = new ToolTip();
 
             // 中間 TabControl
@@ -1421,6 +1423,7 @@ namespace L1FlyMapViewer
             this.toolbarPanel2.Controls.Add(this.btnToolCheckL6);
             this.toolbarPanel2.Controls.Add(this.btnToolCheckL7);
             this.toolbarPanel2.Controls.Add(this.btnToolCheckL8);
+            this.toolbarPanel2.Controls.Add(this.btnEnableVisibleL8);
             this.toolbarPanel2.Dock = DockStyle.Left;
             this.toolbarPanel2.Location = new Point(40, 0);
             this.toolbarPanel2.Name = "toolbarPanel2";
@@ -1667,6 +1670,18 @@ namespace L1FlyMapViewer
             this.btnToolCheckL8.UseVisualStyleBackColor = true;
             this.toolTip1.SetToolTip(this.btnToolCheckL8, "查看哪些S32有第八層（特效）資料");
             this.btnToolCheckL8.Click += new System.EventHandler(this.btnToolCheckL8_Click);
+
+            //
+            // btnEnableVisibleL8
+            //
+            this.btnEnableVisibleL8.Location = new Point(2, 266);
+            this.btnEnableVisibleL8.Name = "btnEnableVisibleL8";
+            this.btnEnableVisibleL8.Size = new Size(34, 34);
+            this.btnEnableVisibleL8.TabIndex = 15;
+            this.btnEnableVisibleL8.Text = "啟L8";
+            this.btnEnableVisibleL8.UseVisualStyleBackColor = true;
+            this.toolTip1.SetToolTip(this.btnEnableVisibleL8, "啟用畫面中所有可見的 L8 特效");
+            this.btnEnableVisibleL8.Click += new System.EventHandler(this.btnEnableVisibleL8_Click);
 
             //
             // MapForm
