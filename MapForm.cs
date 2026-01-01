@@ -9916,6 +9916,46 @@ namespace L1FlyMapViewer
                 return;
             }
 
+            // 先檢查 Layer8 marker 點擊（不需要選取 S32）
+            if (e.Button == MouseButtons.Left && Control.ModifierKeys == Keys.None && _viewState.ShowLayer8)
+            {
+                var worldPoint = S32ScreenToWorld(e.Location.X, e.Location.Y);
+                var clickedMarker = FindLayer8MarkerAtPosition(worldPoint.X, worldPoint.Y);
+                if (clickedMarker.HasValue)
+                {
+                    var (s32Path, index) = clickedMarker.Value;
+                    Console.WriteLine($"[Layer8] Clicked marker: {s32Path} index={index}");
+
+                    // 切換顯示狀態
+                    if (_editState.EnabledLayer8Items.Contains((s32Path, index)))
+                    {
+                        _editState.EnabledLayer8Items.Remove((s32Path, index));
+                        _layer8AnimFrame.Remove((s32Path, index));
+
+                        if (_editState.EnabledLayer8Items.Count == 0 && _layer8AnimTimer != null)
+                        {
+                            _layer8AnimTimer.Stop();
+                        }
+                        Console.WriteLine($"[Layer8] Disabled marker");
+                    }
+                    else
+                    {
+                        _editState.EnabledLayer8Items.Add((s32Path, index));
+                        _layer8AnimFrame[(s32Path, index)] = 0;
+
+                        if (_layer8AnimTimer != null && !_layer8AnimTimer.Enabled)
+                        {
+                            _layer8AnimTimer.Start();
+                        }
+                        Console.WriteLine($"[Layer8] Enabled marker, total enabled: {_editState.EnabledLayer8Items.Count}");
+                    }
+
+                    // 重繪
+                    RenderS32Map();
+                    return;
+                }
+            }
+
             if (currentS32Data == null || currentS32FileItem == null)
                 return;
 
@@ -9948,48 +9988,9 @@ namespace L1FlyMapViewer
                 this.toolStripStatusLabel1.Text = "已取消多邊形繪製";
                 return;
             }
-            // 左鍵：先檢查是否點擊 Layer8 marker，再開始區域選擇
+            // 左鍵：開始區域選擇（Layer8 點擊已在前面處理）
             else if (e.Button == MouseButtons.Left && Control.ModifierKeys == Keys.None && _pendingMaterial == null)
             {
-                // 先檢查是否點擊 Layer8 marker
-                if (_viewState.ShowLayer8)
-                {
-                    var worldPoint = S32ScreenToWorld(e.Location.X, e.Location.Y);
-                    var clickedMarker = FindLayer8MarkerAtPosition(worldPoint.X, worldPoint.Y);
-                    if (clickedMarker.HasValue)
-                    {
-                        var (s32Path, index) = clickedMarker.Value;
-                        Console.WriteLine($"[Layer8] Clicked marker: {s32Path} index={index}");
-
-                        // 切換顯示狀態
-                        if (_editState.EnabledLayer8Items.Contains((s32Path, index)))
-                        {
-                            _editState.EnabledLayer8Items.Remove((s32Path, index));
-                            _layer8AnimFrame.Remove((s32Path, index));
-
-                            if (_editState.EnabledLayer8Items.Count == 0 && _layer8AnimTimer != null)
-                            {
-                                _layer8AnimTimer.Stop();
-                            }
-                        }
-                        else
-                        {
-                            _editState.EnabledLayer8Items.Add((s32Path, index));
-                            _layer8AnimFrame[(s32Path, index)] = 0;
-
-                            if (_layer8AnimTimer != null && !_layer8AnimTimer.Enabled)
-                            {
-                                _layer8AnimTimer.Start();
-                            }
-                        }
-
-                        // 重繪
-                        RenderS32Map();
-                        return;  // 不進入區域選擇模式
-                    }
-                }
-
-                // 沒有點擊到 Layer8 marker，開始區域選擇
                 isSelectingRegion = true;
                 isLayer4CopyMode = true;  // 進入複製模式
                 regionStartPoint = e.Location;
@@ -13298,7 +13299,7 @@ namespace L1FlyMapViewer
         {
             if (_document.S32Files.Count == 0)
             {
-                this.toolStripStatusLabel1.Text = "請先載入地圖";
+                this.toolStripStatusLabel1.Text = LocalizationManager.L("Message_PleaseLoadMap");
                 return;
             }
 
@@ -13343,7 +13344,7 @@ namespace L1FlyMapViewer
                 chkFloatLayer8.Checked = true;
             }
 
-            this.toolStripStatusLabel1.Text = $"已啟用 {addedCount} 個 L8 特效（總共 {_editState.EnabledLayer8Items.Count} 個）";
+            this.toolStripStatusLabel1.Text = string.Format(LocalizationManager.L("L8_EnabledCount"), addedCount, _editState.EnabledLayer8Items.Count);
             RenderS32Map();
         }
 
@@ -19175,7 +19176,7 @@ namespace L1FlyMapViewer
         {
             if (_document.S32Files.Count == 0)
             {
-                MessageBox.Show("請先載入地圖", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(LocalizationManager.L("Message_PleaseLoadMap"), LocalizationManager.L("Title_Info"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
@@ -19227,7 +19228,7 @@ namespace L1FlyMapViewer
 
             // 顯示結果
             Form resultForm = new Form();
-            resultForm.Text = $"L8 檢查、編輯與清除";
+            resultForm.Text = LocalizationManager.L("L8_Title");
             resultForm.Size = new Size(850, 680);
             resultForm.FormBorderStyle = FormBorderStyle.Sizable;
             resultForm.StartPosition = FormStartPosition.CenterParent;
@@ -19236,7 +19237,7 @@ namespace L1FlyMapViewer
             int totalItemsSelected = s32WithL8Selected.Sum(x => x.count);
             int extendedCount = _document.S32Files.Values.Count(s => s.Layer8HasExtendedData);
             Label lblSummary = new Label();
-            lblSummary.Text = $"選取: {s32WithL8Selected.Count} 個 S32 / {totalItemsSelected} 項 | 全部: {s32WithL8All.Count} 個 S32 / {totalItemsAll} 項 | {extendedCount} 個擴展格式";
+            lblSummary.Text = string.Format(LocalizationManager.L("L8_Summary"), s32WithL8Selected.Count, totalItemsSelected, s32WithL8All.Count, totalItemsAll, extendedCount);
             lblSummary.Location = new Point(10, 10);
             lblSummary.Size = new Size(810, 20);
             resultForm.Controls.Add(lblSummary);
@@ -19246,8 +19247,8 @@ namespace L1FlyMapViewer
             tabControl.Location = new Point(10, 115);
             tabControl.Size = new Size(810, 330);
 
-            TabPage tabAll = new TabPage($"全部 ({s32WithL8All.Count})");
-            TabPage tabSelected = new TabPage($"選取的 S32 ({s32WithL8Selected.Count})");
+            TabPage tabAll = new TabPage(string.Format(LocalizationManager.L("L8_TabAll"), s32WithL8All.Count));
+            TabPage tabSelected = new TabPage(string.Format(LocalizationManager.L("L8_TabSelected"), s32WithL8Selected.Count));
             tabControl.TabPages.Add(tabAll);
             tabControl.TabPages.Add(tabSelected);
 
@@ -19370,13 +19371,13 @@ namespace L1FlyMapViewer
                 lv.FullRowSelect = true;
                 lv.CheckBoxes = true;
                 lv.SmallImageList = sprImageList;
-                lv.Columns.Add("S32 檔案", 100);
-                lv.Columns.Add("擴展", 45);
-                lv.Columns.Add("SprId", 60);
-                lv.Columns.Add("預覽", 55);
-                lv.Columns.Add("X", 50);
-                lv.Columns.Add("Y", 50);
-                lv.Columns.Add("ExtData", 70);
+                lv.Columns.Add(LocalizationManager.L("L8_Column_File"), 100);
+                lv.Columns.Add(LocalizationManager.L("L8_Column_Extended"), 45);
+                lv.Columns.Add(LocalizationManager.L("L8_Column_SprId"), 60);
+                lv.Columns.Add(LocalizationManager.L("L8_Column_Preview"), 55);
+                lv.Columns.Add(LocalizationManager.L("L8_Column_X"), 50);
+                lv.Columns.Add(LocalizationManager.L("L8_Column_Y"), 50);
+                lv.Columns.Add(LocalizationManager.L("L8_Column_ExtData"), 70);
 
                 // 初始化排序狀態
                 sortStates[lv] = (-1, true);
@@ -19405,7 +19406,7 @@ namespace L1FlyMapViewer
 
             // 預覽區域 (右側)
             GroupBox gbPreview = new GroupBox();
-            gbPreview.Text = "SPR 預覽";
+            gbPreview.Text = LocalizationManager.L("L8_Preview");
             gbPreview.Location = new Point(640, 115);
             gbPreview.Size = new Size(180, 330);
             resultForm.Controls.Add(gbPreview);
@@ -19421,13 +19422,13 @@ namespace L1FlyMapViewer
             Label lblPreviewInfo = new Label();
             lblPreviewInfo.Location = new Point(10, 185);
             lblPreviewInfo.Size = new Size(160, 45);
-            lblPreviewInfo.Text = "選取項目以預覽";
+            lblPreviewInfo.Text = LocalizationManager.L("L8_SelectToPreview");
             lblPreviewInfo.ForeColor = Color.Gray;
             gbPreview.Controls.Add(lblPreviewInfo);
 
             // 跳轉按鈕
             Button btnJumpToLocation = new Button();
-            btnJumpToLocation.Text = "跳轉到位置";
+            btnJumpToLocation.Text = LocalizationManager.L("L8_JumpToLocation");
             btnJumpToLocation.Location = new Point(10, 232);
             btnJumpToLocation.Size = new Size(160, 25);
             btnJumpToLocation.Enabled = false;
@@ -19435,7 +19436,7 @@ namespace L1FlyMapViewer
 
             // 篩選無圖項目
             CheckBox chkFilterNoImage = new CheckBox();
-            chkFilterNoImage.Text = "只顯示無圖項目";
+            chkFilterNoImage.Text = LocalizationManager.L("L8_FilterNoImage");
             chkFilterNoImage.Location = new Point(10, 260);
             chkFilterNoImage.Size = new Size(160, 24);
             chkFilterNoImage.ForeColor = Color.OrangeRed;
@@ -19487,12 +19488,12 @@ namespace L1FlyMapViewer
 
             // 擴展格式設定區
             GroupBox gbExtended = new GroupBox();
-            gbExtended.Text = "擴展格式設定";
+            gbExtended.Text = LocalizationManager.L("L8_ExtendedSettings");
             gbExtended.Location = new Point(10, 35);
             gbExtended.Size = new Size(810, 75);
 
             Label lblExtendedInfo = new Label();
-            lblExtendedInfo.Text = "擴展格式 (Extended) 表示 Layer8 項目包含額外 4 bytes 資料。選擇 S32 檔案後可切換其擴展格式設定：";
+            lblExtendedInfo.Text = LocalizationManager.L("L8_ExtendedInfo");
             lblExtendedInfo.Location = new Point(10, 18);
             lblExtendedInfo.Size = new Size(550, 20);
             gbExtended.Controls.Add(lblExtendedInfo);
@@ -19504,7 +19505,7 @@ namespace L1FlyMapViewer
             foreach (var kvp in _document.S32Files)
             {
                 string fileName = Path.GetFileName(kvp.Key);
-                string extMark = kvp.Value.Layer8HasExtendedData ? " [擴展]" : "";
+                string extMark = kvp.Value.Layer8HasExtendedData ? $" [{LocalizationManager.L("L8_ExtendedFormat")}]" : "";
                 cmbS32Extended.Items.Add(new { FilePath = kvp.Key, Display = $"{fileName}{extMark}" });
             }
             cmbS32Extended.DisplayMember = "Display";
@@ -19514,11 +19515,11 @@ namespace L1FlyMapViewer
             Label lblCurrentStatus = new Label();
             lblCurrentStatus.Location = new Point(220, 45);
             lblCurrentStatus.Size = new Size(150, 20);
-            lblCurrentStatus.Text = "目前：未選擇";
+            lblCurrentStatus.Text = string.Format(LocalizationManager.L("L8_CurrentStatus"), LocalizationManager.L("L8_NotSelected"));
             gbExtended.Controls.Add(lblCurrentStatus);
 
             Button btnSetExtended = new Button();
-            btnSetExtended.Text = "設為擴展";
+            btnSetExtended.Text = LocalizationManager.L("L8_SetExtended");
             btnSetExtended.Location = new Point(380, 40);
             btnSetExtended.Size = new Size(90, 28);
             btnSetExtended.Click += (s, args) =>
@@ -19530,10 +19531,10 @@ namespace L1FlyMapViewer
                 {
                     s32Data.Layer8HasExtendedData = true;
                     s32Data.IsModified = true;
-                    lblCurrentStatus.Text = "目前：擴展格式";
+                    lblCurrentStatus.Text = string.Format(LocalizationManager.L("L8_CurrentStatus"), LocalizationManager.L("L8_ExtendedFormat"));
                     // 更新 ComboBox 顯示
                     int idx = cmbS32Extended.SelectedIndex;
-                    cmbS32Extended.Items[idx] = new { FilePath = filePath, Display = $"{Path.GetFileName(filePath)} [擴展]" };
+                    cmbS32Extended.Items[idx] = new { FilePath = filePath, Display = $"{Path.GetFileName(filePath)} [{LocalizationManager.L("L8_ExtendedFormat")}]" };
                     cmbS32Extended.SelectedIndex = idx;
                     // 更新 ListView 中該 S32 的項目
                     foreach (ListViewItem lvi in lvItems.Items)
@@ -19542,19 +19543,19 @@ namespace L1FlyMapViewer
                         var (lvFilePath, lvItem) = ((string, Layer8Item))lvi.Tag;
                         if (lvFilePath == filePath)
                         {
-                            lvi.SubItems[1].Text = "是";  // 擴展欄位 (索引 1)
+                            lvi.SubItems[1].Text = LocalizationManager.L("L8_Yes");  // 擴展欄位 (索引 1)
                         }
                     }
                     // 更新摘要
                     int newExtCount = _document.S32Files.Values.Count(x => x.Layer8HasExtendedData);
-                    lblSummary.Text = $"共 {s32WithL8.Count} 個 S32 有 Layer8 資料，總計 {totalItems} 項。{newExtCount} 個 S32 使用擴展格式。";
-                    MessageBox.Show($"已將 {Path.GetFileName(filePath)} 設為擴展格式。\n請記得儲存 S32 檔案。", "完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    lblSummary.Text = string.Format(LocalizationManager.L("L8_Summary"), s32WithL8Selected.Count, totalItemsSelected, s32WithL8All.Count, totalItemsAll, newExtCount);
+                    MessageBox.Show(string.Format(LocalizationManager.L("L8_SetExtendedDone"), Path.GetFileName(filePath)), LocalizationManager.L("Title_Success"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             };
             gbExtended.Controls.Add(btnSetExtended);
 
             Button btnSetNormal = new Button();
-            btnSetNormal.Text = "設為一般";
+            btnSetNormal.Text = LocalizationManager.L("L8_SetNormal");
             btnSetNormal.Location = new Point(480, 40);
             btnSetNormal.Size = new Size(90, 28);
             btnSetNormal.Click += (s, args) =>
@@ -19571,7 +19572,7 @@ namespace L1FlyMapViewer
                         item.ExtendedData = 0;
                     }
                     s32Data.IsModified = true;
-                    lblCurrentStatus.Text = "目前：一般格式";
+                    lblCurrentStatus.Text = string.Format(LocalizationManager.L("L8_CurrentStatus"), LocalizationManager.L("L8_NormalFormat"));
                     // 更新 ComboBox 顯示
                     int idx = cmbS32Extended.SelectedIndex;
                     cmbS32Extended.Items[idx] = new { FilePath = filePath, Display = Path.GetFileName(filePath) };
@@ -19589,14 +19590,14 @@ namespace L1FlyMapViewer
                     }
                     // 更新摘要
                     int newExtCount = _document.S32Files.Values.Count(x => x.Layer8HasExtendedData);
-                    lblSummary.Text = $"共 {s32WithL8.Count} 個 S32 有 Layer8 資料，總計 {totalItems} 項。{newExtCount} 個 S32 使用擴展格式。";
-                    MessageBox.Show($"已將 {Path.GetFileName(filePath)} 設為一般格式，並清除 {s32Data.Layer8.Count} 個項目的 ExtendedData。\n請記得儲存 S32 檔案。", "完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    lblSummary.Text = string.Format(LocalizationManager.L("L8_Summary"), s32WithL8Selected.Count, totalItemsSelected, s32WithL8All.Count, totalItemsAll, newExtCount);
+                    MessageBox.Show(string.Format(LocalizationManager.L("L8_SetNormalDone"), Path.GetFileName(filePath), s32Data.Layer8.Count), LocalizationManager.L("Title_Success"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             };
             gbExtended.Controls.Add(btnSetNormal);
 
             Button btnResetAllExtended = new Button();
-            btnResetAllExtended.Text = "全部重設為一般";
+            btnResetAllExtended.Text = LocalizationManager.L("L8_ResetAll");
             btnResetAllExtended.Location = new Point(580, 40);
             btnResetAllExtended.Size = new Size(120, 28);
             btnResetAllExtended.BackColor = Color.LightYellow;
@@ -19605,12 +19606,12 @@ namespace L1FlyMapViewer
                 int currentExtCount = _document.S32Files.Values.Count(x => x.Layer8HasExtendedData);
                 if (currentExtCount == 0)
                 {
-                    MessageBox.Show("沒有使用擴展格式的 S32 檔案。", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(LocalizationManager.L("L8_NoExtendedFiles"), LocalizationManager.L("Title_Info"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
                 var confirmResult = MessageBox.Show(
-                    $"確定要將所有 {currentExtCount} 個 S32 檔案的 Layer8 重設為一般格式嗎？\n\n注意：這會清除所有 ExtendedData 欄位的資料。",
-                    "確認重設",
+                    string.Format(LocalizationManager.L("L8_ConfirmResetAll"), currentExtCount),
+                    LocalizationManager.L("L8_ConfirmResetTitle"),
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Warning);
                 if (confirmResult != DialogResult.Yes) return;
@@ -19637,15 +19638,15 @@ namespace L1FlyMapViewer
                     cmbS32Extended.Items.Add(new { FilePath = kvp.Key, Display = Path.GetFileName(kvp.Key) });
                 }
                 if (cmbS32Extended.Items.Count > 0) cmbS32Extended.SelectedIndex = 0;
-                lblCurrentStatus.Text = "目前：一般格式";
+                lblCurrentStatus.Text = string.Format(LocalizationManager.L("L8_CurrentStatus"), LocalizationManager.L("L8_NormalFormat"));
                 // 更新 ListView 中所有項目的擴展欄位 (索引: 0=檔案, 1=擴展, 2=SprId, 3=預覽, 4=X, 5=Y, 6=ExtData)
                 foreach (ListViewItem lvi in lvItems.Items)
                 {
                     lvi.SubItems[1].Text = "";  // 擴展欄位 (索引 1)
                     lvi.SubItems[6].Text = "0"; // ExtData 欄位 (索引 6)
                 }
-                lblSummary.Text = $"共 {s32WithL8.Count} 個 S32 有 Layer8 資料，總計 {totalItems} 項。0 個 S32 使用擴展格式。";
-                MessageBox.Show($"已將 {currentExtCount} 個 S32 檔案重設為一般格式，並清除 {clearedItemCount} 個項目的 ExtendedData。\n請記得儲存 S32 檔案。", "完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                lblSummary.Text = string.Format(LocalizationManager.L("L8_Summary"), s32WithL8Selected.Count, totalItemsSelected, s32WithL8All.Count, totalItemsAll, 0);
+                MessageBox.Show(string.Format(LocalizationManager.L("L8_ResetAllDone"), currentExtCount, clearedItemCount), LocalizationManager.L("Title_Success"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             };
             gbExtended.Controls.Add(btnResetAllExtended);
 
@@ -19656,7 +19657,7 @@ namespace L1FlyMapViewer
                 string filePath = selected.FilePath;
                 if (_document.S32Files.TryGetValue(filePath, out S32Data s32Data))
                 {
-                    lblCurrentStatus.Text = s32Data.Layer8HasExtendedData ? "目前：擴展格式" : "目前：一般格式";
+                    lblCurrentStatus.Text = string.Format(LocalizationManager.L("L8_CurrentStatus"), s32Data.Layer8HasExtendedData ? LocalizationManager.L("L8_ExtendedFormat") : LocalizationManager.L("L8_NormalFormat"));
                 }
             };
             // 初始顯示
@@ -19665,7 +19666,7 @@ namespace L1FlyMapViewer
                 dynamic firstItem = cmbS32Extended.Items[0];
                 if (_document.S32Files.TryGetValue(firstItem.FilePath, out S32Data firstS32))
                 {
-                    lblCurrentStatus.Text = firstS32.Layer8HasExtendedData ? "目前：擴展格式" : "目前：一般格式";
+                    lblCurrentStatus.Text = string.Format(LocalizationManager.L("L8_CurrentStatus"), firstS32.Layer8HasExtendedData ? LocalizationManager.L("L8_ExtendedFormat") : LocalizationManager.L("L8_NormalFormat"));
                 }
             }
             resultForm.Controls.Add(gbExtended);
@@ -19677,7 +19678,7 @@ namespace L1FlyMapViewer
                 lv.Items.Clear();
                 if (dataList.Count == 0)
                 {
-                    lv.Items.Add(new ListViewItem("沒有任何 S32 檔案有 Layer8 資料"));
+                    lv.Items.Add(new ListViewItem(LocalizationManager.L("L8_NoExtendedFiles")));
                     lv.Enabled = false;
                 }
                 else
@@ -19701,7 +19702,7 @@ namespace L1FlyMapViewer
 
                             // 欄位順序: S32檔案(0), 擴展(1), SprId(2), 預覽(3), X(4), Y(5), ExtData(6)
                             ListViewItem lvi = new ListViewItem(fileName);
-                            lvi.SubItems.Add(hasExtended ? "是" : "");
+                            lvi.SubItems.Add(hasExtended ? LocalizationManager.L("L8_Yes") : "");
                             lvi.SubItems.Add(item.SprId.ToString());
                             lvi.SubItems.Add(""); // 預覽欄位 (圖片)
                             lvi.SubItems[3].Tag = imgKey; // 儲存圖片 key
@@ -19722,7 +19723,7 @@ namespace L1FlyMapViewer
 
             // 更新無圖項目計數
             int noImageCount = sprLoadFailed.Count;
-            lblNoImageCount.Text = $"無圖項目: {noImageCount} 個 SPR";
+            lblNoImageCount.Text = string.Format(LocalizationManager.L("L8_NoImageCount"), noImageCount);
 
             // 篩選無圖項目
             chkFilterNoImage.CheckedChanged += (s, args) =>
@@ -19800,7 +19801,7 @@ namespace L1FlyMapViewer
                     currentSelectedItem = null;
                     btnJumpToLocation.Enabled = false;
                     pbPreview.Image = null;
-                    lblPreviewInfo.Text = "選取項目以預覽";
+                    lblPreviewInfo.Text = LocalizationManager.L("L8_SelectToPreview");
                     lblPreviewInfo.ForeColor = Color.Gray;
                 }
             }
@@ -19823,7 +19824,7 @@ namespace L1FlyMapViewer
                     // 使用既有的座標跳轉方法
                     JumpToGameCoordinate(globalX, globalY);
 
-                    this.toolStripStatusLabel1.Text = $"已跳轉到 L8 項目位置 ({globalX}, {globalY}) - SprId: {item.SprId}";
+                    this.toolStripStatusLabel1.Text = string.Format(LocalizationManager.L("L8_JumpedToLocation"), globalX, globalY, item.SprId);
                 }
             };
 
@@ -19838,7 +19839,7 @@ namespace L1FlyMapViewer
 
             // 編輯區域
             GroupBox gbEdit = new GroupBox();
-            gbEdit.Text = "編輯選取的項目";
+            gbEdit.Text = LocalizationManager.L("L8_EditSection");
             gbEdit.Location = new Point(10, 455);
             gbEdit.Size = new Size(810, 80);
 
@@ -19852,14 +19853,14 @@ namespace L1FlyMapViewer
             TextBox txtExtData = new TextBox { Location = new Point(445, 25), Size = new Size(80, 23) };
 
             Button btnApplyEdit = new Button();
-            btnApplyEdit.Text = "套用修改";
+            btnApplyEdit.Text = LocalizationManager.L("L8_ApplyEdit");
             btnApplyEdit.Location = new Point(545, 22);
             btnApplyEdit.Size = new Size(80, 28);
             btnApplyEdit.Click += (s, args) =>
             {
                 if (lvItems.SelectedItems.Count != 1)
                 {
-                    MessageBox.Show("請選取一個項目進行編輯", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(LocalizationManager.L("L8_SelectOneToEdit"), LocalizationManager.L("Title_Info"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
 
@@ -19871,7 +19872,7 @@ namespace L1FlyMapViewer
                     !ushort.TryParse(txtY.Text, out ushort newY) ||
                     !int.TryParse(txtExtData.Text, out int newExtData))
                 {
-                    MessageBox.Show("請輸入有效的數值", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show(LocalizationManager.L("L8_InvalidValue"), LocalizationManager.L("Title_Error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
@@ -19893,19 +19894,19 @@ namespace L1FlyMapViewer
                     s32Data.IsModified = true;
                 }
 
-                MessageBox.Show("已套用修改。請記得儲存 S32 檔案。", "完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(LocalizationManager.L("L8_EditApplied"), LocalizationManager.L("Title_Done"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             };
 
             // 新增項目按鈕
             Button btnAddNew = new Button();
-            btnAddNew.Text = "新增";
+            btnAddNew.Text = LocalizationManager.L("L8_AddNew");
             btnAddNew.Location = new Point(635, 22);
             btnAddNew.Size = new Size(60, 28);
             btnAddNew.Click += (s, args) =>
             {
                 if (_document.S32Files.Count == 0)
                 {
-                    MessageBox.Show("請先載入地圖", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(LocalizationManager.L("Message_PleaseLoadMap"), LocalizationManager.L("Title_Info"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
 
@@ -19914,24 +19915,24 @@ namespace L1FlyMapViewer
                     !ushort.TryParse(txtY.Text, out ushort newY) ||
                     !int.TryParse(txtExtData.Text, out int newExtData))
                 {
-                    MessageBox.Show("請輸入有效的數值", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show(LocalizationManager.L("L8_InvalidValue"), LocalizationManager.L("Title_Error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
                 // 選擇要加入的 S32 檔案
                 var s32Files = _document.S32Files.Keys.Select(k => Path.GetFileName(k)).ToArray();
                 Form selectForm = new Form();
-                selectForm.Text = "選擇 S32 檔案";
+                selectForm.Text = LocalizationManager.L("L8_SelectS32File");
                 selectForm.Size = new Size(300, 150);
                 selectForm.FormBorderStyle = FormBorderStyle.FixedDialog;
                 selectForm.StartPosition = FormStartPosition.CenterParent;
 
-                Label lblSelect = new Label { Text = "選擇要新增 Layer8 項目的 S32 檔案:", Location = new Point(10, 15), Size = new Size(260, 20) };
+                Label lblSelect = new Label { Text = LocalizationManager.L("L8_SelectS32ForNewItem"), Location = new Point(10, 15), Size = new Size(260, 20) };
                 ComboBox cmbS32 = new ComboBox { Location = new Point(10, 40), Size = new Size(260, 23), DropDownStyle = ComboBoxStyle.DropDownList };
                 cmbS32.Items.AddRange(s32Files);
                 if (cmbS32.Items.Count > 0) cmbS32.SelectedIndex = 0;
 
-                Button btnOK = new Button { Text = "確定", Location = new Point(100, 75), Size = new Size(80, 28), DialogResult = DialogResult.OK };
+                Button btnOK = new Button { Text = LocalizationManager.L("Common_OK"), Location = new Point(100, 75), Size = new Size(80, 28), DialogResult = DialogResult.OK };
                 selectForm.Controls.AddRange(new Control[] { lblSelect, cmbS32, btnOK });
                 selectForm.AcceptButton = btnOK;
 
@@ -19973,7 +19974,7 @@ namespace L1FlyMapViewer
                         lvItems.Items.Add(lvi);
                         itemInfoList.Add((selectedFilePath, newItem));
 
-                        MessageBox.Show($"已新增 Layer8 項目到 {selectedFileName}。\n\n請記得儲存 S32 檔案。", "完成",
+                        MessageBox.Show(string.Format(LocalizationManager.L("L8_ItemAdded"), selectedFileName), LocalizationManager.L("Title_Done"),
                             MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                 }
@@ -19984,17 +19985,17 @@ namespace L1FlyMapViewer
 
             // 批次取代區域
             GroupBox gbBatchReplace = new GroupBox();
-            gbBatchReplace.Text = "批次取代 SprId";
+            gbBatchReplace.Text = LocalizationManager.L("L8_BatchReplace");
             gbBatchReplace.Location = new Point(10, 540);
             gbBatchReplace.Size = new Size(500, 50);
 
-            Label lblFromSpr = new Label { Text = "將 SprId:", Location = new Point(10, 20), Size = new Size(60, 20) };
+            Label lblFromSpr = new Label { Text = LocalizationManager.L("L8_FromSprId"), Location = new Point(10, 20), Size = new Size(60, 20) };
             TextBox txtFromSprId = new TextBox { Location = new Point(75, 17), Size = new Size(70, 23) };
-            Label lblToSpr = new Label { Text = "改為:", Location = new Point(155, 20), Size = new Size(40, 20) };
+            Label lblToSpr = new Label { Text = LocalizationManager.L("L8_ToSprId"), Location = new Point(155, 20), Size = new Size(40, 20) };
             TextBox txtToSprId = new TextBox { Location = new Point(195, 17), Size = new Size(70, 23) };
 
             Button btnBatchReplace = new Button();
-            btnBatchReplace.Text = "批次取代";
+            btnBatchReplace.Text = LocalizationManager.L("L8_BatchReplaceBtn");
             btnBatchReplace.Location = new Point(280, 15);
             btnBatchReplace.Size = new Size(80, 25);
             btnBatchReplace.Click += (s, args) =>
@@ -20002,13 +20003,13 @@ namespace L1FlyMapViewer
                 if (!ushort.TryParse(txtFromSprId.Text, out ushort fromSprId) ||
                     !ushort.TryParse(txtToSprId.Text, out ushort toSprId))
                 {
-                    MessageBox.Show("請輸入有效的 SprId 數值", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show(LocalizationManager.L("L8_InvalidSprId"), LocalizationManager.L("Title_Error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
 
                 if (fromSprId == toSprId)
                 {
-                    MessageBox.Show("來源和目標 SprId 相同", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(LocalizationManager.L("L8_SameSprId"), LocalizationManager.L("Title_Info"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
 
@@ -20024,13 +20025,13 @@ namespace L1FlyMapViewer
 
                 if (affectedCount == 0)
                 {
-                    MessageBox.Show($"找不到 SprId = {fromSprId} 的項目", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(string.Format(LocalizationManager.L("L8_SprIdNotFound"), fromSprId), LocalizationManager.L("Title_Info"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
 
                 var confirmResult = MessageBox.Show(
-                    $"確定要將所有 SprId = {fromSprId} 的項目 ({affectedCount} 個) 改為 SprId = {toSprId} 嗎？",
-                    "確認批次取代",
+                    string.Format(LocalizationManager.L("L8_ConfirmBatchReplace"), fromSprId, affectedCount, toSprId),
+                    LocalizationManager.L("L8_ConfirmBatchReplaceTitle"),
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Question);
 
@@ -20080,13 +20081,13 @@ namespace L1FlyMapViewer
                 }
 
                 MessageBox.Show(
-                    $"已將 {replacedCount} 個項目的 SprId 從 {fromSprId} 改為 {toSprId}。\n影響 {modifiedFiles.Count} 個 S32 檔案。\n\n請記得儲存 S32 檔案。",
-                    "批次取代完成",
+                    string.Format(LocalizationManager.L("L8_BatchReplaceComplete"), replacedCount, fromSprId, toSprId, modifiedFiles.Count),
+                    LocalizationManager.L("L8_BatchReplaceCompleteTitle"),
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
             };
 
-            Label lblBatchHint = new Label { Text = "(影響全部 S32)", Location = new Point(370, 20), Size = new Size(120, 20), ForeColor = Color.Gray };
+            Label lblBatchHint = new Label { Text = LocalizationManager.L("L8_AffectsAllS32"), Location = new Point(370, 20), Size = new Size(120, 20), ForeColor = Color.Gray };
 
             gbBatchReplace.Controls.AddRange(new Control[] { lblFromSpr, txtFromSprId, lblToSpr, txtToSprId, btnBatchReplace, lblBatchHint });
             resultForm.Controls.Add(gbBatchReplace);
@@ -20112,7 +20113,7 @@ namespace L1FlyMapViewer
             lvAll.SelectedIndexChanged += OnListViewSelectionChanged;
 
             Button btnSelectAll = new Button();
-            btnSelectAll.Text = "全選";
+            btnSelectAll.Text = LocalizationManager.L("L8_SelectAll");
             btnSelectAll.Location = new Point(10, 600);
             btnSelectAll.Size = new Size(80, 30);
             btnSelectAll.Click += (s, args) =>
@@ -20124,7 +20125,7 @@ namespace L1FlyMapViewer
             resultForm.Controls.Add(btnSelectAll);
 
             Button btnDeselectAll = new Button();
-            btnDeselectAll.Text = "取消全選";
+            btnDeselectAll.Text = LocalizationManager.L("L8_DeselectAll");
             btnDeselectAll.Location = new Point(100, 600);
             btnDeselectAll.Size = new Size(80, 30);
             btnDeselectAll.Click += (s, args) =>
@@ -20136,7 +20137,7 @@ namespace L1FlyMapViewer
             resultForm.Controls.Add(btnDeselectAll);
 
             Button btnClearSelected = new Button();
-            btnClearSelected.Text = "刪除勾選項目";
+            btnClearSelected.Text = LocalizationManager.L("L8_DeleteChecked");
             btnClearSelected.Location = new Point(10, 640);
             btnClearSelected.Size = new Size(120, 35);
             btnClearSelected.BackColor = Color.LightCoral;
@@ -20147,13 +20148,13 @@ namespace L1FlyMapViewer
                 int checkedCount = currentLv.CheckedItems.Count;
                 if (checkedCount == 0)
                 {
-                    MessageBox.Show("請先勾選要刪除的項目", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(LocalizationManager.L("L8_SelectToDelete"), LocalizationManager.L("Title_Info"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
 
                 var confirmResult = MessageBox.Show(
-                    $"確定要刪除勾選的 {checkedCount} 個 Layer8 項目嗎？",
-                    "確認刪除",
+                    string.Format(LocalizationManager.L("L8_ConfirmDeleteChecked"), checkedCount),
+                    LocalizationManager.L("L8_ConfirmDeleteTitle"),
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Warning);
 
@@ -20183,7 +20184,7 @@ namespace L1FlyMapViewer
                     }
                 }
 
-                MessageBox.Show($"已刪除 {removedCount} 個 Layer8 項目。\n\n請記得儲存 S32 檔案。", "完成",
+                MessageBox.Show(string.Format(LocalizationManager.L("L8_DeleteComplete"), removedCount), LocalizationManager.L("Title_Done"),
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
 
                 resultForm.Close();
@@ -20192,7 +20193,7 @@ namespace L1FlyMapViewer
             resultForm.Controls.Add(btnClearSelected);
 
             Button btnClearAll = new Button();
-            btnClearAll.Text = "刪除全部 L8";
+            btnClearAll.Text = LocalizationManager.L("L8_DeleteAll");
             btnClearAll.Location = new Point(140, 640);
             btnClearAll.Size = new Size(120, 35);
             btnClearAll.BackColor = Color.Salmon;
@@ -20200,8 +20201,8 @@ namespace L1FlyMapViewer
             btnClearAll.Click += (s, args) =>
             {
                 var confirmResult = MessageBox.Show(
-                    $"確定要刪除所有 {totalItems} 個 Layer8 項目嗎？",
-                    "確認刪除全部",
+                    string.Format(LocalizationManager.L("L8_ConfirmDeleteAll"), totalItems),
+                    LocalizationManager.L("L8_ConfirmDeleteAllTitle"),
                     MessageBoxButtons.YesNo,
                     MessageBoxIcon.Warning);
 
@@ -20218,7 +20219,7 @@ namespace L1FlyMapViewer
                     }
                 }
 
-                MessageBox.Show($"已刪除 {removedCount} 個 Layer8 項目。\n\n請記得儲存 S32 檔案。", "完成",
+                MessageBox.Show(string.Format(LocalizationManager.L("L8_DeleteComplete"), removedCount), LocalizationManager.L("Title_Done"),
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
 
                 resultForm.Close();
@@ -20227,7 +20228,7 @@ namespace L1FlyMapViewer
             resultForm.Controls.Add(btnClearAll);
 
             Button btnClose = new Button();
-            btnClose.Text = "關閉";
+            btnClose.Text = LocalizationManager.L("L8_Close");
             btnClose.Location = new Point(730, 640);
             btnClose.Size = new Size(90, 35);
             btnClose.Click += (s, args) => resultForm.Close();

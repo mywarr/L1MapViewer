@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
 using L1MapViewer.Controls;
+using L1MapViewer.Localization;
 using L1MapViewer.Other;
 
 namespace L1FlyMapViewer
@@ -501,8 +502,8 @@ namespace L1FlyMapViewer
             //
             this.toolStripShowAllL8.Name = "toolStripShowAllL8";
             this.toolStripShowAllL8.Size = new Size(80, 20);
-            this.toolStripShowAllL8.Text = "顯示全部L8";
-            this.toolStripShowAllL8.ToolTipText = "顯示畫面中所有 Layer8 SPR 特效";
+            this.toolStripShowAllL8.Text = LocalizationManager.L("L8_ShowAllL8");
+            this.toolStripShowAllL8.ToolTipText = LocalizationManager.L("L8_ShowAllL8");
             this.toolStripShowAllL8.Click += new System.EventHandler(this.toolStripShowAllL8_Click);
 
             //
