@@ -2609,17 +2609,22 @@ namespace L1FlyMapViewer
             // 在背景執行緒載入地圖資料
             Task.Run(() =>
             {
-                LogPerf("[LOADMAP-BG] Task started, calling L1MapHelper.Read...");
-                var stopwatch = Stopwatch.StartNew();
-                var dictionary = L1MapHelper.Read(selectedPath);
-                stopwatch.Stop();
-                long readMs = stopwatch.ElapsedMilliseconds;
-                LogPerf($"[LOADMAP-BG] L1MapHelper.Read done: {readMs}ms, maps={dictionary.Count}");
-
-                // 回到 UI 執行緒更新介面
-                LogPerf("[LOADMAP-BG] Invoking UI update...");
-                this.BeginInvoke((MethodInvoker)delegate
+                try
                 {
+                    DebugLog.Log("[LOADMAP-BG] Task started");
+                    LogPerf("[LOADMAP-BG] Task started, calling L1MapHelper.Read...");
+                    var stopwatch = Stopwatch.StartNew();
+                    var dictionary = L1MapHelper.Read(selectedPath);
+                    stopwatch.Stop();
+                    long readMs = stopwatch.ElapsedMilliseconds;
+                    DebugLog.Log($"[LOADMAP-BG] L1MapHelper.Read done: {readMs}ms, maps={dictionary.Count}");
+                    LogPerf($"[LOADMAP-BG] L1MapHelper.Read done: {readMs}ms, maps={dictionary.Count}");
+
+                    // 回到 UI 執行緒更新介面
+                    DebugLog.Log("[LOADMAP-BG] Invoking UI update...");
+                    LogPerf("[LOADMAP-BG] Invoking UI update...");
+                    this.BeginInvoke((MethodInvoker)delegate
+                    {
                     LogPerf("[LOADMAP-UI] BeginInvoke callback started");
                     stopwatch.Restart();
 
@@ -2697,6 +2702,23 @@ namespace L1FlyMapViewer
                     Utils.ShowProgressBar(false, this);
                     LogPerf("[LOADMAP-UI] Done");
                 });
+                }
+                catch (Exception ex)
+                {
+                    DebugLog.Log($"[LOADMAP-BG] EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+                    DebugLog.Log($"[LOADMAP-BG] StackTrace: {ex.StackTrace}");
+                    if (ex.InnerException != null)
+                    {
+                        DebugLog.Log($"[LOADMAP-BG] InnerException: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
+                    }
+                    this.BeginInvoke((MethodInvoker)delegate
+                    {
+                        Utils.ShowProgressBar(false, this);
+                        this.toolStripStatusLabel1.Text = $"載入錯誤: {ex.Message}";
+                        MessageBox.Show($"載入地圖時發生錯誤:\n{ex.Message}\n\n詳細資訊已寫入 debug log:\n{DebugLog.LogPath}",
+                            "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    });
+                }
             });
             LogPerf("[LOADMAP] Task.Run started (async)");
         }
