@@ -11732,25 +11732,45 @@ namespace L1FlyMapViewer
                 }
             }
 
-            // Layer5 統計（按格子位置刪除透明圖塊）
+            // Layer5 統計（跨 S32 搜索覆蓋選取格子的透明圖塊）
             Dictionary<S32Data, List<Layer5Item>> layer5ToDeleteByS32 = new Dictionary<S32Data, List<Layer5Item>>();
-            if (deleteLayer5to8)
+            if (deleteLayer5to8 && cells.Count > 0)
             {
+                // 建立選取格子的全域遊戲座標集合
+                var selectedGameCells = new HashSet<(int x, int y)>();
                 foreach (var cell in cells)
                 {
-                    // Layer5 的 X 是 0-127 (Layer1 座標)，Y 是 0-63
-                    // cell.LocalX 已經是 Layer1 座標 (0-127)
-                    // 一個遊戲格子對應兩個 Layer1 X 座標（LocalX 和 LocalX+1）
-                    int layer1X = cell.LocalX;
-                    var layer5Items = cell.S32Data.Layer5.Where(l => (l.X == layer1X || l.X == layer1X + 1) && l.Y == cell.LocalY).ToList();
-                    if (layer5Items.Count > 0)
+                    int gameX = cell.S32Data.SegInfo.nLinBeginX + cell.LocalX / 2;
+                    int gameY = cell.S32Data.SegInfo.nLinBeginY + cell.LocalY;
+                    selectedGameCells.Add((gameX, gameY));
+                }
+
+                // 遍歷所有 S32 檔案搜索 L5 項目（跨 S32 搜索）
+                foreach (var s32Data in _document.S32Files.Values)
+                {
+                    int segStartX = s32Data.SegInfo.nLinBeginX;
+                    int segStartY = s32Data.SegInfo.nLinBeginY;
+
+                    foreach (var item5 in s32Data.Layer5)
                     {
-                        if (!layer5ToDeleteByS32.ContainsKey(cell.S32Data))
+                        // 計算 L5 項目的全域遊戲座標
+                        // L5 的 X 是 Layer1 座標 (0-255)，除以 2 得到遊戲座標偏移
+                        int itemGameX = segStartX + item5.X / 2;
+                        int itemGameY = segStartY + item5.Y;
+
+                        // 檢查是否在選取的格子內
+                        if (selectedGameCells.Contains((itemGameX, itemGameY)))
                         {
-                            layer5ToDeleteByS32[cell.S32Data] = new List<Layer5Item>();
+                            if (!layer5ToDeleteByS32.ContainsKey(s32Data))
+                            {
+                                layer5ToDeleteByS32[s32Data] = new List<Layer5Item>();
+                            }
+                            if (!layer5ToDeleteByS32[s32Data].Contains(item5))
+                            {
+                                layer5ToDeleteByS32[s32Data].Add(item5);
+                                layer5to8Count++;
+                            }
                         }
-                        layer5ToDeleteByS32[cell.S32Data].AddRange(layer5Items);
-                        layer5to8Count += layer5Items.Count;
                     }
                 }
             }
