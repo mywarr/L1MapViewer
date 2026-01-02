@@ -12143,6 +12143,7 @@ namespace L1FlyMapViewer
         }
 
         // 創建第五層面板 - 可透明化的圖塊（只顯示該格子相關的項目）
+        // 搜尋所有 S32 的 Layer5，因為 S32 的 Layer5 項目可能超出自己的邊界範圍
         private Panel CreateLayer5Panel(int x, int y)
         {
             Panel panel = new Panel();
@@ -12157,17 +12158,40 @@ namespace L1FlyMapViewer
             title.TextAlign = ContentAlignment.MiddleCenter;
             panel.Controls.Add(title);
 
-            // 只篩選該格子相關的 Layer5 項目
+            // 計算當前格子的全域 Layer1 座標
             // x 是 Layer1 座標 (0-127)，y 是 Layer3 座標 (0-63)
-            // Layer5 的 X 是 0-127，Y 是 0-63
-            // 一個遊戲格子對應兩個 Layer1 X 座標（x 和 x+1）
-            var cellLayer5Items = new List<(int index, Layer5Item item)>();
-            for (int i = 0; i < currentS32Data.Layer5.Count; i++)
+            // L5 的 X 偶數和奇數都是同一格（偶數=左半，奇數=右半），需要正規化為偶數
+            int normalizedX = (x / 2) * 2;  // 正規化為偶數（同一格的左半）
+            int globalLayer1X = currentS32Data.SegInfo.nLinBeginX * 2 + normalizedX;
+            int globalLayer1Y = currentS32Data.SegInfo.nLinBeginY + y;
+
+            // 搜尋所有 S32 的 Layer5（不只是當前 S32）
+            // 因為相鄰 S32 的 Layer5 項目可能超出自己的邊界
+            var cellLayer5Items = new List<(string s32Name, S32Data s32Data, int index, Layer5Item item)>();
+
+            foreach (var s32Data in _document.S32Files.Values)
             {
-                var item5 = currentS32Data.Layer5[i];
-                if ((item5.X == x || item5.X == x + 1) && item5.Y == y)
+                if (s32Data.Layer5.Count == 0) continue;
+
+                // 計算該 S32 的全域座標起點
+                int s32StartX = s32Data.SegInfo.nLinBeginX * 2;
+                int s32StartY = s32Data.SegInfo.nLinBeginY;
+
+                for (int i = 0; i < s32Data.Layer5.Count; i++)
                 {
-                    cellLayer5Items.Add((i, item5));
+                    var item5 = s32Data.Layer5[i];
+
+                    // 計算該 L5 項目的全域座標
+                    int itemGlobalX = s32StartX + item5.X;
+                    int itemGlobalY = s32StartY + item5.Y;
+
+                    // 檢查是否在目標格子範圍內（考慮 x 和 x+1）
+                    if ((itemGlobalX == globalLayer1X || itemGlobalX == globalLayer1X + 1)
+                        && itemGlobalY == globalLayer1Y)
+                    {
+                        string s32Name = System.IO.Path.GetFileName(s32Data.FilePath);
+                        cellLayer5Items.Add((s32Name, s32Data, i, item5));
+                    }
                 }
             }
 
@@ -12186,19 +12210,22 @@ namespace L1FlyMapViewer
                 listView.GridLines = true;
                 listView.Font = new Font("Consolas", 9, FontStyle.Regular);
 
+                listView.Columns.Add("來源", 90);
                 listView.Columns.Add("索引", 40);
-                listView.Columns.Add("X", 40);
-                listView.Columns.Add("Y", 40);
-                listView.Columns.Add("ObjIdx", 60);
-                listView.Columns.Add("Type", 50);
+                listView.Columns.Add("X", 35);
+                listView.Columns.Add("Y", 35);
+                listView.Columns.Add("ObjIdx", 50);
+                listView.Columns.Add("Type", 40);
 
-                foreach (var (idx, item5) in cellLayer5Items)
+                foreach (var (s32Name, s32Data, idx, item5) in cellLayer5Items)
                 {
-                    var lvItem = new ListViewItem(idx.ToString());
+                    var lvItem = new ListViewItem(s32Name);
+                    lvItem.SubItems.Add(idx.ToString());
                     lvItem.SubItems.Add(item5.X.ToString());
                     lvItem.SubItems.Add(item5.Y.ToString());
                     lvItem.SubItems.Add(item5.ObjectIndex.ToString());
                     lvItem.SubItems.Add(item5.Type.ToString());
+                    lvItem.Tag = (s32Data, idx);  // 保存來源 S32 和索引，方便後續操作
                     listView.Items.Add(lvItem);
                 }
 
