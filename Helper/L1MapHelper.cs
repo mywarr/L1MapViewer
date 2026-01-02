@@ -91,14 +91,18 @@ namespace L1MapViewer.Helper {
 
             if (Share.MapDataList.Count == 0) {
                 DebugLog.Log($"[L1MapHelper.Read] Scanning directories in: {szMapPath}");
+                DebugLog.Log("[L1MapHelper.Read] Calling GetDirectories()...");
                 var directories = new DirectoryInfo(szMapPath).GetDirectories();
                 DebugLog.Log($"[L1MapHelper.Read] Found {directories.Length} directories to scan");
+                DebugLog.Log($"[L1MapHelper.Read] First dir: {(directories.Length > 0 ? directories[0].Name : "none")}");
 
                 int dirIndex = 0;
                 //開始讀取資料夾
+                DebugLog.Log("[L1MapHelper.Read] Entering foreach loop...");
                 foreach (DirectoryInfo di in directories) {
                     dirIndex++;
-                    if (dirIndex % 50 == 0) {
+                    // 前 5 個和每 50 個都輸出 log
+                    if (dirIndex <= 5 || dirIndex % 50 == 0) {
                         DebugLog.Log($"[L1MapHelper.Read] Scanning dir {dirIndex}/{directories.Length}: {di.Name}");
                     }
                     //地圖檔的資料夾名稱應該都是數字
