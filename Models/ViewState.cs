@@ -89,7 +89,7 @@ namespace L1MapViewer.Models
             get => _scrollX;
             set
             {
-                int newValue = Math.Max(0, Math.Min(value, MaxScrollX));
+                int newValue = Math.Max(MinScrollX, Math.Min(value, MaxScrollX));
                 if (_scrollX != newValue)
                 {
                     _scrollX = newValue;
@@ -106,7 +106,7 @@ namespace L1MapViewer.Models
             get => _scrollY;
             set
             {
-                int newValue = Math.Max(0, Math.Min(value, MaxScrollY));
+                int newValue = Math.Max(MinScrollY, Math.Min(value, MaxScrollY));
                 if (_scrollY != newValue)
                 {
                     _scrollY = newValue;
@@ -114,6 +114,26 @@ namespace L1MapViewer.Models
                 }
             }
         }
+
+        /// <summary>
+        /// S32 區塊寬度（像素）- 用於計算捲動緩衝區
+        /// </summary>
+        public const int S32BlockWidth = 3072;
+
+        /// <summary>
+        /// S32 區塊高度（像素）- 用於計算捲動緩衝區
+        /// </summary>
+        public const int S32BlockHeight = 1536;
+
+        /// <summary>
+        /// 最小水平捲動值（支援左側緩衝區）
+        /// </summary>
+        public int MinScrollX { get; set; }
+
+        /// <summary>
+        /// 最小垂直捲動值（支援上側緩衝區）
+        /// </summary>
+        public int MinScrollY { get; set; }
 
         /// <summary>
         /// 最大水平捲動值
@@ -145,8 +165,8 @@ namespace L1MapViewer.Models
         /// </summary>
         public void SetScrollSilent(int x, int y)
         {
-            _scrollX = Math.Max(0, Math.Min(x, MaxScrollX));
-            _scrollY = Math.Max(0, Math.Min(y, MaxScrollY));
+            _scrollX = Math.Max(MinScrollX, Math.Min(x, MaxScrollX));
+            _scrollY = Math.Max(MinScrollY, Math.Min(y, MaxScrollY));
         }
 
         /// <summary>
@@ -170,18 +190,28 @@ namespace L1MapViewer.Models
         }
 
         /// <summary>
-        /// 更新最大捲動值
+        /// 更新最大捲動值（含緩衝區）
         /// </summary>
         public void UpdateScrollLimits(int mapWidth, int mapHeight)
         {
+            // 計算緩衝區大小（一個 S32 區塊，依縮放比例調整）
+            int bufferX = (int)(S32BlockWidth * ZoomLevel);
+            int bufferY = (int)(S32BlockHeight * ZoomLevel);
+
             int scaledWidth = (int)(mapWidth * ZoomLevel);
             int scaledHeight = (int)(mapHeight * ZoomLevel);
-            MaxScrollX = Math.Max(0, scaledWidth - ViewportWidth);
-            MaxScrollY = Math.Max(0, scaledHeight - ViewportHeight);
 
-            // 確保當前位置不超過限制
+            // 上下左右各留一個 S32 區塊的緩衝區
+            MinScrollX = -bufferX;
+            MinScrollY = -bufferY;
+            MaxScrollX = Math.Max(0, scaledWidth - ViewportWidth + bufferX);
+            MaxScrollY = Math.Max(0, scaledHeight - ViewportHeight + bufferY);
+
+            // 確保當前位置在新限制範圍內
             if (_scrollX > MaxScrollX) _scrollX = MaxScrollX;
+            if (_scrollX < MinScrollX) _scrollX = MinScrollX;
             if (_scrollY > MaxScrollY) _scrollY = MaxScrollY;
+            if (_scrollY < MinScrollY) _scrollY = MinScrollY;
         }
 
         #endregion
@@ -528,6 +558,8 @@ namespace L1MapViewer.Models
             _zoomLevel = 1.0;
             _scrollX = 0;
             _scrollY = 0;
+            MinScrollX = 0;
+            MinScrollY = 0;
             MaxScrollX = 0;
             MaxScrollY = 0;
             MapWidth = 0;
