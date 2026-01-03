@@ -88,6 +88,11 @@ namespace L1MapViewer.Helper
         public const int BlockHeight = 64 * 12 * 2; // 1536
 
         /// <summary>
+        /// 小地圖邊界 padding（世界座標像素）
+        /// </summary>
+        public int Padding { get; set; } = 200;
+
+        /// <summary>
         /// 渲染 MiniMap
         /// </summary>
         public Bitmap RenderMiniMap(
@@ -132,6 +137,12 @@ namespace L1MapViewer.Helper
                 worldMaxX = mapWidth;
                 worldMaxY = mapHeight;
             }
+
+            // 加入 padding（四周邊界）
+            worldMinX -= Padding;
+            worldMinY -= Padding;
+            worldMaxX += Padding;
+            worldMaxY += Padding;
 
             int contentWidth = worldMaxX - worldMinX;
             int contentHeight = worldMaxY - worldMinY;
