@@ -827,7 +827,7 @@ namespace L1FlyMapViewer
 
                             bool alreadyCopied = _editState.CellClipboard.Any(cd =>
                                 cd.Layer4Objects.Any(o =>
-                                    o.RelativeX == relX && o.RelativeY == relY && o.GroupId == obj.GroupId && o.TileId == obj.TileId));
+                                    o.RelativeX == relX && o.RelativeY == relY && o.GroupId == obj.GroupId && o.Layer == obj.Layer && o.IndexId == obj.IndexId && o.TileId == obj.TileId));
 
                             if (!alreadyCopied)
                             {
