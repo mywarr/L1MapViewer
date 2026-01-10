@@ -4947,6 +4947,416 @@ namespace L1FlyMapViewer
             }
         }
 
+        // 重疊處理方式列舉
+        private enum OverlapHandling
+        {
+            Overwrite,  // 覆蓋現有區塊
+            Skip        // 跳過重疊區塊
+        }
+
+        // 在指定位置匯入 fs32
+        private void ImportFs32AtPosition(Point worldPos, Struct.L1Map currentMap)
+        {
+            if (string.IsNullOrEmpty(_document.MapId))
+            {
+                MessageBox.Show("請先載入地圖", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (_document.S32Files.Count == 0)
+            {
+                MessageBox.Show("請先載入至少一個 S32 區塊以供座標參考", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // 1. 計算目標 Block 座標
+            var (targetBlockX, targetBlockY) = EstimateBlockCoordinates(worldPos, currentMap);
+
+            string mapPath = Path.Combine(Share.LineagePath, "Map", _document.MapId);
+
+            using (var openDialog = new OpenFileDialog())
+            {
+                openDialog.Filter = "FS32 地圖包|*.fs32|所有檔案|*.*";
+                openDialog.Title = "選擇要匯入的 fs32 地圖包";
+
+                if (openDialog.ShowDialog() != DialogResult.OK)
+                    return;
+
+                try
+                {
+                    // 2. 載入 fs32
+                    toolStripStatusLabel1.Text = "正在載入 fs32...";
+                    Application.DoEvents();
+
+                    var fs32 = Fs32Parser.ParseFile(openDialog.FileName);
+                    if (fs32 == null || fs32.Blocks.Count == 0)
+                    {
+                        MessageBox.Show("無效的 fs32 檔案或不包含任何區塊", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+
+                    // 3. 計算 fs32 的基準點（最小 BlockX/BlockY）
+                    var (baseBlockX, baseBlockY) = GetFs32BaseBlock(fs32);
+
+                    // 4. 計算偏移量
+                    int offsetX = targetBlockX - baseBlockX;
+                    int offsetY = targetBlockY - baseBlockY;
+
+                    Console.WriteLine($"[ImportFs32AtPosition] Target: ({targetBlockX:X4}, {targetBlockY:X4})");
+                    Console.WriteLine($"[ImportFs32AtPosition] Base: ({baseBlockX:X4}, {baseBlockY:X4})");
+                    Console.WriteLine($"[ImportFs32AtPosition] Offset: ({offsetX}, {offsetY})");
+
+                    // 5. 檢查重疊區塊
+                    var overlappingBlocks = FindOverlappingBlocks(fs32, offsetX, offsetY, mapPath);
+                    OverlapHandling? overlapHandling = null;
+
+                    if (overlappingBlocks.Count > 0)
+                    {
+                        overlapHandling = ShowOverlapConflictDialog(overlappingBlocks, offsetX, offsetY);
+                        if (overlapHandling == null)
+                        {
+                            // 使用者取消
+                            toolStripStatusLabel1.Text = "已取消匯入";
+                            return;
+                        }
+                    }
+
+                    // 6. 顯示確認對話框
+                    string confirmMessage = $"fs32 地圖包資訊：\n\n" +
+                                            $"• 來源地圖: {fs32.SourceMapId}\n" +
+                                            $"• 區塊數量: {fs32.Blocks.Count}\n" +
+                                            $"• 圖塊數量: {fs32.Tiles.Count}\n" +
+                                            $"• SPR 數量: {fs32.Sprs.Count}\n\n" +
+                                            $"目標位置: ({targetBlockX:X4}, {targetBlockY:X4})\n" +
+                                            $"偏移量: ({offsetX}, {offsetY})\n";
+
+                    if (overlappingBlocks.Count > 0)
+                    {
+                        confirmMessage += $"\n⚠️ 有 {overlappingBlocks.Count} 個重疊區塊將被" +
+                                          (overlapHandling == OverlapHandling.Overwrite ? "覆蓋" : "跳過");
+                    }
+
+                    confirmMessage += "\n\n確定要匯入嗎？";
+
+                    if (MessageBox.Show(confirmMessage, "確認匯入", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                    {
+                        toolStripStatusLabel1.Text = "已取消匯入";
+                        return;
+                    }
+
+                    // 7. 統計 Layer8 項目並顯示警告
+                    int totalL8Items = 0;
+                    HashSet<int> l8SprIds = new HashSet<int>();
+                    foreach (var block in fs32.Blocks)
+                    {
+                        try
+                        {
+                            var tempS32 = S32Parser.Parse(block.S32Data);
+                            if (tempS32?.Layer8 != null)
+                            {
+                                totalL8Items += tempS32.Layer8.Count;
+                                foreach (var l8 in tempS32.Layer8)
+                                    l8SprIds.Add(l8.SprId);
+                            }
+                        }
+                        catch { }
+                    }
+
+                    if (totalL8Items > 0)
+                    {
+                        string l8Warning = $"⚠️ 警告：包含 {totalL8Items} 個 Layer8 項目 (使用 {l8SprIds.Count} 種 SPR)\n\n";
+                        if (fs32.Sprs.Count > 0)
+                        {
+                            l8Warning += $"fs32 已包含 {fs32.Sprs.Count} 個 SPR 檔案\n";
+                            l8Warning += "• spr/file/*.spr → 匯入至 Client\n";
+                            l8Warning += "• spr/code/*.sprtxt → 加入您的 list.spr 編碼檔\n";
+                        }
+                        else
+                        {
+                            l8Warning += "fs32 不包含 SPR 檔案\n請自行準備對應的 SPR 編碼檔\n";
+                        }
+                        l8Warning += "\n否則可能導致遊戲閃退！\n\n確定要繼續匯入嗎？";
+
+                        var l8Result = MessageBox.Show(l8Warning, "Layer8 警告",
+                            MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                        if (l8Result != DialogResult.Yes)
+                            return;
+                    }
+
+                    // 8. 處理 Tiles（如果有）
+                    TileMappingResult tileMapping = null;
+                    if (fs32.Tiles.Count > 0)
+                    {
+                        tileMapping = ProcessFs32Tiles(fs32);
+                        if (tileMapping == null)
+                        {
+                            // 用戶取消
+                            return;
+                        }
+                    }
+
+                    // 9. 取得 MapInfo
+                    int mapMinBlockX = 0x7FFF;
+                    int mapMinBlockY = 0x7FFF;
+                    int mapBlockCountX = 1;
+
+                    if (_document.MapInfo != null)
+                    {
+                        mapMinBlockX = _document.MapInfo.nMinBlockX;
+                        mapMinBlockY = _document.MapInfo.nMinBlockY;
+                        mapBlockCountX = _document.MapInfo.nBlockCountX;
+                    }
+                    else if (_document.S32Files.Count > 0)
+                    {
+                        var firstS32 = _document.S32Files.Values.First();
+                        if (firstS32.SegInfo != null)
+                        {
+                            mapMinBlockX = firstS32.SegInfo.nMapMinBlockX;
+                            mapMinBlockY = firstS32.SegInfo.nMapMinBlockY;
+                            mapBlockCountX = firstS32.SegInfo.nMapBlockCountX;
+                        }
+                    }
+
+                    // 10. 解析並寫入 S32 區塊（帶偏移）
+                    toolStripStatusLabel1.Text = "正在匯入區塊...";
+                    Application.DoEvents();
+
+                    int importedCount = 0;
+                    int skippedCount = 0;
+                    var errors = new List<string>();
+
+                    foreach (var block in fs32.Blocks)
+                    {
+                        try
+                        {
+                            // 計算新座標
+                            int newBlockX = block.BlockX + offsetX;
+                            int newBlockY = block.BlockY + offsetY;
+
+                            string s32FileName = $"{newBlockX:x4}{newBlockY:x4}.s32";
+                            string s32FilePath = Path.Combine(mapPath, s32FileName);
+
+                            // 檢查重疊
+                            bool isOverlapping = File.Exists(s32FilePath) ||
+                                _document.S32Files.Keys.Any(k => k.EndsWith(s32FileName, StringComparison.OrdinalIgnoreCase));
+
+                            if (isOverlapping && overlapHandling == OverlapHandling.Skip)
+                            {
+                                Console.WriteLine($"[ImportFs32AtPosition] Skipping overlapping block {newBlockX:X4}{newBlockY:X4}");
+                                skippedCount++;
+                                continue;
+                            }
+
+                            Console.WriteLine($"[ImportFs32AtPosition] Processing block {block.BlockX:X4}{block.BlockY:X4} -> {newBlockX:X4}{newBlockY:X4}");
+
+                            // 解析 S32 資料
+                            if (block.S32Data == null || block.S32Data.Length == 0)
+                            {
+                                errors.Add($"區塊 {block.BlockX:X4}{block.BlockY:X4}: 資料為空");
+                                skippedCount++;
+                                continue;
+                            }
+
+                            var s32Data = S32Parser.Parse(block.S32Data);
+                            if (s32Data == null)
+                            {
+                                errors.Add($"區塊 {block.BlockX:X4}{block.BlockY:X4}: 解析失敗");
+                                skippedCount++;
+                                continue;
+                            }
+
+                            // 設置 SegInfo（使用新座標）
+                            var segInfo = new Struct.L1MapSeg(newBlockX, newBlockY, true);
+                            segInfo.nMapMinBlockX = mapMinBlockX;
+                            segInfo.nMapMinBlockY = mapMinBlockY;
+                            segInfo.nMapBlockCountX = mapBlockCountX;
+                            s32Data.SegInfo = segInfo;
+
+                            // 如果有 Tile Mapping，套用到 S32
+                            if (tileMapping != null && tileMapping.IdMapping.Count > 0)
+                            {
+                                ApplyTileMappingToS32(s32Data, tileMapping);
+                            }
+
+                            // 寫入 S32
+                            Console.WriteLine($"[ImportFs32AtPosition] Writing to {s32FilePath}");
+                            S32Writer.Write(s32Data, s32FilePath);
+                            importedCount++;
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[ImportFs32AtPosition] Error in block {block.BlockX:X4}{block.BlockY:X4}: {ex}");
+                            errors.Add($"區塊 {block.BlockX:X4}{block.BlockY:X4}: {ex.Message}");
+                            skippedCount++;
+                        }
+                    }
+
+                    // 11. 顯示結果
+                    string resultMessage = $"匯入完成！\n\n" +
+                                           $"• 目標位置: ({targetBlockX:X4}, {targetBlockY:X4})\n" +
+                                           $"• 成功匯入: {importedCount} 個區塊\n";
+
+                    if (tileMapping != null)
+                    {
+                        resultMessage += $"• 匯入圖塊: {tileMapping.ImportedCount} 個\n" +
+                                         $"• 重用圖塊: {tileMapping.ReuseCount} 個\n" +
+                                         $"• 重新編號: {tileMapping.RemappedCount} 個\n";
+                    }
+
+                    if (skippedCount > 0)
+                    {
+                        resultMessage += $"\n跳過 {skippedCount} 個區塊";
+                        if (errors.Count > 0 && errors.Count <= 5)
+                        {
+                            resultMessage += ":\n" + string.Join("\n", errors);
+                        }
+                    }
+
+                    MessageBox.Show(resultMessage, "匯入完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                    // 12. 重新載入地圖
+                    ReloadCurrentMap();
+                    toolStripStatusLabel1.Text = $"已匯入 {importedCount} 個區塊至 ({targetBlockX:X4}, {targetBlockY:X4})";
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[ImportFs32AtPosition] Error: {ex}");
+                    MessageBox.Show($"匯入失敗: {ex.Message}", "錯誤", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        // 取得 fs32 的基準點（最小 BlockX/BlockY）
+        private (int minBlockX, int minBlockY) GetFs32BaseBlock(Fs32Data fs32)
+        {
+            int minX = int.MaxValue;
+            int minY = int.MaxValue;
+
+            foreach (var block in fs32.Blocks)
+            {
+                if (block.BlockX < minX) minX = block.BlockX;
+                if (block.BlockY < minY) minY = block.BlockY;
+            }
+
+            return (minX, minY);
+        }
+
+        // 檢查重疊區塊
+        private List<Fs32Block> FindOverlappingBlocks(Fs32Data fs32, int offsetX, int offsetY, string mapPath)
+        {
+            var overlapping = new List<Fs32Block>();
+
+            foreach (var block in fs32.Blocks)
+            {
+                int newBlockX = block.BlockX + offsetX;
+                int newBlockY = block.BlockY + offsetY;
+                string fileName = $"{newBlockX:x4}{newBlockY:x4}.s32";
+                string filePath = Path.Combine(mapPath, fileName);
+
+                if (File.Exists(filePath) ||
+                    _document.S32Files.Keys.Any(k => k.EndsWith(fileName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    overlapping.Add(block);
+                }
+            }
+
+            return overlapping;
+        }
+
+        // 顯示重疊處理對話框
+        private OverlapHandling? ShowOverlapConflictDialog(List<Fs32Block> overlapping, int offsetX, int offsetY)
+        {
+            using (var dialog = new Form())
+            {
+                dialog.Text = "區塊重疊警告";
+                dialog.Size = new Size(400, 250);
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dialog.MaximizeBox = false;
+                dialog.MinimizeBox = false;
+
+                var label = new Label
+                {
+                    Text = $"⚠️ 發現 {overlapping.Count} 個區塊將與現有區塊重疊：\n\n",
+                    Location = new Point(20, 20),
+                    Size = new Size(350, 40),
+                    AutoSize = false
+                };
+                dialog.Controls.Add(label);
+
+                // 顯示前幾個重疊的區塊名稱
+                string blockList = "";
+                int showCount = Math.Min(overlapping.Count, 5);
+                for (int i = 0; i < showCount; i++)
+                {
+                    var block = overlapping[i];
+                    int newBlockX = block.BlockX + offsetX;
+                    int newBlockY = block.BlockY + offsetY;
+                    blockList += $"• {newBlockX:x4}{newBlockY:x4}.s32\n";
+                }
+                if (overlapping.Count > 5)
+                {
+                    blockList += $"... 還有 {overlapping.Count - 5} 個\n";
+                }
+
+                var listLabel = new Label
+                {
+                    Text = blockList,
+                    Location = new Point(20, 60),
+                    Size = new Size(350, 80),
+                    AutoSize = false
+                };
+                dialog.Controls.Add(listLabel);
+
+                var questionLabel = new Label
+                {
+                    Text = "請選擇處理方式：",
+                    Location = new Point(20, 145),
+                    AutoSize = true
+                };
+                dialog.Controls.Add(questionLabel);
+
+                OverlapHandling? result = null;
+
+                var overwriteBtn = new Button
+                {
+                    Text = "覆蓋現有區塊",
+                    Location = new Point(20, 170),
+                    Size = new Size(110, 30),
+                    DialogResult = DialogResult.OK
+                };
+                overwriteBtn.Click += (s, e) => { result = OverlapHandling.Overwrite; };
+                dialog.Controls.Add(overwriteBtn);
+
+                var skipBtn = new Button
+                {
+                    Text = "跳過重疊區塊",
+                    Location = new Point(140, 170),
+                    Size = new Size(110, 30),
+                    DialogResult = DialogResult.OK
+                };
+                skipBtn.Click += (s, e) => { result = OverlapHandling.Skip; };
+                dialog.Controls.Add(skipBtn);
+
+                var cancelBtn = new Button
+                {
+                    Text = "取消",
+                    Location = new Point(260, 170),
+                    Size = new Size(110, 30),
+                    DialogResult = DialogResult.Cancel
+                };
+                dialog.Controls.Add(cancelBtn);
+
+                dialog.AcceptButton = overwriteBtn;
+                dialog.CancelButton = cancelBtn;
+
+                if (dialog.ShowDialog() == DialogResult.Cancel)
+                    return null;
+
+                return result;
+            }
+        }
+
         // 處理 fs32 中的 Tiles（類似 fs3p 的邏輯）
         private TileMappingResult ProcessFs32Tiles(Fs32Data fs32)
         {
@@ -9712,6 +10122,13 @@ namespace L1FlyMapViewer
                     return;
                 }
 
+                // 右鍵點擊已存在區塊：顯示操作選單
+                if (e.Button == MouseButtons.Right)
+                {
+                    Struct.L1Map currentMap = Share.MapDataList[_document.MapId];
+                    ShowExistingBlockContextMenu(e.Location, new Point(worldX, worldY), currentMap, s32Data);
+                    return;
+                }
 
                 // 重新渲染以顯示高亮
                 RenderS32Map();
@@ -9754,6 +10171,14 @@ namespace L1FlyMapViewer
             };
             menu.Items.Add(addS32Item);
 
+            // 在此位置匯入 fs32
+            ToolStripMenuItem importFs32Item = new ToolStripMenuItem("📦 在此位置匯入 fs32...");
+            importFs32Item.Click += (s, args) =>
+            {
+                ImportFs32AtPosition(worldPos, currentMap);
+            };
+            menu.Items.Add(importFs32Item);
+
             // 顯示預估的 Block 座標
             if (_document.S32Files.Count > 0)
             {
@@ -9765,6 +10190,36 @@ namespace L1FlyMapViewer
                 infoItem.Enabled = false;
                 menu.Items.Add(infoItem);
             }
+
+            menu.Show(_mapViewerControl, screenLocation);
+        }
+
+        // 顯示已存在區塊的右鍵選單
+        private void ShowExistingBlockContextMenu(Point screenLocation, Point worldPos, Struct.L1Map currentMap, S32Data currentS32)
+        {
+            ContextMenuStrip menu = new ContextMenuStrip();
+
+            // 在此位置匯入 fs32（覆蓋現有區塊）
+            ToolStripMenuItem importFs32Item = new ToolStripMenuItem("📦 在此位置匯入 fs32...");
+            importFs32Item.Click += (s, args) =>
+            {
+                ImportFs32AtPosition(worldPos, currentMap);
+            };
+            menu.Items.Add(importFs32Item);
+
+            // 顯示當前區塊資訊
+            menu.Items.Add(new ToolStripSeparator());
+            string blockFileName = Path.GetFileName(currentS32.FilePath);
+            ToolStripMenuItem infoItem = new ToolStripMenuItem($"當前區塊: {blockFileName}");
+            infoItem.Enabled = false;
+            menu.Items.Add(infoItem);
+
+            // 顯示目標位置資訊
+            var (blockX, blockY) = EstimateBlockCoordinates(worldPos, currentMap);
+            string targetFileName = $"{blockX:X4}{blockY:X4}.s32".ToLower();
+            ToolStripMenuItem targetItem = new ToolStripMenuItem($"目標位置: {targetFileName} ({blockX:X4},{blockY:X4})");
+            targetItem.Enabled = false;
+            menu.Items.Add(targetItem);
 
             menu.Show(_mapViewerControl, screenLocation);
         }
