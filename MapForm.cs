@@ -10586,6 +10586,12 @@ namespace L1FlyMapViewer
                     }
                     else if (e.Buttons == Eto.Forms.MouseButtons.Alternate)
                     {
+                        // 如果有選取格子，優先顯示選取區域選單
+                        if (_editState.SelectedCells.Count > 0)
+                        {
+                            ShowSelectionContextMenu(e.Location.ToPoint());
+                            return;
+                        }
                         // 真正的延伸區域，顯示新增 S32 選單
                         Struct.L1Map currentMap = Share.MapDataList[_document.MapId];
                         ShowEmptyAreaContextMenu(e.Location.ToPoint(), new Point(worldX, worldY), currentMap);
@@ -10636,8 +10642,8 @@ namespace L1FlyMapViewer
                 // 右鍵點擊：如果有選取格子則顯示選取區域選單，否則顯示區塊操作選單
                 if (e.Buttons == Eto.Forms.MouseButtons.Alternate)
                 {
-                    // 優先顯示選取區域的右鍵選單
-                    if (_interaction.IsLayer4CopyMode && _editState.SelectedCells.Count > 0)
+                    // 優先顯示選取區域的右鍵選單（不論是否在複製模式）
+                    if (_editState.SelectedCells.Count > 0)
                     {
                         ShowSelectionContextMenu(e.Location.ToPoint());
                         return;
@@ -10668,9 +10674,15 @@ namespace L1FlyMapViewer
             sw.Stop();
             LogPerf($"[MOUSE-CLICK] no cell found, total={sw.ElapsedMilliseconds}ms, s32Count={_document.S32Files.Count}");
 
-            // 點擊空白區域時，顯示右鍵選單以新增 S32
+            // 點擊空白區域時，如果有選取格子則顯示選取選單，否則顯示新增 S32 選單
             if (e.Buttons == Eto.Forms.MouseButtons.Alternate && _document.S32Files.Count > 0)
             {
+                // 優先顯示選取區域的右鍵選單
+                if (_editState.SelectedCells.Count > 0)
+                {
+                    ShowSelectionContextMenu(e.Location.ToPoint());
+                    return;
+                }
                 Struct.L1Map currentMap = Share.MapDataList[_document.MapId];
                 ShowEmptyAreaContextMenu(e.Location.ToPoint(), new Point(worldX, worldY), currentMap);
             }

@@ -3113,10 +3113,13 @@ public class ControlCollection : System.Collections.ObjectModel.Collection<Eto.F
             }
             else if (Count > 1)
             {
-                var layout = new Eto.Forms.StackLayout();
+                // 使用 PixelLayout 以支援絕對定位 (Location 屬性)
+                var layout = new Eto.Forms.PixelLayout();
                 foreach (var control in this)
                 {
-                    layout.Items.Add(control);
+                    // 取得控件的 Location (如果有設定)
+                    var loc = control.GetLocation();
+                    layout.Add(control, loc);
                 }
                 panel.Content = layout;
             }
@@ -5006,10 +5009,45 @@ public static class ImageViewExtensions
 /// </summary>
 public static class CommonControlExtensions
 {
-    // Location - read-only in Eto, need layout-based approach
+    // 存儲控件位置的字典
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Eto.Forms.Control, LocationHolder> _locations
+        = new System.Runtime.CompilerServices.ConditionalWeakTable<Eto.Forms.Control, LocationHolder>();
+
+    private class LocationHolder
+    {
+        public Eto.Drawing.Point Location { get; set; }
+    }
+
+    // Location - stored for PixelLayout positioning
     public static void SetLocation(this Eto.Forms.Control control, Eto.Drawing.Point location)
     {
-        // Stub - Eto uses layout-based positioning
+        var holder = _locations.GetOrCreateValue(control);
+        holder.Location = location;
+
+        // 如果控件已在 PixelLayout 中，更新其位置
+        if (control.Parent is Eto.Forms.PixelLayout pixelLayout)
+        {
+            pixelLayout.Move(control, location);
+        }
+    }
+
+    public static Eto.Drawing.Point GetLocation(this Eto.Forms.Control control)
+    {
+        // 先檢查存儲的位置
+        if (_locations.TryGetValue(control, out var holder))
+        {
+            return holder.Location;
+        }
+
+        // 檢查是否有 Location 屬性 (WinForms 相容類別)
+        var locProp = control.GetType().GetProperty("Location", typeof(Point));
+        if (locProp != null)
+        {
+            var loc = (Point)locProp.GetValue(control);
+            return new Eto.Drawing.Point(loc.X, loc.Y);
+        }
+
+        return new Eto.Drawing.Point(0, 0);
     }
 
     // Size

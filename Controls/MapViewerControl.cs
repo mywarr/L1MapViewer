@@ -465,6 +465,9 @@ namespace L1MapViewer.Controls
             _zoomControlPanel.GetControls().Add(_btnZoomOut);
             _zoomControlPanel.GetControls().Add(_btnZoomReset);
 
+            // 設定初始位置（使用預設值，稍後會在 Resize 時更新）
+            _zoomControlPanel.Location = new Point(10, 10);
+
             _mapPanel.GetControls().Add(_zoomControlPanel);
             _zoomControlPanel.BringToFront();
 
@@ -623,7 +626,11 @@ namespace L1MapViewer.Controls
 
             RequestRenderIfNeeded();
             ScrollChanged?.Invoke(this, EventArgs.Empty);
-            ((HandledMouseEventArgs)e).Handled = true;
+            // 嘗試設置 Handled，避免 Eto.Forms 原生事件類型造成的類型轉換錯誤
+            if (e is HandledMouseEventArgs handledArgs)
+            {
+                handledArgs.Handled = true;
+            }
         }
 
         private void MapPanel_Resize(object sender, EventArgs e)
