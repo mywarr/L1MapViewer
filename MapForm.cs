@@ -904,14 +904,6 @@ namespace L1FlyMapViewer
             };
 
             // 建立狀態列按鈕 (ToolStripButton 不能直接用於 StackLayout)
-            var btnShowAllL8 = new Eto.Forms.Button
-            {
-                Text = toolStripShowAllL8.Text,
-                ToolTip = toolStripShowAllL8.ToolTip,
-                Size = new Eto.Drawing.Size(-1, 22)
-            };
-            btnShowAllL8.Click += (s, e) => toolStripShowAllL8_Click(s, e);
-
             var btnCopyMoveCmd = new Eto.Forms.Button
             {
                 Text = toolStripCopyMoveCmd.Text,
@@ -955,7 +947,6 @@ namespace L1FlyMapViewer
                 Spacing = 10
             };
             statusLeft.Items.Add(toolStripStatusLabel1);
-            statusLeft.Items.Add(btnShowAllL8);
             statusLeft.Items.Add(new Eto.Forms.Label { Text = "|", TextColor = Eto.Drawing.Colors.Gray });
             statusLeft.Items.Add(toolStripStatusLabel2);
 

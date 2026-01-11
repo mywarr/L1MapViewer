@@ -301,15 +301,29 @@ namespace L1FlyMapViewer
         }
 
         // 解析座標輸入
-        private bool TryParseCoordinate(string input, out int x, out int y)
+        private bool TryParseCoordinate(string input, out int x, out int y, out string mapId)
         {
             x = 0;
             y = 0;
+            mapId = null;
             if (string.IsNullOrWhiteSpace(input))
                 return false;
 
             // 支援逗號或空格分隔
             string[] parts = input.Split(new char[] { ',', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+
+            // 支援 "移動 X Y MapID" 格式
+            if (parts.Length >= 4 && parts[0] == "移動")
+            {
+                if (int.TryParse(parts[1].Trim(), out x) &&
+                    int.TryParse(parts[2].Trim(), out y))
+                {
+                    mapId = parts[3].Trim();
+                    return true;
+                }
+            }
+
+            // 支援 "X,Y" 或 "X Y" 格式
             if (parts.Length >= 2 &&
                 int.TryParse(parts[0].Trim(), out x) &&
                 int.TryParse(parts[1].Trim(), out y))
@@ -319,24 +333,49 @@ namespace L1FlyMapViewer
             return false;
         }
 
+        // 重載：不需要 mapId 的版本
+        private bool TryParseCoordinate(string input, out int x, out int y)
+        {
+            return TryParseCoordinate(input, out x, out y, out _);
+        }
+
         // 執行座標跳轉
         private void PerformCoordinateJump()
         {
-            string input = toolStripJumpTextBox.Text.Trim();
+            // 優先使用 Eto 狀態列文字框的內容
+            string input = _statusTxtJump?.Text?.Trim() ?? toolStripJumpTextBox.Text.Trim();
             if (string.IsNullOrEmpty(input))
             {
-                this.toolStripStatusLabel1.Text = "請輸入座標，格式: X,Y";
+                this.toolStripStatusLabel1.Text = "請輸入座標，格式: X,Y 或 移動 X Y 地圖ID";
                 return;
             }
 
-            if (TryParseCoordinate(input, out int x, out int y))
+            if (TryParseCoordinate(input, out int x, out int y, out string mapId))
             {
+                // 如果有指定地圖 ID 且與當前不同，先切換地圖
+                if (!string.IsNullOrEmpty(mapId) && mapId != _document.MapId)
+                {
+                    // 嘗試找到並載入指定的地圖
+                    if (Share.MapDataList.ContainsKey(mapId))
+                    {
+                        LoadMap(mapId);
+                        this.toolStripStatusLabel1.Text = $"已切換到地圖 {mapId}，跳轉到座標 ({x}, {y})";
+                    }
+                    else
+                    {
+                        this.toolStripStatusLabel1.Text = $"找不到地圖 {mapId}，嘗試在當前地圖跳轉";
+                    }
+                }
+
                 JumpToGameCoordinate(x, y);
-                this.toolStripStatusLabel1.Text = $"已跳轉到座標 ({x}, {y})";
+                if (string.IsNullOrEmpty(mapId) || mapId == _document.MapId)
+                {
+                    this.toolStripStatusLabel1.Text = $"已跳轉到座標 ({x}, {y})";
+                }
             }
             else
             {
-                this.toolStripStatusLabel1.Text = "座標格式錯誤，請使用格式: X,Y (例如: 32800,32700)";
+                this.toolStripStatusLabel1.Text = "座標格式錯誤，請使用格式: X,Y 或 移動 X Y 地圖ID";
             }
         }
 
