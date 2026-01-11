@@ -3389,12 +3389,13 @@ public static class MoreControlExtensions
 /// </summary>
 public static class GraphicsHelper
 {
-    // Note: Eto.Drawing.Graphics doesn't have FromImage like WinForms
-    // This is a stub - actual implementation would need SkiaSharp
+    /// <summary>
+    /// Create a Graphics object for drawing on a Bitmap
+    /// In Eto.Forms, this is done via the Graphics constructor
+    /// </summary>
     public static Eto.Drawing.Graphics FromImage(Eto.Drawing.Bitmap bitmap)
     {
-        // This is a placeholder - real implementation needs SkiaSharp
-        return null;
+        return new Eto.Drawing.Graphics(bitmap);
     }
 }
 
