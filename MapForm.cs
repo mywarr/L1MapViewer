@@ -25944,7 +25944,8 @@ namespace L1FlyMapViewer
             btnClose.Click += (s, args) => resultForm.Close();
             resultForm.GetControls().Add(btnClose);
 
-            resultForm.Resize += (s, args) =>
+            // 調整佈局的方法
+            Action adjustLayout = () =>
             {
                 int clientWidth = Math.Max(100, resultForm.ClientSize.Width);
                 int clientHeight = Math.Max(200, resultForm.ClientSize.Height);
@@ -25955,6 +25956,9 @@ namespace L1FlyMapViewer
                 btnClearAll.SetLocation(new Point(140, Math.Max(10, clientHeight - 45)));
                 btnClose.SetLocation(new Point(Math.Max(10, clientWidth - 100), Math.Max(10, clientHeight - 45)));
             };
+
+            resultForm.Resize += (s, args) => adjustLayout();
+            resultForm.Shown += (s, args) => adjustLayout();
 
             resultForm.Show();
         }
