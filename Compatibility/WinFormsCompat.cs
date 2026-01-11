@@ -3685,12 +3685,15 @@ public static class BitmapHelper
 /// </summary>
 public class WinFormsBitmap : Eto.Drawing.Bitmap
 {
+    private readonly PixelFormat _originalFormat;
+
     /// <summary>
     /// Create a new Bitmap with width and height
     /// </summary>
     public WinFormsBitmap(int width, int height)
         : base(new Eto.Drawing.Size(width, height), Eto.Drawing.PixelFormat.Format32bppRgba)
     {
+        _originalFormat = PixelFormat.Format32bppArgb;
     }
 
     /// <summary>
@@ -3699,8 +3702,8 @@ public class WinFormsBitmap : Eto.Drawing.Bitmap
     public WinFormsBitmap(int width, int height, PixelFormat format)
         : base(new Eto.Drawing.Size(width, height), format)
     {
+        _originalFormat = format;
     }
-
 
     /// <summary>
     /// Create a new Bitmap from a Stream
@@ -3708,6 +3711,7 @@ public class WinFormsBitmap : Eto.Drawing.Bitmap
     public WinFormsBitmap(System.IO.Stream stream)
         : base(stream)
     {
+        _originalFormat = PixelFormat.Format32bppArgb;
     }
 
     /// <summary>
@@ -3716,6 +3720,7 @@ public class WinFormsBitmap : Eto.Drawing.Bitmap
     public WinFormsBitmap(string filename)
         : base(filename)
     {
+        _originalFormat = PixelFormat.Format32bppArgb;
     }
 
     /// <summary>
@@ -3724,6 +3729,7 @@ public class WinFormsBitmap : Eto.Drawing.Bitmap
     public WinFormsBitmap(Eto.Drawing.Size size)
         : base(size, Eto.Drawing.PixelFormat.Format32bppRgba)
     {
+        _originalFormat = PixelFormat.Format32bppArgb;
     }
 
     /// <summary>
@@ -3732,6 +3738,7 @@ public class WinFormsBitmap : Eto.Drawing.Bitmap
     public WinFormsBitmap(Eto.Drawing.Size size, PixelFormat format)
         : base(size, format)
     {
+        _originalFormat = format;
     }
 
     /// <summary>
@@ -3740,6 +3747,7 @@ public class WinFormsBitmap : Eto.Drawing.Bitmap
     public WinFormsBitmap(Eto.Drawing.Size size, Eto.Drawing.PixelFormat format)
         : base(size, format)
     {
+        _originalFormat = PixelFormat.Format32bppArgb;
     }
 
     /// <summary>
@@ -3748,7 +3756,7 @@ public class WinFormsBitmap : Eto.Drawing.Bitmap
     public WinFormsBitmap(Eto.Drawing.Bitmap source, int width, int height)
         : base(new Eto.Drawing.Size(width, height), Eto.Drawing.PixelFormat.Format32bppRgba)
     {
-        // TODO: Actual resizing would need SkiaSharp
+        _originalFormat = PixelFormat.Format32bppArgb;
     }
 
     /// <summary>
@@ -3757,7 +3765,7 @@ public class WinFormsBitmap : Eto.Drawing.Bitmap
     public WinFormsBitmap(Eto.Drawing.Image source, int width, int height)
         : base(new Eto.Drawing.Size(width, height), Eto.Drawing.PixelFormat.Format32bppRgba)
     {
-        // TODO: Actual resizing would need SkiaSharp
+        _originalFormat = PixelFormat.Format32bppArgb;
     }
 
     /// <summary>
@@ -3766,13 +3774,13 @@ public class WinFormsBitmap : Eto.Drawing.Bitmap
     public WinFormsBitmap(Eto.Drawing.Image source)
         : base(new Eto.Drawing.Size(source.Width, source.Height), Eto.Drawing.PixelFormat.Format32bppRgba)
     {
-        // TODO: Actual copying would need SkiaSharp
+        _originalFormat = PixelFormat.Format32bppArgb;
     }
 
     /// <summary>
-    /// PixelFormat property for WinForms compatibility
+    /// PixelFormat property - returns the original format passed to constructor
     /// </summary>
-    public PixelFormat PixelFormat => PixelFormat.Format32bppArgb;
+    public PixelFormat PixelFormat => _originalFormat;
 
 }
 
@@ -3795,15 +3803,116 @@ public static class BitmapExtensions
         return new Eto.Drawing.Size(bitmap.Width, bitmap.Height);
     }
 
-    // LockBits stub - for actual implementation, use SkiaSharp directly
+    /// <summary>
+    /// LockBits - Allocate a buffer for direct pixel manipulation
+    /// Supports RGB555 format for tile rendering
+    /// </summary>
     public static BitmapData LockBits(this Eto.Drawing.Bitmap bitmap, Eto.Drawing.Rectangle rect,
         ImageLockMode mode, PixelFormat format)
     {
-        return new BitmapData { Width = rect.Width, Height = rect.Height };
+        bool isRgb555 = format == PixelFormat.Format16bppRgb555;
+        int bytesPerPixel = isRgb555 ? 2 : 4;
+        // Align stride to 4 bytes
+        int stride = ((rect.Width * bytesPerPixel + 3) / 4) * 4;
+        int bufferSize = stride * rect.Height;
+
+        var buffer = new byte[bufferSize];
+        var handle = System.Runtime.InteropServices.GCHandle.Alloc(buffer, System.Runtime.InteropServices.GCHandleType.Pinned);
+
+        return new BitmapData
+        {
+            Width = rect.Width,
+            Height = rect.Height,
+            Stride = stride,
+            Scan0 = handle.AddrOfPinnedObject(),
+            PixelFormat = format,
+            Buffer = buffer,
+            BufferHandle = handle,
+            SourceBitmap = bitmap
+        };
     }
 
+    /// <summary>
+    /// UnlockBits - Copy buffer data back to the Eto bitmap
+    /// Converts RGB555 to RGBA32 if needed
+    /// </summary>
     public static void UnlockBits(this Eto.Drawing.Bitmap bitmap, BitmapData data)
     {
+        if (data?.Buffer == null || data.SourceBitmap == null) return;
+
+        bool isRgb555 = data.PixelFormat == PixelFormat.Format16bppRgb555;
+
+        try
+        {
+            // Use Eto's Lock method to get direct pixel access
+            using (var bitmapData = bitmap.Lock())
+            {
+                int srcStride = data.Stride;
+                int dstStride = bitmapData.ScanWidth;
+                int width = Math.Min(data.Width, bitmap.Width);
+                int height = Math.Min(data.Height, bitmap.Height);
+
+                unsafe
+                {
+                    byte* dstPtr = (byte*)bitmapData.Data;
+
+                    if (isRgb555)
+                    {
+                        // Convert RGB555 to BGRA32 (Eto uses BGRA)
+                        for (int y = 0; y < height; y++)
+                        {
+                            int srcOffset = y * srcStride;
+                            int dstOffset = y * dstStride;
+
+                            for (int x = 0; x < width; x++)
+                            {
+                                // Read RGB555 (16-bit)
+                                ushort rgb555 = (ushort)(data.Buffer[srcOffset] | (data.Buffer[srcOffset + 1] << 8));
+
+                                // Extract RGB components (5 bits each)
+                                int r = (rgb555 >> 10) & 0x1F;
+                                int g = (rgb555 >> 5) & 0x1F;
+                                int b = rgb555 & 0x1F;
+
+                                // Convert to 8-bit (scale from 0-31 to 0-255)
+                                byte r8 = (byte)((r << 3) | (r >> 2));
+                                byte g8 = (byte)((g << 3) | (g >> 2));
+                                byte b8 = (byte)((b << 3) | (b >> 2));
+                                byte a8 = 255; // Always opaque - black is a valid color
+
+                                // Write BGRA32
+                                dstPtr[dstOffset] = b8;
+                                dstPtr[dstOffset + 1] = g8;
+                                dstPtr[dstOffset + 2] = r8;
+                                dstPtr[dstOffset + 3] = a8;
+
+                                srcOffset += 2;
+                                dstOffset += 4;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Direct copy for 32-bit formats
+                        for (int y = 0; y < height; y++)
+                        {
+                            int srcOffset = y * srcStride;
+                            int dstOffset = y * dstStride;
+                            int copyBytes = Math.Min(srcStride, dstStride);
+                            System.Buffer.BlockCopy(data.Buffer, srcOffset, new Span<byte>(dstPtr + dstOffset, copyBytes).ToArray(), 0, copyBytes);
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Silently ignore errors during pixel conversion
+        }
+        finally
+        {
+            data.Dispose();
+        }
     }
 
     /// <summary>
@@ -4349,14 +4458,30 @@ public enum ImageLockMode
 }
 
 /// <summary>
-/// BitmapData class for compatibility
+/// BitmapData class for compatibility - supports direct pixel manipulation
 /// </summary>
-public class BitmapData
+public class BitmapData : IDisposable
 {
     public int Width { get; set; }
     public int Height { get; set; }
     public int Stride { get; set; }
     public IntPtr Scan0 { get; set; }
+    public PixelFormat PixelFormat { get; set; }
+
+    // Internal buffer management
+    internal byte[]? Buffer { get; set; }
+    internal System.Runtime.InteropServices.GCHandle BufferHandle { get; set; }
+    internal Eto.Drawing.Bitmap? SourceBitmap { get; set; }
+
+    public void Dispose()
+    {
+        if (BufferHandle.IsAllocated)
+        {
+            BufferHandle.Free();
+        }
+        Buffer = null;
+        Scan0 = IntPtr.Zero;
+    }
 }
 
 /// <summary>

@@ -103,3 +103,35 @@ int gameY = layer1Y;
 ## S32 區塊
 
 每個區塊大小：3072 x 1536 像素 (64*24*2 x 64*12*2)
+
+## 測試工具
+
+### 視窗截圖工具
+
+`tests/capture_window.py` 可以抓取指定視窗的截圖，用於自動化驗證 UI 渲染。
+
+```bash
+# 基本用法（等待 10 秒後抓取標題含 "L1" 的視窗）
+python tests/capture_window.py
+
+# 指定參數
+python tests/capture_window.py "L1MapViewer" screenshot.bmp 10
+```
+
+**參數：**
+- `title` - 視窗標題關鍵字（預設: "L1"）
+- `output` - 輸出檔案路徑（預設: "screenshot.bmp"）
+- `delay` - 等待秒數（預設: 10）
+
+**自動化測試流程：**
+```bash
+# 1. 建置並啟動程式（背景執行）
+dotnet run -o bin/Debug/cli &
+
+# 2. 等待並截圖
+python tests/capture_window.py "L1MapViewer" tests/result.bmp 10
+
+# 3. 檢查截圖確認渲染正常
+```
+
+注意：`tests/` 資料夾已加入 `.gitignore`，不會被提交。
