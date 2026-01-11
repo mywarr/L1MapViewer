@@ -549,7 +549,226 @@ namespace L1FlyMapViewer
             UpdateLanguageMenuCheckmarks();
             UpdateLocalization();
 
+            // 使用 Eto.Forms 原生布局重建 UI
+            BuildEtoLayout();
+
             LogPerf("[FORM-CTOR] End");
+        }
+
+        /// <summary>
+        /// 使用 Eto.Forms 原生布局重建主介面
+        /// </summary>
+        private void BuildEtoLayout()
+        {
+            // === 左側面板 (小地圖 + 地圖列表) ===
+            var leftLayout = new Eto.Forms.StackLayout
+            {
+                Orientation = Eto.Forms.Orientation.Vertical,
+                HorizontalContentAlignment = Eto.Forms.HorizontalAlignment.Stretch,
+                Padding = new Eto.Drawing.Padding(5),
+                Spacing = 5,
+                Width = 280
+            };
+
+            // 小地圖
+            leftLayout.Items.Add(new Eto.Forms.StackLayoutItem(miniMapPictureBox, false));
+
+            // 地圖列表 Tab
+            var mapListLayout = new Eto.Forms.StackLayout
+            {
+                Orientation = Eto.Forms.Orientation.Vertical,
+                HorizontalContentAlignment = Eto.Forms.HorizontalAlignment.Stretch,
+                Spacing = 3
+            };
+            mapListLayout.Items.Add(new Eto.Forms.StackLayoutItem(txtMapSearch, false));
+            mapListLayout.Items.Add(new Eto.Forms.StackLayoutItem(lstMaps, true));
+
+            // S32 檔案 Tab
+            var s32FilesHeader = new Eto.Forms.StackLayout
+            {
+                Orientation = Eto.Forms.Orientation.Horizontal,
+                Spacing = 5
+            };
+            s32FilesHeader.Items.Add(new Eto.Forms.StackLayoutItem(lblS32Files, true));
+            s32FilesHeader.Items.Add(new Eto.Forms.StackLayoutItem(btnS32SelectAll, false));
+            s32FilesHeader.Items.Add(new Eto.Forms.StackLayoutItem(btnS32SelectNone, false));
+
+            var s32FilesLayout = new Eto.Forms.StackLayout
+            {
+                Orientation = Eto.Forms.Orientation.Vertical,
+                HorizontalContentAlignment = Eto.Forms.HorizontalAlignment.Stretch,
+                Spacing = 3
+            };
+            s32FilesLayout.Items.Add(new Eto.Forms.StackLayoutItem(s32FilesHeader, false));
+            s32FilesLayout.Items.Add(new Eto.Forms.StackLayoutItem(lstS32Files, true));
+
+            // 重建 TabControl
+            var leftTabs = new Eto.Forms.TabControl();
+            var tabMap = new Eto.Forms.TabPage { Text = "地圖列表", Content = mapListLayout };
+            var tabS32 = new Eto.Forms.TabPage { Text = "S32 檔案", Content = s32FilesLayout };
+            leftTabs.Pages.Add(tabMap);
+            leftTabs.Pages.Add(tabS32);
+
+            leftLayout.Items.Add(new Eto.Forms.StackLayoutItem(leftTabs, true));
+
+            // === 中間面板 (S32 編輯器) ===
+            // 工具列按鈕 Row 1
+            var toolRow1 = new Eto.Forms.StackLayout
+            {
+                Orientation = Eto.Forms.Orientation.Horizontal,
+                Spacing = 5,
+                Padding = new Eto.Drawing.Padding(5)
+            };
+            toolRow1.Items.Add(btnReloadMap);
+            toolRow1.Items.Add(btnSaveS32);
+            toolRow1.Items.Add(btnCopySettings);
+            toolRow1.Items.Add(btnCopyMapCoords);
+            toolRow1.Items.Add(btnImportFs32);
+
+            // 工具列按鈕 Row 2
+            var toolRow2 = new Eto.Forms.StackLayout
+            {
+                Orientation = Eto.Forms.Orientation.Horizontal,
+                Spacing = 5,
+                Padding = new Eto.Drawing.Padding(5, 0, 5, 5)
+            };
+            toolRow2.Items.Add(btnEditPassable);
+            toolRow2.Items.Add(btnEditLayer5);
+            toolRow2.Items.Add(btnRegionEdit);
+
+            // 工具列容器
+            var toolbarLayout = new Eto.Forms.StackLayout
+            {
+                Orientation = Eto.Forms.Orientation.Vertical,
+                BackgroundColor = Eto.Drawing.Colors.LightGrey
+            };
+            toolbarLayout.Items.Add(toolRow1);
+            toolbarLayout.Items.Add(toolRow2);
+
+            // 地圖顯示區域 (包含 MapViewerControl)
+            var mapContainer = new Eto.Forms.Panel
+            {
+                Content = _mapViewerControl,
+                BackgroundColor = Eto.Drawing.Colors.Black
+            };
+
+            // 中間面板布局
+            var centerLayout = new Eto.Forms.TableLayout
+            {
+                Spacing = new Eto.Drawing.Size(0, 0),
+                Rows =
+                {
+                    new Eto.Forms.TableRow(new Eto.Forms.TableCell(toolbarLayout, false)),
+                    new Eto.Forms.TableRow(new Eto.Forms.TableCell(mapContainer, true)) { ScaleHeight = true }
+                }
+            };
+
+            // === 右側面板 (工具按鈕 + Tile 列表) ===
+            // 工具按鈕列
+            var toolBtnLayout = new Eto.Forms.StackLayout
+            {
+                Orientation = Eto.Forms.Orientation.Vertical,
+                HorizontalContentAlignment = Eto.Forms.HorizontalAlignment.Stretch,
+                Spacing = 2,
+                Padding = new Eto.Drawing.Padding(3)
+            };
+            toolBtnLayout.Items.Add(btnToolCopy);
+            toolBtnLayout.Items.Add(btnToolPaste);
+            toolBtnLayout.Items.Add(btnToolUndo);
+            toolBtnLayout.Items.Add(btnToolRedo);
+            toolBtnLayout.Items.Add(btnToolCheckL1);
+            toolBtnLayout.Items.Add(btnToolCheckL2);
+            toolBtnLayout.Items.Add(btnToolCheckL3);
+            toolBtnLayout.Items.Add(btnToolCheckL4);
+            toolBtnLayout.Items.Add(btnToolCheckL5);
+            toolBtnLayout.Items.Add(btnToolCheckL6);
+            toolBtnLayout.Items.Add(btnToolCheckL7);
+            toolBtnLayout.Items.Add(btnToolCheckL8);
+            toolBtnLayout.Items.Add(btnEnableVisibleL8);
+            toolBtnLayout.Items.Add(btnViewClipboard);
+            toolBtnLayout.Items.Add(btnToolTestTil);
+            toolBtnLayout.Items.Add(btnToolClearTestTil);
+
+            // Tile 列表區域
+            var tileListLayout = new Eto.Forms.StackLayout
+            {
+                Orientation = Eto.Forms.Orientation.Vertical,
+                HorizontalContentAlignment = Eto.Forms.HorizontalAlignment.Stretch,
+                Spacing = 3,
+                Padding = new Eto.Drawing.Padding(3)
+            };
+            tileListLayout.Items.Add(new Eto.Forms.StackLayoutItem(lblTileList, false));
+            tileListLayout.Items.Add(new Eto.Forms.StackLayoutItem(txtTileSearch, false));
+            tileListLayout.Items.Add(new Eto.Forms.StackLayoutItem(lvTiles, true));
+            tileListLayout.Items.Add(new Eto.Forms.StackLayoutItem(lblMaterials, false));
+            tileListLayout.Items.Add(new Eto.Forms.StackLayoutItem(lvMaterials, true));
+            tileListLayout.Items.Add(new Eto.Forms.StackLayoutItem(btnMoreMaterials, false));
+
+            // 右側整體布局 (工具按鈕 + Tile 列表)
+            var rightLayout = new Eto.Forms.Splitter
+            {
+                Orientation = Eto.Forms.Orientation.Horizontal,
+                FixedPanel = Eto.Forms.SplitterFixedPanel.Panel1,
+                Panel1MinimumSize = 40,
+                Position = 45,
+                Panel1 = toolBtnLayout,
+                Panel2 = tileListLayout
+            };
+
+            // === 主內容區域 (左中右 Splitter) ===
+            // 中右 Splitter
+            var centerRightSplitter = new Eto.Forms.Splitter
+            {
+                Orientation = Eto.Forms.Orientation.Horizontal,
+                FixedPanel = Eto.Forms.SplitterFixedPanel.Panel2,
+                Panel2MinimumSize = 200,
+                Position = 800,
+                Panel1 = centerLayout,
+                Panel2 = rightLayout
+            };
+
+            // 左 + (中右) Splitter
+            var mainSplitter = new Eto.Forms.Splitter
+            {
+                Orientation = Eto.Forms.Orientation.Horizontal,
+                FixedPanel = Eto.Forms.SplitterFixedPanel.Panel1,
+                Panel1MinimumSize = 250,
+                Position = 280,
+                Panel1 = leftLayout,
+                Panel2 = centerRightSplitter
+            };
+
+            // === 狀態列 ===
+            var statusLayout = new Eto.Forms.StackLayout
+            {
+                Orientation = Eto.Forms.Orientation.Horizontal,
+                VerticalContentAlignment = Eto.Forms.VerticalAlignment.Center,
+                Spacing = 10,
+                Padding = new Eto.Drawing.Padding(5, 2),
+                BackgroundColor = Eto.Drawing.Colors.LightGrey
+            };
+            statusLayout.Items.Add(new Eto.Forms.Label { Text = "狀態列" });
+
+            // === 主布局 (內容 + 狀態列) ===
+            var mainLayout = new Eto.Forms.TableLayout
+            {
+                Spacing = new Eto.Drawing.Size(0, 0),
+                Rows =
+                {
+                    new Eto.Forms.TableRow(new Eto.Forms.TableCell(mainSplitter, true)) { ScaleHeight = true },
+                    new Eto.Forms.TableRow(new Eto.Forms.TableCell(statusLayout, false))
+                }
+            };
+
+            // === 設定 Form ===
+            // 設定選單 (WinFormsMenuStrip 已繼承自 Eto.Forms.MenuBar)
+            this.Menu = menuStrip1;
+
+            // 設定內容
+            this.Content = mainLayout;
+
+            // 設定視窗大小
+            this.ClientSize = new Eto.Drawing.Size(1400, 750);
         }
 
         // 多語系方法已移至 MapForm/MapForm.Localization.cs
