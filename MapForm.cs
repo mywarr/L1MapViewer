@@ -22,11 +22,15 @@ using Lin.Helper.Core.Sprite;
 using Lin.Helper.Core.Pak;
 using L1MapViewer.Compatibility;
 using flyworld.eto.component;
+using NLog;
 
 namespace L1FlyMapViewer
 {
     public partial class MapForm : Form, IMapViewer
     {
+        // Logger
+        private static readonly Logger _logger = LogManager.GetCurrentClassLogger();
+
         // ===== Model 層 =====
         /// <summary>
         /// 地圖文件 Model - 管理所有 S32 資料
@@ -9067,6 +9071,7 @@ namespace L1FlyMapViewer
             var frame = frames[frameIdx % frames.Count];
 
             // 繪製 SPR（使用 SPR 檔案中的 offset）
+            // 與 Rust 一致: start_x = center_x + frame.offset_x
             int drawX = x + frame.XOffset;
             int drawY = y + frame.YOffset;
             g.DrawImage(frame.Image, drawX, drawY);
@@ -10374,7 +10379,7 @@ namespace L1FlyMapViewer
                 DrawLayer8OverlayOnControl(e.Graphics);
             }
 
-            // 轉發給原有的 Paint 處理（跳過 bitmap 繪製部分，只繪製編輯層）
+            // 繪製編輯覆蓋層
             DrawEditingOverlay(e.Graphics);
         }
 
@@ -10410,13 +10415,13 @@ namespace L1FlyMapViewer
                     int baseX = -24 * (layer1X / 2);
                     int baseY = 63 * 12 - 12 * (layer1X / 2);
 
-                    // Marker 位置：原始 L8 座標位置
+                    // Marker 位置：格子中心 (+12, +12)
                     int markerWorldX = mx + baseX + layer1X * 24 + layer1Y * 24 + 12;
                     int markerWorldY = my + baseY + layer1Y * 12 + 12;
 
-                    // SPR 位置：使用 marker 位置（offset 由 SPR 檔案提供）
-                    int sprWorldX = markerWorldX;
-                    int sprWorldY = markerWorldY;
+                    // SPR 位置：格子左上角（offset 由 SPR 檔案提供）
+                    int sprWorldX = mx + baseX + layer1X * 24 + layer1Y * 24;
+                    int sprWorldY = my + baseY + layer1Y * 12;
 
                     // 轉為螢幕座標
                     var markerScreenPoint = _mapViewerControl.WorldToScreen(new Point(markerWorldX, markerWorldY));
@@ -10497,6 +10502,7 @@ namespace L1FlyMapViewer
             int drawH = (int)(frame.Image.Height * scale);
 
             // 使用 SPR 檔案中的 offset（縮放後）
+            // 與 Rust 一致: start_x = center_x + frame.offset_x
             int drawX = x + (int)Math.Round(frame.XOffset * scale);
             int drawY = y + (int)Math.Round(frame.YOffset * scale);
             g.DrawImage(frame.Image, drawX, drawY, drawW, drawH);
@@ -10606,45 +10612,8 @@ namespace L1FlyMapViewer
             int worldX = worldPoint.X;
             int worldY = worldPoint.Y;
 
-            Console.WriteLine($"[Layer8-Debug] Screen=({e.Location.X},{e.Location.Y}) -> World=({worldX},{worldY}), ShowLayer8={_viewState.ShowLayer8}, Button={e.GetButton()}");
-
-            // Layer8 標記點擊處理
-            if (_viewState.ShowLayer8 && e.Buttons == Eto.Forms.MouseButtons.Primary)
-            {
-                var clickedMarker = FindLayer8MarkerAtPosition(worldX, worldY);
-                if (clickedMarker.HasValue)
-                {
-                    var (s32Path, index) = clickedMarker.Value;
-
-                    // 切換顯示狀態
-                    if (_editState.EnabledLayer8Items.Contains((s32Path, index)))
-                    {
-                        _editState.EnabledLayer8Items.Remove((s32Path, index));
-                        _renderCache.Layer8AnimFrame.Remove((s32Path, index));
-
-                        // 如果沒有啟用的項目，停止動畫計時器
-                        if (_editState.EnabledLayer8Items.Count == 0 && _layer8AnimTimer != null)
-                        {
-                            _layer8AnimTimer.Stop();
-                        }
-                    }
-                    else
-                    {
-                        _editState.EnabledLayer8Items.Add((s32Path, index));
-                        _renderCache.Layer8AnimFrame[(s32Path, index)] = 0;
-
-                        // 啟動動畫計時器
-                        if (_layer8AnimTimer != null && !_layer8AnimTimer.Enabled)
-                        {
-                            _layer8AnimTimer.Start();
-                        }
-                    }
-
-                    // 重繪
-                    RenderS32Map();
-                    return;
-                }
-            }
+            // 注意：Layer8 標記點擊已在 MapViewerControl_MapMouseDown 處理，
+            // 這裡不再重複處理，避免雙重切換導致狀態不變
 
             // 使用優化的格子查找（先過濾 S32 範圍，減少 400x 計算量）
             var result = CellFinder.FindCellOptimized(worldX, worldY, _document.S32Files.Values);
@@ -17498,6 +17467,16 @@ namespace L1FlyMapViewer
 
                     if (thumbnail != null && !cancellationToken.IsCancellationRequested)
                     {
+                        // DEBUG: 保存縮圖到測試資料夾
+                        try
+                        {
+                            string debugDir = @"C:\workspaces\lineage\L1MapViewer\tests\thumbnails";
+                            if (!Directory.Exists(debugDir)) Directory.CreateDirectory(debugDir);
+                            string debugPath = Path.Combine(debugDir, $"G{groupId}.png");
+                            thumbnail.Save(debugPath, ImageFormat.Png);
+                        }
+                        catch { }
+
                         thumbnailResults[groupId] = (groupId, info.objects.Count, thumbnail, info.objects, info.hasLayer5, info.layer5Type, info.distance);
                     }
                 });
@@ -17547,6 +17526,7 @@ namespace L1FlyMapViewer
                                 string distanceText = result.distance == 0 ? "●" : $"D{result.distance}";
                                 ListViewItem item = new ListViewItem($"{distanceText} G{result.groupId} ({result.objectCount})");
                                 item.ImageIndex = thumbnailIndex;
+                                item.Image = result.thumbnail;  // 直接設定圖片，不依賴 ImageList
 
                                 // 取得第一個 S32（附近群組通常來自同一個 S32）
                                 S32Data firstS32 = result.objects.Count > 0 ? result.objects[0].s32 : null;
@@ -17569,9 +17549,9 @@ namespace L1FlyMapViewer
                             _cachedGroupItems = items;
                             _cachedGroupImageList = imageList;
 
-                            // 批量添加
-                            lvGroupThumbnails.Items.AddRange(items.ToArray());
+                            // 先設定 ImageList，再添加 Items（順序很重要！）
                             lvGroupThumbnails.LargeImageList = imageList;
+                            lvGroupThumbnails.Items.AddRange(items.ToArray());
                         }
                         finally
                         {
@@ -19690,6 +19670,7 @@ namespace L1FlyMapViewer
                                 // 顯示格式: "距離:G群組ID (物件數)"
                                 ListViewItem item = new ListViewItem($"{result.distCode}:G{result.groupId} ({result.objectCount})");
                                 item.ImageIndex = thumbnailIndex;
+                                item.Image = result.thumbnail;  // 直接設定圖片，不依賴 ImageList
                                 item.Tag = new GroupThumbnailInfo
                                 {
                                     GroupId = result.groupId,
@@ -19709,9 +19690,9 @@ namespace L1FlyMapViewer
                             _cachedGroupItems = items;
                             _cachedGroupImageList = imageList;
 
-                            // 批量添加
-                            lvGroupThumbnails.Items.AddRange(items.ToArray());
+                            // 先設定 ImageList，再添加 Items（順序很重要！）
                             lvGroupThumbnails.LargeImageList = imageList;
+                            lvGroupThumbnails.Items.AddRange(items.ToArray());
                         }
                         finally
                         {
@@ -19950,11 +19931,6 @@ namespace L1FlyMapViewer
             return GenerateGroupThumbnail(tupleList, thumbnailSize, hasLayer5Setting, layer5Type);
         }
 
-        // 縮圖邊框畫筆（重用避免重複建立）
-        private static readonly Pen _thumbnailBorderPen = new Pen(Colors.LightGrey, 1);
-        private static readonly Pen _thumbnailBorderPenType0 = new Pen(Color.FromArgb(180, 0, 255), 3);  // 紫色 - Type=0
-        private static readonly Pen _thumbnailBorderPenType1 = new Pen(Color.FromArgb(255, 80, 80), 3);  // 紅色 - Type=1
-
         // 生成群組縮圖（將同 GroupId 的物件按相對位置組裝，使用與主畫布相同的繪製方式）
         private Bitmap GenerateGroupThumbnail(List<(S32Data s32, ObjectTile obj)> objects, int thumbnailSize, bool hasLayer5Setting = false, byte layer5Type = 0)
         {
@@ -20074,23 +20050,32 @@ namespace L1FlyMapViewer
                     g.DrawImage(tempBitmap, drawX, drawY, scaledWidth, scaledHeight);
 
                     // 加邊框（根據 Layer5 設定使用不同顏色）
+                    // 注意：不使用靜態 Pen 物件，因為會在背景執行緒呼叫，會有跨執行緒存取問題
                     if (hasLayer5Setting)
                     {
-                        Pen borderPen = layer5Type == 0 ? _thumbnailBorderPenType0 : _thumbnailBorderPenType1;
-                        g.DrawRectangle(borderPen, 1, 1, thumbnailSize - 3, thumbnailSize - 3);
+                        using (var borderPen = new Pen(layer5Type == 0 ? Color.FromArgb(180, 0, 255) : Color.FromArgb(255, 80, 80), 3))
+                        {
+                            g.DrawRectangle(borderPen, 1, 1, thumbnailSize - 3, thumbnailSize - 3);
+                        }
                     }
                     else
                     {
-                        g.DrawRectangle(_thumbnailBorderPen, 0, 0, thumbnailSize - 1, thumbnailSize - 1);
+                        using (var borderPen = new Pen(Colors.LightGrey, 1))
+                        {
+                            g.DrawRectangle(borderPen, 0, 0, thumbnailSize - 1, thumbnailSize - 1);
+                        }
                     }
                 }
 
                 tempBitmap.Dispose();
                 return result;
             }
-            catch
+            catch (Exception ex)
             {
-                // 如果生成失敗，返回一個帶文字的預設圖片
+                // 記錄錯誤
+                _logger.Error(ex, $"GenerateGroupThumbnail failed for GroupId {objects[0].obj.GroupId}");
+
+                // 如果生成失敗，返回一個帶錯誤訊息的預設圖片
                 Bitmap fallback = new Bitmap(thumbnailSize, thumbnailSize);
                 using (Graphics g = GraphicsHelper.FromImage(fallback))
                 {
@@ -20102,6 +20087,16 @@ namespace L1FlyMapViewer
                         g.DrawString(text, font, Brushes.Gray,
                             (thumbnailSize - textSize.Width) / 2,
                             (thumbnailSize - textSize.Height) / 2);
+                    }
+                    // 顯示錯誤提示
+                    using (Font smallFont = new Font("Arial", 8))
+                    {
+                        string errText = $"Error: {ex.Message}";
+                        if (errText.Length > 50) errText = errText.Substring(0, 47) + "...";
+                        SizeF errSize = g.MeasureString(errText, smallFont);
+                        g.DrawString(errText, smallFont, Brushes.Red,
+                            (thumbnailSize - errSize.Width) / 2,
+                            thumbnailSize - errSize.Height - 10);
                     }
                 }
                 return fallback;
@@ -20238,6 +20233,131 @@ namespace L1FlyMapViewer
             CopyMultipleGroupsToClipboard(new List<GroupThumbnailInfo> { info });
         }
 
+        // 收集渲染除錯資訊
+        private string CollectRenderingDebugInfo(GroupThumbnailInfo info, int imageSize, Bitmap previewImage)
+        {
+            var sb = new System.Text.StringBuilder();
+
+            // 基本資訊
+            sb.AppendLine($"=== 基本資訊 ===");
+            sb.AppendLine($"GroupId: {info.GroupId}");
+            sb.AppendLine($"S32 檔案: {info.S32FileName}");
+            sb.AppendLine($"距離編碼: {info.DistanceCode}");
+            sb.AppendLine();
+
+            // 圖片資訊
+            sb.AppendLine($"=== 圖片資訊 ===");
+            sb.AppendLine($"預覽圖請求大小: {imageSize} x {imageSize} px");
+            sb.AppendLine($"Bitmap 實際大小: {previewImage?.Width} x {previewImage?.Height} px");
+            sb.AppendLine($"Bitmap 格式: {previewImage?.PixelFormat}");
+
+            // 計算縮圖實際渲染範圍
+            if (info.Objects.Count > 0)
+            {
+                int pixelMinX = int.MaxValue, pixelMaxX = int.MinValue;
+                int pixelMinY = int.MaxValue, pixelMaxY = int.MinValue;
+                foreach (var obj in info.Objects)
+                {
+                    int halfX = obj.X / 2;
+                    int baseX = -24 * halfX;
+                    int baseY = 63 * 12 - 12 * halfX;
+                    int px = baseX + obj.X * 24 + obj.Y * 24;
+                    int py = baseY + obj.Y * 12;
+                    pixelMinX = Math.Min(pixelMinX, px);
+                    pixelMaxX = Math.Max(pixelMaxX, px + 48);
+                    pixelMinY = Math.Min(pixelMinY, py);
+                    pixelMaxY = Math.Max(pixelMaxY, py + 48);
+                }
+                int actualW = pixelMaxX - pixelMinX + 16;
+                int actualH = pixelMaxY - pixelMinY + 16;
+                sb.AppendLine($"實際內容範圍: {actualW} x {actualH} px");
+            }
+            sb.AppendLine();
+
+            // L4 物件統計
+            sb.AppendLine($"=== L4 物件統計 ===");
+            sb.AppendLine($"L4 物件數量: {info.Objects.Count}");
+
+            // TileId 統計與渲染狀態
+            var tileIdGroups = info.Objects.GroupBy(o => o.TileId).OrderBy(g => g.Key).ToList();
+            sb.AppendLine($"不同 TileId 數量: {tileIdGroups.Count}");
+
+            int okCount = 0, failCount = 0;
+            var failedTiles = new List<string>();
+            foreach (var group in tileIdGroups)
+            {
+                var firstObj = group.First();
+                var tilArray = TileProvider.Instance.GetTilArray(firstObj.TileId);
+                if (tilArray != null && tilArray.Count > 0 && firstObj.IndexId < tilArray.Count)
+                    okCount++;
+                else
+                {
+                    failCount++;
+                    failedTiles.Add($"TileId:{firstObj.TileId}");
+                }
+            }
+            sb.AppendLine($"可渲染: {okCount}, 無法渲染: {failCount}");
+            if (failedTiles.Count > 0)
+                sb.AppendLine($"失敗列表: {string.Join(", ", failedTiles)}");
+            sb.AppendLine();
+
+            // TileId 詳細列表
+            sb.AppendLine($"=== TileId 詳細 ===");
+            foreach (var group in tileIdGroups)
+            {
+                var firstObj = group.First();
+                string tileStatus = CheckTileStatus(firstObj.TileId, firstObj.IndexId);
+                sb.AppendLine($"TileId: {group.Key}, 數量: {group.Count()}, IndexId: {firstObj.IndexId} {tileStatus}");
+            }
+            sb.AppendLine();
+
+            // Layer5 設定
+            sb.AppendLine($"=== Layer5 設定 ===");
+            sb.AppendLine($"有 Layer5 設定: {(info.HasLayer5Setting ? "是" : "否")}");
+            if (info.HasLayer5Setting)
+            {
+                sb.AppendLine($"Layer5 Type: {info.Layer5Type} ({(info.Layer5Type == 0 ? "半透明" : "其他")})");
+            }
+            sb.AppendLine();
+
+            // 座標範圍
+            if (info.Objects.Count > 0)
+            {
+                int minX = info.Objects.Min(o => o.X);
+                int maxX = info.Objects.Max(o => o.X);
+                int minY = info.Objects.Min(o => o.Y);
+                int maxY = info.Objects.Max(o => o.Y);
+                sb.AppendLine($"=== 座標範圍 (Layer1) ===");
+                sb.AppendLine($"X 範圍: {minX} ~ {maxX} (跨度: {maxX - minX + 1})");
+                sb.AppendLine($"Y 範圍: {minY} ~ {maxY} (跨度: {maxY - minY + 1})");
+            }
+
+            return sb.ToString();
+        }
+
+        // 檢查 Tile 狀態
+        private string CheckTileStatus(int tileId, int indexId)
+        {
+            try
+            {
+                var tilArray = TileProvider.Instance.GetTilArray(tileId);
+                if (tilArray == null)
+                    return "[TIL 不存在]";
+
+                if (tilArray.Count == 0)
+                    return "[TIL 空白]";
+
+                if (indexId >= tilArray.Count)
+                    return $"[IndexId 越界: {indexId} >= {tilArray.Count}]";
+
+                return $"[OK, {tilArray.Count} 幀]";
+            }
+            catch (Exception ex)
+            {
+                return $"[錯誤: {ex.Message}]";
+            }
+        }
+
         // 顯示群組預覽對話框（可縮放）
         private void ShowGroupPreviewDialog(GroupThumbnailInfo info)
         {
@@ -20248,6 +20368,9 @@ namespace L1FlyMapViewer
             if (previewImage == null)
                 return;
 
+            // 收集渲染除錯資訊
+            var debugInfo = CollectRenderingDebugInfo(info, baseSize, previewImage);
+
             // 縮放狀態
             float currentZoom = 1.0f;
             float minZoom = 0.25f;
@@ -20256,11 +20379,11 @@ namespace L1FlyMapViewer
             Point scrollOffset = Point.Empty;
             bool isDragging = false;
 
-            // 建立預覽對話框
+            // 建立預覽對話框（增加高度以容納除錯資訊）
             Form previewForm = new Form
             {
                 Text = $"群組 {info.DistanceCode}:G{info.GroupId} - {info.Objects.Count} 個物件 (滾輪縮放, 拖曳平移)",
-                Size = new Size(520, 600),
+                Size = new Size(520, 720),
                 StartPosition = FormStartPosition.CenterParent,
                 FormBorderStyle = FormBorderStyle.Sizable,
                 MaximizeBox = true,
@@ -20271,7 +20394,7 @@ namespace L1FlyMapViewer
             Panel container = new Panel
             {
                 Location = new Point(10, 10),
-                Size = new Size(480, 480),
+                Size = new Size(480, 400),
                 Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
                 BorderStyle = BorderStyle.FixedSingle,
                 BackColor = Colors.White,
@@ -20352,12 +20475,13 @@ namespace L1FlyMapViewer
 
             container.GetControls().Add(pb);
 
-            // 縮放按鈕
+            // 縮放按鈕（位於預覽區下方）
+            int buttonY = 420;
             Button btnZoomIn = new Button
             {
                 Text = "+",
                 Size = new Size(40, 30),
-                Location = new Point(10, 500),
+                Location = new Point(10, buttonY),
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Left
             };
             btnZoomIn.Click += (s, ev) =>
@@ -20370,7 +20494,7 @@ namespace L1FlyMapViewer
             {
                 Text = "-",
                 Size = new Size(40, 30),
-                Location = new Point(55, 500),
+                Location = new Point(55, buttonY),
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Left
             };
             btnZoomOut.Click += (s, ev) =>
@@ -20383,7 +20507,7 @@ namespace L1FlyMapViewer
             {
                 Text = "1:1",
                 Size = new Size(40, 30),
-                Location = new Point(100, 500),
+                Location = new Point(100, buttonY),
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Left
             };
             btnZoomReset.Click += (s, ev) =>
@@ -20397,7 +20521,7 @@ namespace L1FlyMapViewer
             {
                 Text = "跳轉到位置",
                 Size = new Size(100, 30),
-                Location = new Point(160, 500),
+                Location = new Point(160, buttonY),
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Left
             };
             btnGoto.Click += (s, ev) =>
@@ -20410,7 +20534,7 @@ namespace L1FlyMapViewer
             {
                 Text = "關閉",
                 Size = new Size(80, 30),
-                Location = new Point(420, 500),
+                Location = new Point(420, buttonY),
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Right
             };
             btnClose.Click += (s, ev) => previewForm.Close();
@@ -20419,11 +20543,33 @@ namespace L1FlyMapViewer
             Label lblInfo = new Label
             {
                 Text = $"GroupId: {info.GroupId} | 物件數: {info.Objects.Count}",
-                Location = new Point(270, 505),
+                Location = new Point(270, buttonY + 5),
                 Size = new Size(140, 20),
                 ForeColor = Colors.Gray,
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Left
             };
+
+            // 渲染除錯資訊區域
+            GroupBox debugGroupBox = new GroupBox
+            {
+                Text = "Rendering Debug",
+                Location = new Point(10, buttonY + 40),
+                Size = new Size(480, 200),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+            };
+
+            TextBox txtDebugInfo = new TextBox
+            {
+                Multiline = true,
+                ReadOnly = true,
+                ScrollBars = ScrollBars.Vertical,
+                Font = new Font("Consolas", 9),
+                Location = new Point(10, 20),
+                Size = new Size(460, 170),
+                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
+                Text = debugInfo
+            };
+            debugGroupBox.GetControls().Add(txtDebugInfo);
 
             previewForm.GetControls().Add(container);
             previewForm.GetControls().Add(btnZoomIn);
@@ -20432,6 +20578,7 @@ namespace L1FlyMapViewer
             previewForm.GetControls().Add(btnGoto);
             previewForm.GetControls().Add(btnClose);
             previewForm.GetControls().Add(lblInfo);
+            previewForm.GetControls().Add(debugGroupBox);
 
             previewForm.FormClosed += (s, ev) =>
             {
@@ -23536,7 +23683,7 @@ namespace L1FlyMapViewer
 
                         string frameInfo = frames.Count > 1 ? $" ({frames.Count} 帧)" : "";
                         lblPreviewInfo.Text = $"SprId: {item.SprId}{frameInfo}\n大小: {frames[0].Width}x{frames[0].Height}\n位置: ({item.X}, {item.Y})";
-                        lblPreviewInfo.TextColor = Colors.White;
+                        lblPreviewInfo.TextColor = Colors.Black;
 
                         // 只有多帧才啟動動畫
                         if (frames.Count > 1)
@@ -23557,7 +23704,7 @@ namespace L1FlyMapViewer
 
                         pbPreview.Image = fullImg;
                         lblPreviewInfo.Text = $"SprId: {item.SprId}\n大小: {fullImg.Width}x{fullImg.Height}\n位置: ({item.X}, {item.Y})";
-                        lblPreviewInfo.TextColor = Colors.White;
+                        lblPreviewInfo.TextColor = Colors.Black;
                     }
                     else
                     {

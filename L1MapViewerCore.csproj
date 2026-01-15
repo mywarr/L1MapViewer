@@ -43,6 +43,7 @@
       <!-- On macOS, reference the platform package for NuGet restore but assets come from manual copy -->
       <PackageReference Include="Eto.Platform.macOS" Version="2.10.2" Condition="$([MSBuild]::IsOSPlatform('OSX'))" GeneratePathProperty="true" />
       <PackageReference Include="Eto.Platform.Wpf" Version="2.10.2" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+      <PackageReference Include="NLog" Version="6.0.7" />
 
       <!-- Cross-platform graphics -->
       <PackageReference Include="SkiaSharp" Version="3.119.1" />
@@ -50,9 +51,14 @@
       <PackageReference Include="SkiaSharp.NativeAssets.macOS" Version="3.119.1" Condition="$([MSBuild]::IsOSPlatform('OSX'))" />
 
       <!-- Existing dependencies -->
-      <PackageReference Include="Lin.Helper.Core" Version="1.3.7" />
+      <PackageReference Include="Lin.Helper.Core" Version="1.3.8" />
       <PackageReference Include="MySql.Data" Version="9.5.0" />
       <PackageReference Include="System.Text.Encoding.CodePages" Version="9.0.0" />
+    </ItemGroup>
+
+    <!-- NLog 配置檔複製到輸出目錄 -->
+    <ItemGroup>
+      <None Include="nlog.config" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
     <!-- 排除 tests 資料夾不發布 -->

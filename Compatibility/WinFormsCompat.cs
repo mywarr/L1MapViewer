@@ -1,5 +1,6 @@
 using Eto.Forms;
 using Eto.Drawing;
+using NLog;
 
 // 事件類型已移至 UI/Component/EventTypes.cs，透過 GlobalUsings.cs 全域匯入
 
@@ -535,7 +536,20 @@ public class WinFormsComboBox : Eto.Forms.ComboBox
     public int SelectionStart { get; set; }
     public int SelectionLength { get; set; }
     public bool DroppedDown { get; set; }
-    public string DisplayMember { get; set; }
+    private string _displayMember;
+    public string DisplayMember
+    {
+        get => _displayMember;
+        set
+        {
+            _displayMember = value;
+            // 當 DisplayMember 改變時，重新整理 ComboBox 顯示
+            if (_objectCollection != null && _objectCollection.Count > 0)
+            {
+                _objectCollection.RefreshDisplay();
+            }
+        }
+    }
     public string ValueMember { get; set; }
     public object DataSource { get; set; }
 
@@ -583,12 +597,34 @@ public class WinFormsComboBox : Eto.Forms.ComboBox
 /// </summary>
 public class ComboBoxObjectCollection : System.Collections.IList
 {
-    private readonly Eto.Forms.ComboBox _comboBox;
+    private readonly WinFormsComboBox _comboBox;
     private readonly List<object> _items = new List<object>();
 
-    public ComboBoxObjectCollection(Eto.Forms.ComboBox comboBox)
+    public ComboBoxObjectCollection(WinFormsComboBox comboBox)
     {
         _comboBox = comboBox;
+    }
+
+    /// <summary>
+    /// 取得物件的顯示文字（使用 DisplayMember 屬性）
+    /// </summary>
+    private string GetDisplayText(object? value)
+    {
+        if (value == null) return string.Empty;
+
+        string displayMember = _comboBox.DisplayMember;
+        if (!string.IsNullOrEmpty(displayMember))
+        {
+            // 使用反射取得 DisplayMember 指定的屬性值
+            var type = value.GetType();
+            var prop = type.GetProperty(displayMember);
+            if (prop != null)
+            {
+                var propValue = prop.GetValue(value);
+                return propValue?.ToString() ?? string.Empty;
+            }
+        }
+        return value.ToString() ?? string.Empty;
     }
 
     public int Count => _items.Count;
@@ -607,14 +643,14 @@ public class ComboBoxObjectCollection : System.Collections.IList
         }
     }
 
-    // Access the underlying Eto ListItemCollection
-    private Eto.Forms.ListItemCollection EtoItems => _comboBox.Items;
+    // Access the underlying Eto ListItemCollection (cast to base class to bypass our override)
+    private Eto.Forms.ListItemCollection EtoItems => ((Eto.Forms.ComboBox)_comboBox).Items;
 
     public int Add(object? value)
     {
         if (value == null) return -1;
         _items.Add(value);
-        EtoItems.Add(value.ToString() ?? string.Empty);
+        EtoItems.Add(GetDisplayText(value));
         return _items.Count - 1;
     }
 
@@ -660,8 +696,16 @@ public class ComboBoxObjectCollection : System.Collections.IList
         EtoItems.Clear();
         foreach (var item in _items)
         {
-            EtoItems.Add(item?.ToString() ?? string.Empty);
+            EtoItems.Add(GetDisplayText(item));
         }
+    }
+
+    /// <summary>
+    /// 重新整理顯示（當 DisplayMember 改變時呼叫）
+    /// </summary>
+    public void RefreshDisplay()
+    {
+        RefreshComboBox();
     }
 }
 
@@ -952,10 +996,64 @@ public class WinFormsSplitContainer : Eto.Forms.Splitter
 }
 
 /// <summary>
-/// WinForms-compatible PictureBox wrapper (ImageView)
+/// WinForms-compatible PictureBox wrapper (Drawable)
 /// </summary>
 public class WinFormsPictureBox : Eto.Forms.Drawable, System.ComponentModel.ISupportInitialize
 {
+    private Eto.Drawing.Image _image;
+    private bool _hasCustomPaint = false;
+
+    public WinFormsPictureBox()
+    {
+        // 內建繪製處理 - 用於顯示 Image 屬性的圖片
+        base.Paint += OnInternalPaint;
+    }
+
+    private void OnInternalPaint(object sender, Eto.Forms.PaintEventArgs e)
+    {
+        // 繪製背景（透明時跳過，讓下層可見）
+        if (BackgroundColor.A > 0)
+        {
+            e.Graphics.FillRectangle(BackgroundColor, new Eto.Drawing.RectangleF(0, 0, Width, Height));
+        }
+
+        // 如果有設定 Image 且沒有自訂 Paint 事件，則繪製圖片
+        if (_image != null && !_hasCustomPaint)
+        {
+            float imgW = _image.Width;
+            float imgH = _image.Height;
+            float ctrlW = Width;
+            float ctrlH = Height;
+
+            if (ctrlW <= 0 || ctrlH <= 0) return;
+
+            if (SizeMode == PictureBoxSizeMode.Zoom)
+            {
+                // 等比縮放並置中
+                float scale = Math.Min(ctrlW / imgW, ctrlH / imgH);
+                float newW = imgW * scale;
+                float newH = imgH * scale;
+                float x = (ctrlW - newW) / 2;
+                float y = (ctrlH - newH) / 2;
+                e.Graphics.DrawImage(_image, x, y, newW, newH);
+            }
+            else if (SizeMode == PictureBoxSizeMode.StretchImage)
+            {
+                e.Graphics.DrawImage(_image, 0, 0, ctrlW, ctrlH);
+            }
+            else if (SizeMode == PictureBoxSizeMode.CenterImage)
+            {
+                float x = (ctrlW - imgW) / 2;
+                float y = (ctrlH - imgH) / 2;
+                e.Graphics.DrawImage(_image, x, y);
+            }
+            else
+            {
+                e.Graphics.DrawImage(_image, 0, 0);
+            }
+        }
+    }
+
     public void BeginInit() { }
     public void EndInit() { }
     public Point Location { get; set; }
@@ -968,7 +1066,15 @@ public class WinFormsPictureBox : Eto.Forms.Drawable, System.ComponentModel.ISup
     public PictureBoxSizeMode SizeMode { get; set; }
     public Padding Margin { get; set; }
     public Eto.Forms.ContextMenu ContextMenuStrip { get => ContextMenu; set => ContextMenu = value; }
-    public Eto.Drawing.Image Image { get; set; }
+    public Eto.Drawing.Image Image
+    {
+        get => _image;
+        set
+        {
+            _image = value;
+            Invalidate();
+        }
+    }
 
     // Position properties
     public int Left { get => Location.X; set => Location = new Point(value, Location.Y); }
@@ -1014,10 +1120,14 @@ public class WinFormsPictureBox : Eto.Forms.Drawable, System.ComponentModel.ISup
     }
     public event PreviewKeyDownEventHandler PreviewKeyDown { add { } remove { } }
 
-    // Paint event
+    // Paint event - 當有自訂 Paint 時，標記為有自訂繪製
     public new event PaintEventHandler Paint
     {
-        add => base.Paint += (s, e) => value(s, e);
+        add
+        {
+            _hasCustomPaint = true;
+            base.Paint += (s, e) => value(s, e);
+        }
         remove { }
     }
 }
@@ -1047,20 +1157,107 @@ public class WinFormsProgressBar : Eto.Forms.ProgressBar
 /// </summary>
 public class WinFormsListView : Eto.Forms.GridView
 {
+    private static readonly Logger _logger = LogManager.GetLogger("WinFormsCompat");
+
+    public WinFormsListView()
+    {
+        // 當選取改變時，更新 SelectedItems 和 SelectedIndices
+        base.SelectionChanged += OnSelectionChangedInternal;
+    }
+
+    private void OnSelectionChangedInternal(object sender, EventArgs e)
+    {
+        // 清除舊的選取
+        SelectedItems.Clear();
+        SelectedIndices.Clear();
+
+        // 取得 DataStore 作為 ListViewItem 列表
+        if (DataStore is System.Collections.IList dataList)
+        {
+            foreach (var row in SelectedRows)
+            {
+                if (row >= 0 && row < dataList.Count && dataList[row] is ListViewItem item)
+                {
+                    SelectedItems.Add(item);
+                    SelectedIndices.Add(row);
+                }
+            }
+        }
+    }
+
     public Point Location { get; set; }
     public DockStyle Dock { get; set; }
     public AnchorStyles Anchor { get; set; }
     public int TabIndex { get; set; }
     public new string Name { get => ID; set => ID = value; }
     public BorderStyle BorderStyle { get; set; }
-    public View View { get; set; }
+
+    private View _view;
+    public View View
+    {
+        get => _view;
+        set
+        {
+            if (_view != value)
+            {
+                _view = value;
+                // 標記需要重建欄位（延遲到 RefreshFromItems 時處理）
+                _needsColumnRebuild = true;
+            }
+        }
+    }
+    private bool _needsColumnRebuild;
+
     public bool FullRowSelect { get; set; }
     public bool MultiSelect { get => AllowMultipleSelection; set => AllowMultipleSelection = value; }
     public ColumnHeaderStyle HeaderStyle { get; set; }
     public SortOrder Sorting { get; set; }
     public bool HideSelection { get; set; }
-    public ImageList SmallImageList { get; set; }
-    public ImageList LargeImageList { get; set; }
+
+    private ImageList _smallImageList;
+    public ImageList SmallImageList
+    {
+        get => _smallImageList;
+        set
+        {
+            _smallImageList = value;
+            // ImageList 改變後需要重建欄位以更新綁定
+            if (_view == View.SmallIcon)
+            {
+                _needsColumnRebuild = true;
+                ScheduleRefresh();
+            }
+        }
+    }
+
+    private ImageList _largeImageList;
+    public ImageList LargeImageList
+    {
+        get => _largeImageList;
+        set
+        {
+            _largeImageList = value;
+            // ImageList 改變後需要重建欄位以更新綁定
+            if (_view == View.LargeIcon)
+            {
+                _needsColumnRebuild = true;
+                ScheduleRefresh();
+            }
+        }
+    }
+
+    private bool _refreshScheduled;
+    private void ScheduleRefresh()
+    {
+        if (_refreshScheduled) return;
+        _refreshScheduled = true;
+        Eto.Forms.Application.Instance.AsyncInvoke(() =>
+        {
+            _refreshScheduled = false;
+            RefreshFromItems();
+        });
+    }
+
     public Padding Margin { get; set; }
     public bool UseCompatibleStateImageBehavior { get; set; }
     public Eto.Forms.ContextMenu ContextMenuStrip { get => ContextMenu; set => ContextMenu = value; }
@@ -1112,6 +1309,119 @@ public class WinFormsListView : Eto.Forms.GridView
     {
         if (base.Columns.Count > 0) return;
 
+        // LargeIcon/SmallIcon 視圖：使用單一 CustomCell 繪製圖片+文字
+        if (View == View.LargeIcon || View == View.SmallIcon)
+        {
+            // 隱藏標題列
+            ShowHeader = false;
+
+            // 設定行高以容納圖片
+            var isLargeIcon = View == View.LargeIcon;
+            RowHeight = isLargeIcon ? 68 : 24;
+
+            // 使用 DrawableCell 完全控制繪製
+            var listViewRef = this;
+            var imgSize = isLargeIcon ? 64 : 20;
+
+            var drawableCell = new Eto.Forms.DrawableCell();
+            drawableCell.Paint += (sender, e) =>
+            {
+                if (e.Item is ListViewItem item)
+                {
+                    var g = e.Graphics;
+                    var bounds = e.ClipRectangle;
+
+                    // 繪製圖片 - 優先使用 item.Image，否則用 ImageList[ImageIndex]
+                    Eto.Drawing.Image img = item.Image;
+                    string imgSource = "item.Image";
+                    if (img == null)
+                    {
+                        imgSource = "ImageList";
+                        var imgList = isLargeIcon ? listViewRef.LargeImageList : listViewRef.SmallImageList;
+                        if (imgList != null && item.ImageIndex >= 0 && item.ImageIndex < imgList.Images.Count)
+                        {
+                            img = imgList.Images[item.ImageIndex];
+                        }
+                    }
+
+                    // 點擊時輸出 log (當選中時)
+                    if (listViewRef.SelectedItem == item)
+                    {
+                        string imgInfo = "null";
+                        if (img != null)
+                        {
+                            // 檢查圖片格式和是否為 Bitmap
+                            var imgType = img.GetType().Name;
+                            var isBitmap = img is Eto.Drawing.Bitmap;
+                            imgInfo = $"{img.Width}x{img.Height}, type={imgType}, isBitmap={isBitmap}";
+
+                            // 檢查第一個像素是否透明
+                            if (img is Eto.Drawing.Bitmap bmp)
+                            {
+                                try
+                                {
+                                    var pixel = bmp.GetPixel(0, 0);
+                                    var centerPixel = bmp.GetPixel(bmp.Width / 2, bmp.Height / 2);
+                                    imgInfo += $", pixel[0,0]=RGBA({pixel.Rb},{pixel.Gb},{pixel.Bb},{pixel.Ab}), center=RGBA({centerPixel.Rb},{centerPixel.Gb},{centerPixel.Bb},{centerPixel.Ab})";
+                                }
+                                catch (Exception ex)
+                                {
+                                    imgInfo += $", pixelErr={ex.Message}";
+                                }
+                            }
+                        }
+                        _logger.Debug($"[ListView-Paint] Text={item.Text}, bounds={bounds}, imgSize={imgSize}, imgSource={imgSource}, imgInfo={imgInfo}");
+                    }
+
+                    if (img != null)
+                    {
+                        var imgRect = new Eto.Drawing.RectangleF(4, bounds.Y + 2, imgSize, imgSize);
+                        try
+                        {
+                            g.DrawImage(img, imgRect);
+                            // 畫綠色邊框確認繪製位置
+                            g.DrawRectangle(Eto.Drawing.Colors.Green, imgRect);
+                            if (listViewRef.SelectedItem == item)
+                            {
+                                _logger.Debug($"[ListView-Paint] DrawImage OK at {imgRect}");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Error($"[ListView-Paint] DrawImage FAILED: {ex.Message}");
+                            // 畫紅色方塊作為 fallback
+                            g.FillRectangle(Eto.Drawing.Colors.Red, imgRect);
+                        }
+                    }
+                    else
+                    {
+                        // 沒有圖片時畫藍色方塊
+                        var imgRect = new Eto.Drawing.RectangleF(4, bounds.Y + 2, imgSize, imgSize);
+                        g.FillRectangle(Eto.Drawing.Colors.Blue, imgRect);
+                        if (listViewRef.SelectedItem == item)
+                        {
+                            _logger.Debug($"[ListView-Paint] No image, drew blue rect at {imgRect}");
+                        }
+                    }
+
+                    // 繪製文字
+                    var textX = imgSize + 12;
+                    var textY = bounds.Y + (bounds.Height - 14) / 2;
+                    g.DrawText(Eto.Drawing.SystemFonts.Default(), Eto.Drawing.Colors.Black, textX, textY, item.Text);
+                }
+            };
+
+            var combinedCol = new Eto.Forms.GridColumn
+            {
+                HeaderText = "",
+                Width = 250,  // 固定寬度: 圖片(64) + 間距(12) + 文字(~174)
+                DataCell = drawableCell
+            };
+            base.Columns.Add(combinedCol);
+            return;
+        }
+
+        // Details 視圖：使用定義的欄位
         foreach (var col in Columns)
         {
             var gridCol = new Eto.Forms.GridColumn
@@ -1129,8 +1439,18 @@ public class WinFormsListView : Eto.Forms.GridView
     /// </summary>
     public void RefreshFromItems()
     {
-        if (_items == null || _items.Count == 0) return;
+        // 如果需要重建欄位，先清除再重建
+        if (_needsColumnRebuild)
+        {
+            base.Columns.Clear();
+            _needsColumnRebuild = false;
+        }
         EnsureColumnsCreated();
+        if (_items == null || _items.Count == 0)
+        {
+            DataStore = new List<ListViewItem>();
+            return;
+        }
         DataStore = new List<ListViewItem>(_items);
     }
 
@@ -1803,11 +2123,38 @@ public enum ColorDepth
 /// </summary>
 public class ListViewItem
 {
-    public string Text { get; set; }
+    private string _text;
+    public string Text 
+    { 
+        get => _text; 
+        set 
+        { 
+            _text = value;
+            // 同步到 SubItems[0]
+            if (_subItems != null && _subItems.Count > 0)
+                _subItems[0].Text = value;
+        }
+    }
     public string ImageKey { get; set; }
     public int ImageIndex { get; set; } = -1;
     public object Tag { get; set; }
-    public ListViewSubItemCollection SubItems { get; } = new ListViewSubItemCollection();
+
+    /// <summary>
+    /// 直接存放圖片，DrawableCell 優先使用此屬性繪製
+    /// </summary>
+    public Eto.Drawing.Image Image { get; set; }
+    
+    private ListViewSubItemCollection _subItems;
+    public ListViewSubItemCollection SubItems 
+    { 
+        get 
+        {
+            if (_subItems == null)
+                _subItems = new ListViewSubItemCollection(this);
+            return _subItems;
+        }
+    }
+    
     public bool Selected { get; set; }
     public bool Checked { get; set; }
     public Color BackColor { get; set; }
@@ -1823,13 +2170,12 @@ public class ListViewItem
 
     /// <summary>
     /// 取得指定欄位索引的文字（用於 GridView 綁定）
+    /// SubItems[0] = Text, SubItems[1] = 第一個 Add 的項目...
     /// </summary>
     public string GetSubItemText(int columnIndex)
     {
-        if (columnIndex == 0) return Text ?? "";
-        int subIndex = columnIndex - 1;
-        if (subIndex >= 0 && subIndex < SubItems.Count)
-            return SubItems[subIndex].Text ?? "";
+        if (columnIndex >= 0 && columnIndex < SubItems.Count)
+            return SubItems[columnIndex].Text ?? "";
         return "";
     }
 
@@ -1850,10 +2196,30 @@ public class ListViewItem
 
     public class ListViewSubItemCollection : System.Collections.Generic.List<ListViewSubItem>
     {
-        public ListViewSubItem this[int index]
+        private readonly ListViewItem _owner;
+        
+        public ListViewSubItemCollection(ListViewItem owner)
         {
-            get => base[index];
-            set => base[index] = value;
+            _owner = owner;
+            // SubItems[0] 是主項目文字 (WinForms 相容)
+            base.Add(new ListViewSubItem { Text = owner.Text });
+        }
+
+        public new ListViewSubItem this[int index]
+        {
+            get
+            {
+                // 同步主項目文字
+                if (index == 0 && base.Count > 0)
+                    base[0].Text = _owner.Text;
+                return base[index];
+            }
+            set
+            {
+                base[index] = value;
+                if (index == 0)
+                    _owner.Text = value.Text;
+            }
         }
 
         public void Add(string text)
@@ -3929,13 +4295,16 @@ public static class BitmapExtensions
                     }
                     else
                     {
-                        // Direct copy for 32-bit formats
+                        // Direct copy for 32-bit formats (BGRA)
                         for (int y = 0; y < height; y++)
                         {
                             int srcOffset = y * srcStride;
                             int dstOffset = y * dstStride;
-                            int copyBytes = Math.Min(srcStride, dstStride);
-                            System.Buffer.BlockCopy(data.Buffer, srcOffset, new Span<byte>(dstPtr + dstOffset, copyBytes).ToArray(), 0, copyBytes);
+                            int copyBytes = width * 4; // 4 bytes per pixel for 32-bit
+                            for (int i = 0; i < copyBytes; i++)
+                            {
+                                dstPtr[dstOffset + i] = data.Buffer[srcOffset + i];
+                            }
                         }
                     }
                 }
