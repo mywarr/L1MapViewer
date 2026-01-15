@@ -12763,8 +12763,9 @@ namespace L1FlyMapViewer
                                 item.ImageIndex = imageIndex++;
                             }
                         }
-                        catch
+                        catch (Exception ex)
                         {
+                            _logger.Error(ex, $"RefreshMaterialsList: Failed to load thumbnail for {info.Name}");
                             item.ImageIndex = -1;
                         }
                     }
@@ -12776,9 +12777,9 @@ namespace L1FlyMapViewer
                     lvMaterials.Items.Add(item);
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // 忽略錯誤
+                _logger.Error(ex, "RefreshMaterialsList failed");
             }
         }
 

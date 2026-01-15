@@ -1333,44 +1333,13 @@ public class WinFormsListView : Eto.Forms.GridView
 
                     // 繪製圖片 - 優先使用 item.Image，否則用 ImageList[ImageIndex]
                     Eto.Drawing.Image img = item.Image;
-                    string imgSource = "item.Image";
                     if (img == null)
                     {
-                        imgSource = "ImageList";
                         var imgList = isLargeIcon ? listViewRef.LargeImageList : listViewRef.SmallImageList;
                         if (imgList != null && item.ImageIndex >= 0 && item.ImageIndex < imgList.Images.Count)
                         {
                             img = imgList.Images[item.ImageIndex];
                         }
-                    }
-
-                    // 點擊時輸出 log (當選中時)
-                    if (listViewRef.SelectedItem == item)
-                    {
-                        string imgInfo = "null";
-                        if (img != null)
-                        {
-                            // 檢查圖片格式和是否為 Bitmap
-                            var imgType = img.GetType().Name;
-                            var isBitmap = img is Eto.Drawing.Bitmap;
-                            imgInfo = $"{img.Width}x{img.Height}, type={imgType}, isBitmap={isBitmap}";
-
-                            // 檢查第一個像素是否透明
-                            if (img is Eto.Drawing.Bitmap bmp)
-                            {
-                                try
-                                {
-                                    var pixel = bmp.GetPixel(0, 0);
-                                    var centerPixel = bmp.GetPixel(bmp.Width / 2, bmp.Height / 2);
-                                    imgInfo += $", pixel[0,0]=RGBA({pixel.Rb},{pixel.Gb},{pixel.Bb},{pixel.Ab}), center=RGBA({centerPixel.Rb},{centerPixel.Gb},{centerPixel.Bb},{centerPixel.Ab})";
-                                }
-                                catch (Exception ex)
-                                {
-                                    imgInfo += $", pixelErr={ex.Message}";
-                                }
-                            }
-                        }
-                        _logger.Debug($"[ListView-Paint] Text={item.Text}, bounds={bounds}, imgSize={imgSize}, imgSource={imgSource}, imgInfo={imgInfo}");
                     }
 
                     if (img != null)
@@ -1379,28 +1348,10 @@ public class WinFormsListView : Eto.Forms.GridView
                         try
                         {
                             g.DrawImage(img, imgRect);
-                            // 畫綠色邊框確認繪製位置
-                            g.DrawRectangle(Eto.Drawing.Colors.Green, imgRect);
-                            if (listViewRef.SelectedItem == item)
-                            {
-                                _logger.Debug($"[ListView-Paint] DrawImage OK at {imgRect}");
-                            }
                         }
                         catch (Exception ex)
                         {
-                            _logger.Error($"[ListView-Paint] DrawImage FAILED: {ex.Message}");
-                            // 畫紅色方塊作為 fallback
-                            g.FillRectangle(Eto.Drawing.Colors.Red, imgRect);
-                        }
-                    }
-                    else
-                    {
-                        // 沒有圖片時畫藍色方塊
-                        var imgRect = new Eto.Drawing.RectangleF(4, bounds.Y + 2, imgSize, imgSize);
-                        g.FillRectangle(Eto.Drawing.Colors.Blue, imgRect);
-                        if (listViewRef.SelectedItem == item)
-                        {
-                            _logger.Debug($"[ListView-Paint] No image, drew blue rect at {imgRect}");
+                            _logger.Error(ex, $"[ListView-Paint] DrawImage failed for {item.Text}");
                         }
                     }
 
