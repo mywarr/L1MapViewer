@@ -1,0 +1,831 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using SkiaSharp;
+using L1MapViewer.Models;
+using L1MapViewer.Other;
+using Eto.Drawing;
+using NLog;
+
+namespace L1FlyMapViewer
+{
+    public partial class MapForm
+    {
+        // Logger for overlay (MapForm 主檔案已有 _logger)
+
+        #region SkiaSharp Overlay 繪製函數
+
+        // 輔助函數：取得屬性對應的 SKColor
+        private SKColor GetAttributeColorSK(int attribute)
+        {
+            // 參考 GetAttributeColor 函數
+            return attribute switch
+            {
+                1 => new SKColor(255, 0, 0, 150),     // 紅色
+                2 => new SKColor(0, 255, 0, 150),     // 綠色
+                3 => new SKColor(0, 0, 255, 150),     // 藍色
+                4 => new SKColor(255, 255, 0, 150),   // 黃色
+                5 => new SKColor(255, 0, 255, 150),   // 紫色
+                6 => new SKColor(0, 255, 255, 150),   // 青色
+                7 => new SKColor(255, 128, 0, 150),   // 橙色
+                8 => new SKColor(128, 0, 255, 150),   // 紫羅蘭
+                _ => new SKColor(128, 128, 128, 150)  // 灰色
+            };
+        }
+
+        // 繪製 Layer3 屬性覆蓋層 (SkiaSharp 版本)
+        // 參考 DrawLayer3AttributesViewport
+        private void DrawLayer3AttributesViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect)
+        {
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                int mx = loc[0];
+                int my = loc[1];
+
+                for (int y = 0; y < 64; y++)
+                {
+                    for (int x = 0; x < 64; x++)
+                    {
+                        var attr = s32Data.Layer3[y, x];
+                        if (attr == null) continue;
+                        if (attr.Attribute1 == 0 && attr.Attribute2 == 0) continue;
+
+                        int x1 = x * 2;
+                        int localBaseX = 0 - 24 * (x1 / 2);
+                        int localBaseY = 63 * 12 - 12 * (x1 / 2);
+
+                        int X = mx + localBaseX + x1 * 24 + y * 24 - worldRect.X;
+                        int Y = my + localBaseY + y * 12 - worldRect.Y;
+
+                        // 跳過不在 Viewport 內的格子
+                        if (X + 48 < 0 || X > worldRect.Width || Y + 24 < 0 || Y > worldRect.Height)
+                            continue;
+
+                        // 菱形的頂點
+                        var pTop = new SKPoint(X + 24, Y + 0);
+                        var pRight = new SKPoint(X + 48, Y + 12);
+                        var pBottom = new SKPoint(X + 24, Y + 24);
+                        var pLeft = new SKPoint(X + 0, Y + 12);
+                        var pCenter = new SKPoint(X + 24, Y + 12);
+
+                        // 左半邊 - 使用 Attribute1
+                        if (attr.Attribute1 != 0)
+                        {
+                            var color1 = GetAttributeColorSK(attr.Attribute1);
+                            using var pen = new SKPaint { Color = color1, Style = SKPaintStyle.Stroke, StrokeWidth = 3, IsAntialias = true };
+                            canvas.DrawLine(pLeft, pTop, pen);
+                            canvas.DrawLine(pTop, pCenter, pen);
+                            canvas.DrawLine(pCenter, pBottom, pen);
+                            canvas.DrawLine(pBottom, pLeft, pen);
+                        }
+
+                        // 右半邊 - 使用 Attribute2
+                        if (attr.Attribute2 != 0)
+                        {
+                            var color2 = GetAttributeColorSK(attr.Attribute2);
+                            using var pen = new SKPaint { Color = color2, Style = SKPaintStyle.Stroke, StrokeWidth = 3, IsAntialias = true };
+                            canvas.DrawLine(pTop, pRight, pen);
+                            canvas.DrawLine(pRight, pBottom, pen);
+                            canvas.DrawLine(pBottom, pCenter, pen);
+                            canvas.DrawLine(pCenter, pTop, pen);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 繪製通行性覆蓋層 (SkiaSharp 版本)
+        // 參考 DrawPassableOverlayViewport
+        private void DrawPassableOverlayViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect)
+        {
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                int mx = loc[0];
+                int my = loc[1];
+
+                for (int y = 0; y < 64; y++)
+                {
+                    for (int x = 0; x < 64; x++)
+                    {
+                        var attr = s32Data.Layer3[y, x];
+                        if (attr == null) continue;
+                        if (attr.Attribute1 == 0 && attr.Attribute2 == 0) continue;
+
+                        int x1 = x * 2;
+                        int localBaseX = 0 - 24 * (x1 / 2);
+                        int localBaseY = 63 * 12 - 12 * (x1 / 2);
+
+                        int X = mx + localBaseX + x1 * 24 + y * 24 - worldRect.X;
+                        int Y = my + localBaseY + y * 12 - worldRect.Y;
+
+                        if (X + 48 < 0 || X > worldRect.Width || Y + 24 < 0 || Y > worldRect.Height)
+                            continue;
+
+                        var pTop = new SKPoint(X + 24, Y + 0);
+                        var pRight = new SKPoint(X + 48, Y + 12);
+                        var pBottom = new SKPoint(X + 24, Y + 24);
+                        var pLeft = new SKPoint(X + 0, Y + 12);
+                        var pCenter = new SKPoint(X + 24, Y + 12);
+
+                        // 左半邊 - Attribute1 = 1 表示不可通行
+                        if (attr.Attribute1 == 1)
+                        {
+                            using var brush = new SKPaint { Color = new SKColor(255, 0, 0, 100), Style = SKPaintStyle.Fill };
+                            var path = new SKPath();
+                            path.MoveTo(pLeft);
+                            path.LineTo(pTop);
+                            path.LineTo(pCenter);
+                            path.LineTo(pBottom);
+                            path.Close();
+                            canvas.DrawPath(path, brush);
+                        }
+
+                        // 右半邊 - Attribute2 = 1 表示不可通行
+                        if (attr.Attribute2 == 1)
+                        {
+                            using var brush = new SKPaint { Color = new SKColor(255, 0, 0, 100), Style = SKPaintStyle.Fill };
+                            var path = new SKPath();
+                            path.MoveTo(pTop);
+                            path.LineTo(pRight);
+                            path.LineTo(pBottom);
+                            path.LineTo(pCenter);
+                            path.Close();
+                            canvas.DrawPath(path, brush);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 繪製區域覆蓋層 (SkiaSharp 版本)
+        // 參考 DrawRegionsOverlayViewport
+        private void DrawRegionsOverlayViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect, bool showSafe, bool showCombat)
+        {
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                int mx = loc[0];
+                int my = loc[1];
+
+                for (int y = 0; y < 64; y++)
+                {
+                    for (int x = 0; x < 64; x++)
+                    {
+                        var attr = s32Data.Layer3[y, x];
+                        if (attr == null) continue;
+
+                        // Attribute1 = 2 安全區, 3 戰鬥區 等
+                        bool isSafe1 = showSafe && attr.Attribute1 == 2;
+                        bool isCombat1 = showCombat && attr.Attribute1 == 3;
+                        bool isSafe2 = showSafe && attr.Attribute2 == 2;
+                        bool isCombat2 = showCombat && attr.Attribute2 == 3;
+
+                        if (!isSafe1 && !isCombat1 && !isSafe2 && !isCombat2) continue;
+
+                        int x1 = x * 2;
+                        int localBaseX = 0 - 24 * (x1 / 2);
+                        int localBaseY = 63 * 12 - 12 * (x1 / 2);
+
+                        int X = mx + localBaseX + x1 * 24 + y * 24 - worldRect.X;
+                        int Y = my + localBaseY + y * 12 - worldRect.Y;
+
+                        if (X + 48 < 0 || X > worldRect.Width || Y + 24 < 0 || Y > worldRect.Height)
+                            continue;
+
+                        var pTop = new SKPoint(X + 24, Y + 0);
+                        var pRight = new SKPoint(X + 48, Y + 12);
+                        var pBottom = new SKPoint(X + 24, Y + 24);
+                        var pLeft = new SKPoint(X + 0, Y + 12);
+                        var pCenter = new SKPoint(X + 24, Y + 12);
+
+                        // 左半邊
+                        if (isSafe1 || isCombat1)
+                        {
+                            var color = isSafe1 ? new SKColor(0, 255, 0, 100) : new SKColor(255, 0, 0, 100);
+                            using var brush = new SKPaint { Color = color, Style = SKPaintStyle.Fill };
+                            var path = new SKPath();
+                            path.MoveTo(pLeft);
+                            path.LineTo(pTop);
+                            path.LineTo(pCenter);
+                            path.LineTo(pBottom);
+                            path.Close();
+                            canvas.DrawPath(path, brush);
+                        }
+
+                        // 右半邊
+                        if (isSafe2 || isCombat2)
+                        {
+                            var color = isSafe2 ? new SKColor(0, 255, 0, 100) : new SKColor(255, 0, 0, 100);
+                            using var brush = new SKPaint { Color = color, Style = SKPaintStyle.Fill };
+                            var path = new SKPath();
+                            path.MoveTo(pTop);
+                            path.LineTo(pRight);
+                            path.LineTo(pBottom);
+                            path.LineTo(pCenter);
+                            path.Close();
+                            canvas.DrawPath(path, brush);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 繪製格線 (SkiaSharp 版本)
+        // 參考 DrawS32GridViewport
+        private void DrawS32GridViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect)
+        {
+            using var gridPaint = new SKPaint
+            {
+                IsAntialias = false,
+                Style = SKPaintStyle.Stroke,
+                StrokeWidth = 1,
+                Color = new SKColor(255, 0, 0, 100)
+            };
+
+            var s32FilesSnapshot = _document.S32Files.Values.ToList();
+
+            foreach (var s32Data in s32FilesSnapshot)
+            {
+                int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                int mx = loc[0];
+                int my = loc[1];
+
+                // 繪製 "/" 方向的線
+                for (int i = 0; i <= 64; i++)
+                {
+                    int x3 = i;
+                    int x = x3 * 2;
+
+                    int startLocalBaseX = -24 * (x / 2);
+                    int startLocalBaseY = 63 * 12 - 12 * (x / 2);
+                    int startX = mx + startLocalBaseX + x * 24 + 0 * 24 + 24 - worldRect.X;
+                    int startY = my + startLocalBaseY + 0 * 12 - worldRect.Y;
+
+                    int endX = mx + startLocalBaseX + x * 24 + 63 * 24 + 24 - worldRect.X;
+                    int endY = my + startLocalBaseY + 63 * 12 + 24 - worldRect.Y;
+
+                    if (endX >= 0 && startX <= worldRect.Width &&
+                        Math.Max(startY, endY) >= 0 && Math.Min(startY, endY) <= worldRect.Height)
+                    {
+                        canvas.DrawLine(startX, startY, endX, endY, gridPaint);
+                    }
+                }
+
+                // 繪製 "\" 方向的線
+                for (int j = 0; j <= 64; j++)
+                {
+                    int y = j;
+
+                    int x = 0;
+                    int startLocalBaseX = -24 * (x / 2);
+                    int startLocalBaseY = 63 * 12 - 12 * (x / 2);
+                    int startX = mx + startLocalBaseX + x * 24 + y * 24 - worldRect.X;
+                    int startY = my + startLocalBaseY + y * 12 + 12 - worldRect.Y;
+
+                    x = 63 * 2;
+                    int endLocalBaseX = -24 * (x / 2);
+                    int endLocalBaseY = 63 * 12 - 12 * (x / 2);
+                    int endX = mx + endLocalBaseX + x * 24 + y * 24 + 48 - worldRect.X;
+                    int endY = my + endLocalBaseY + y * 12 + 12 - worldRect.Y;
+
+                    if (endX >= 0 && startX <= worldRect.Width &&
+                        Math.Max(startY, endY) >= 0 && Math.Min(startY, endY) <= worldRect.Height)
+                    {
+                        canvas.DrawLine(startX, startY, endX, endY, gridPaint);
+                    }
+                }
+            }
+        }
+
+        // 繪製座標標籤 (SkiaSharp 版本)
+        // 參考 DrawCoordinateLabelsViewport
+        private void DrawCoordinateLabelsViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect)
+        {
+            using var textPaint = new SKPaint
+            {
+                IsAntialias = true,
+                TextSize = 10,
+                Color = SKColors.Blue,
+                Typeface = SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold)
+            };
+            using var bgPaint = new SKPaint
+            {
+                IsAntialias = false,
+                Style = SKPaintStyle.Fill,
+                Color = new SKColor(255, 255, 255, 180)
+            };
+
+            int interval = 10;
+
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                int mx = loc[0];
+                int my = loc[1];
+
+                for (int y = 0; y < 64; y += interval)
+                {
+                    for (int x = 0; x < 128; x += interval)
+                    {
+                        int localBaseX = -24 * (x / 2);
+                        int localBaseY = 63 * 12 - 12 * (x / 2);
+                        int pixelX = mx + localBaseX + x * 24 + y * 24 - worldRect.X;
+                        int pixelY = my + localBaseY + y * 12 - worldRect.Y;
+
+                        // 跳過不在 Viewport 內的格子
+                        if (pixelX + 24 < 0 || pixelX > worldRect.Width ||
+                            pixelY + 24 < 0 || pixelY > worldRect.Height)
+                            continue;
+
+                        // 計算遊戲座標
+                        int gameX = s32Data.SegInfo.nLinBeginX + x / 2;  // Layer1 座標轉遊戲座標
+                        int gameY = s32Data.SegInfo.nLinBeginY + y;
+
+                        string text = $"{gameX},{gameY}";
+                        var bounds = new SKRect();
+                        textPaint.MeasureText(text, ref bounds);
+
+                        int textX = pixelX + 12 - (int)bounds.Width / 2;
+                        int textY = pixelY + 12 - (int)bounds.Height / 2;
+
+                        canvas.DrawRect(textX - 2, textY - 1, bounds.Width + 4, bounds.Height + 2, bgPaint);
+                        canvas.DrawText(text, textX, textY + bounds.Height, textPaint);
+                    }
+                }
+            }
+        }
+
+        // 繪製 S32 邊界 (SkiaSharp 版本)
+        // 參考 DrawS32BoundaryOnlyViewport
+        private void DrawS32BoundaryOnlyViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect)
+        {
+            using var boundaryPaint = new SKPaint
+            {
+                IsAntialias = true,
+                Style = SKPaintStyle.Stroke,
+                StrokeWidth = 2,
+                Color = SKColors.Cyan
+            };
+            using var textPaint = new SKPaint
+            {
+                IsAntialias = true,
+                TextSize = 10,
+                Color = SKColors.Lime,
+                Typeface = SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold)
+            };
+            using var bgPaint = new SKPaint
+            {
+                IsAntialias = false,
+                Style = SKPaintStyle.Fill,
+                Color = new SKColor(0, 0, 0, 200)
+            };
+
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                int mx = loc[0];
+                int my = loc[1];
+
+                // 計算四個角點
+                var corners = new SKPoint[4];
+                int[] cornerX3 = { 0, 64, 64, 0 };
+                int[] cornerY = { 0, 0, 64, 64 };
+
+                for (int i = 0; i < 4; i++)
+                {
+                    int x3 = cornerX3[i];
+                    int y = cornerY[i];
+                    int x = x3 * 2;
+
+                    int localBaseX = -24 * (x / 2);
+                    int localBaseY = 63 * 12 - 12 * (x / 2);
+                    int X = mx + localBaseX + x * 24 + y * 24 - worldRect.X;
+                    int Y = my + localBaseY + y * 12 - worldRect.Y;
+
+                    corners[i] = new SKPoint(X, Y + 12);
+                }
+
+                canvas.DrawLine(corners[0], corners[1], boundaryPaint);
+                canvas.DrawLine(corners[1], corners[2], boundaryPaint);
+                canvas.DrawLine(corners[2], corners[3], boundaryPaint);
+                canvas.DrawLine(corners[3], corners[0], boundaryPaint);
+
+                // 繪製中心標籤
+                float centerX = (corners[0].X + corners[2].X) / 2;
+                float centerY = (corners[0].Y + corners[2].Y) / 2;
+                string centerText = $"({mx},{my})";
+
+                var bounds = new SKRect();
+                textPaint.MeasureText(centerText, ref bounds);
+                canvas.DrawRect(centerX - bounds.Width / 2 - 2, centerY - bounds.Height / 2 - 1, bounds.Width + 4, bounds.Height + 2, bgPaint);
+                canvas.DrawText(centerText, centerX - bounds.Width / 2, centerY + bounds.Height / 2, textPaint);
+            }
+        }
+
+        // 繪製 Layer5 覆蓋層 (SkiaSharp 版本)
+        // 完全複製自 DrawLayer5OverlayViewport
+        private void DrawLayer5OverlayViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect, bool isLayer5Edit)
+        {
+            // 收集所有 Layer5 位置（去重）
+            var drawnPositions = new HashSet<(int mx, int my, int x, int y)>();
+
+            // 半透明藍色填充和邊框 (原版顏色: ARGB 80,60,140,255)
+            using var fillPaint = new SKPaint
+            {
+                IsAntialias = false,
+                Style = SKPaintStyle.Fill,
+                Color = new SKColor(60, 140, 255, 80)
+            };
+            using var borderPaint = new SKPaint
+            {
+                IsAntialias = true,
+                Style = SKPaintStyle.Stroke,
+                StrokeWidth = 1.5f,
+                Color = new SKColor(80, 160, 255, 180)
+            };
+            using var highlightPaint = new SKPaint
+            {
+                IsAntialias = true,
+                Style = SKPaintStyle.Stroke,
+                StrokeWidth = 1f,
+                Color = new SKColor(150, 200, 255, 200)
+            };
+
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                // 只繪製已啟用的 S32
+                if (!_checkedS32Files.Contains(s32Data.FilePath)) continue;
+                if (s32Data.Layer5.Count == 0) continue;
+
+                int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                int mx = loc[0];
+                int my = loc[1];
+
+                foreach (var item in s32Data.Layer5)
+                {
+                    // 同位置只畫一次
+                    var posKey = (mx, my, (int)item.X, (int)item.Y);
+                    if (drawnPositions.Contains(posKey)) continue;
+                    drawnPositions.Add(posKey);
+
+                    // Layer5 的 X 是 0-127（Layer1 座標系），Y 是 0-63
+                    // 繪製半格大小的三角形（X 切半）
+                    int x1 = item.X;  // 0-127
+                    int y = item.Y;   // 0-63
+
+                    int localBaseX = 0 - 24 * (x1 / 2);
+                    int localBaseY = 63 * 12 - 12 * (x1 / 2);
+
+                    int X = mx + localBaseX + x1 * 24 + y * 24 - worldRect.X;
+                    int Y = my + localBaseY + y * 12 - worldRect.Y;
+
+                    // 跳過不在 Viewport 內的格子
+                    if (X + 24 < 0 || X > worldRect.Width || Y + 12 < 0 || Y > worldRect.Height)
+                        continue;
+
+                    // 繪製半格三角形（根據 X 奇偶決定左半或右半）
+                    using var path = new SKPath();
+                    if (x1 % 2 == 0)
+                    {
+                        // 偶數 X：左半三角形
+                        float pLeftX = X + 0, pLeftY = Y + 12;
+                        float pTopX = X + 24, pTopY = Y + 0;
+                        float pBottomX = X + 24, pBottomY = Y + 24;
+
+                        path.MoveTo(pLeftX, pLeftY);
+                        path.LineTo(pTopX, pTopY);
+                        path.LineTo(pBottomX, pBottomY);
+                        path.Close();
+
+                        canvas.DrawPath(path, fillPaint);
+                        // 邊框（上亮下暗）
+                        canvas.DrawLine(pLeftX, pLeftY, pTopX, pTopY, highlightPaint);
+                        canvas.DrawLine(pTopX, pTopY, pBottomX, pBottomY, borderPaint);
+                        canvas.DrawLine(pBottomX, pBottomY, pLeftX, pLeftY, borderPaint);
+                    }
+                    else
+                    {
+                        // 奇數 X：右半三角形
+                        float pTopX = X + 0, pTopY = Y + 0;
+                        float pRightX = X + 24, pRightY = Y + 12;
+                        float pBottomX = X + 0, pBottomY = Y + 24;
+
+                        path.MoveTo(pTopX, pTopY);
+                        path.LineTo(pRightX, pRightY);
+                        path.LineTo(pBottomX, pBottomY);
+                        path.Close();
+
+                        canvas.DrawPath(path, fillPaint);
+                        // 邊框（上亮下暗）
+                        canvas.DrawLine(pTopX, pTopY, pRightX, pRightY, highlightPaint);
+                        canvas.DrawLine(pRightX, pRightY, pBottomX, pBottomY, borderPaint);
+                        canvas.DrawLine(pBottomX, pBottomY, pTopX, pTopY, borderPaint);
+                    }
+                }
+            }
+
+            // 在透明編輯模式下，繪製已設定 Layer5 的群組物件覆蓋層
+            if (isLayer5Edit)
+            {
+                DrawLayer5GroupOverlaySK(canvas, worldRect);
+            }
+        }
+
+        // 繪製 Layer5 群組覆蓋層 (SkiaSharp 版本)
+        // 完全複製自 DrawLayer5GroupOverlay
+        private void DrawLayer5GroupOverlaySK(SKCanvas canvas, Rectangle worldRect)
+        {
+            // 只有在有選取格子時才顯示
+            if (_editState.SelectedCells.Count == 0) return;
+
+            // 從選取的格子收集 Layer5 的 GroupId 及其 Type
+            var groupLayer5Info = new Dictionary<int, byte>(); // GroupId -> Type
+            foreach (var selectedCell in _editState.SelectedCells)
+            {
+                var s32Data = selectedCell.S32Data;
+                int localX = selectedCell.LocalX;  // Layer1 座標 (0-127)
+                int localY = selectedCell.LocalY;  // Layer3 座標 (0-63)
+
+                // 查找該格子位置對應的 Layer5 設定
+                // Layer5 的 X 是 0-127，Y 是 0-63
+                // selectedCell.LocalX 是 Layer1 座標 (0-127)，LocalY 是 (0-63)
+                // 一個遊戲格子對應兩個 Layer1 X 座標（localX 和 localX+1）
+                foreach (var item in s32Data.Layer5)
+                {
+                    if ((item.X == localX || item.X == localX + 1) && item.Y == localY)
+                    {
+                        // 如果同一個 GroupId 有多個設定，保留第一個
+                        if (!groupLayer5Info.ContainsKey(item.ObjectIndex))
+                        {
+                            groupLayer5Info[item.ObjectIndex] = item.Type;
+                        }
+                    }
+                }
+            }
+
+            if (groupLayer5Info.Count == 0) return;
+
+            // 半透明覆蓋色：Type=0 紫色（高對比），Type=1 紅色
+            using var type0Paint = new SKPaint
+            {
+                IsAntialias = false,
+                Style = SKPaintStyle.Fill,
+                Color = new SKColor(180, 0, 255, 100)
+            };
+            using var type1Paint = new SKPaint
+            {
+                IsAntialias = false,
+                Style = SKPaintStyle.Fill,
+                Color = new SKColor(255, 80, 80, 100)
+            };
+
+            foreach (var s32Data in _document.S32Files.Values)
+            {
+                // 只繪製已啟用的 S32
+                if (!_checkedS32Files.Contains(s32Data.FilePath)) continue;
+
+                int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                int mx = loc[0];
+                int my = loc[1];
+
+                foreach (var obj in s32Data.Layer4)
+                {
+                    // 檢查該群組是否有 Layer5 設定
+                    if (!groupLayer5Info.TryGetValue(obj.GroupId, out byte type))
+                        continue;
+
+                    // 使用與高亮格子相同的座標計算方式
+                    int x1 = obj.X;  // 0-127 (Layer1 座標系)
+                    int y = obj.Y;   // 0-63
+
+                    int localBaseX = 0 - 24 * (x1 / 2);
+                    int localBaseY = 63 * 12 - 12 * (x1 / 2);
+
+                    int X = mx + localBaseX + x1 * 24 + y * 24 - worldRect.X;
+                    int Y = my + localBaseY + y * 12 - worldRect.Y;
+
+                    // 跳過不在 Viewport 內的物件
+                    if (X + 24 < 0 || X > worldRect.Width || Y + 24 < 0 || Y > worldRect.Height)
+                        continue;
+
+                    // 繪製半格菱形覆蓋（與格子高亮相同大小）
+                    var paint = type == 0 ? type0Paint : type1Paint;
+                    using var path = new SKPath();
+                    path.MoveTo(X + 0, Y + 12);   // 左
+                    path.LineTo(X + 12, Y + 0);   // 上
+                    path.LineTo(X + 24, Y + 12);  // 右
+                    path.LineTo(X + 12, Y + 24);  // 下
+                    path.Close();
+                    canvas.DrawPath(path, paint);
+                }
+            }
+        }
+
+        // 繪製群組高亮覆蓋層 (SkiaSharp 版本)
+        // 參考 DrawGroupHighlightOverlay
+        private void DrawGroupHighlightOverlaySK(SKCanvas canvas, Rectangle worldRect, List<(int, int)> groupHighlightCells)
+        {
+            using var fillPaint = new SKPaint
+            {
+                IsAntialias = false,
+                Style = SKPaintStyle.Fill,
+                Color = new SKColor(0, 255, 0, 80) // 綠色半透明
+            };
+            using var strokePaint = new SKPaint
+            {
+                IsAntialias = true,
+                Style = SKPaintStyle.Stroke,
+                StrokeWidth = 2,
+                Color = new SKColor(0, 255, 0, 200)
+            };
+
+            foreach (var (cellX, cellY) in groupHighlightCells)
+            {
+                // 找到包含這個遊戲座標的 S32
+                foreach (var s32Data in _document.S32Files.Values)
+                {
+                    if (cellX < s32Data.SegInfo.nLinBeginX || cellX >= s32Data.SegInfo.nLinEndX ||
+                        cellY < s32Data.SegInfo.nLinBeginY || cellY >= s32Data.SegInfo.nLinEndY)
+                        continue;
+
+                    int[] loc = s32Data.SegInfo.GetLoc(1.0);
+                    int mx = loc[0];
+                    int my = loc[1];
+
+                    int localX3 = cellX - s32Data.SegInfo.nLinBeginX;
+                    int localY = cellY - s32Data.SegInfo.nLinBeginY;
+                    int x = localX3 * 2;
+
+                    int localBaseX = -24 * (x / 2);
+                    int localBaseY = 63 * 12 - 12 * (x / 2);
+                    int pixelX = mx + localBaseX + x * 24 + localY * 24 - worldRect.X;
+                    int pixelY = my + localBaseY + localY * 12 - worldRect.Y;
+
+                    if (pixelX + 48 < 0 || pixelX > worldRect.Width ||
+                        pixelY + 24 < 0 || pixelY > worldRect.Height)
+                        continue;
+
+                    var path = new SKPath();
+                    path.MoveTo(pixelX + 24, pixelY);
+                    path.LineTo(pixelX + 48, pixelY + 12);
+                    path.LineTo(pixelX + 24, pixelY + 24);
+                    path.LineTo(pixelX, pixelY + 12);
+                    path.Close();
+
+                    canvas.DrawPath(path, fillPaint);
+                    canvas.DrawPath(path, strokePaint);
+                    break;
+                }
+            }
+        }
+
+        // 繪製選中格子高亮 (SkiaSharp 版本)
+        // 參考 DrawHighlightedCellViewport
+        private void DrawHighlightedCellViewportSK(SKCanvas canvas, Rectangle worldRect, S32Data highlightedS32Data, int highlightedCellX, int highlightedCellY)
+        {
+            _logger.Debug($"[HIGHLIGHT-SK] Enter: s32Data={highlightedS32Data?.FilePath}, cellX={highlightedCellX}, cellY={highlightedCellY}");
+
+            if (highlightedS32Data == null)
+            {
+                _logger.Debug("[HIGHLIGHT-SK] Exit: s32Data is null");
+                return;
+            }
+
+            // RGB565 不支援 alpha，使用 Fill + Stroke 繪製明顯的高亮
+            using var fillPaint = new SKPaint
+            {
+                IsAntialias = false,
+                Style = SKPaintStyle.Fill,
+                Color = new SKColor(255, 255, 0) // 亮黃色填充
+            };
+            using var strokePaint = new SKPaint
+            {
+                IsAntialias = true,
+                Style = SKPaintStyle.Stroke,
+                StrokeWidth = 3,
+                Color = new SKColor(255, 128, 0) // 橙色邊框
+            };
+
+            int[] loc = highlightedS32Data.SegInfo.GetLoc(1.0);
+            int mx = loc[0];
+            int my = loc[1];
+
+            // highlightedCellX 是 Layer1 座標 (0-127)
+            // 公式與原版 DrawHighlightedCellViewport 完全一致
+            int localBaseX = 0 - 24 * (highlightedCellX / 2);
+            int localBaseY = 63 * 12 - 12 * (highlightedCellX / 2);
+
+            int X = mx + localBaseX + highlightedCellX * 24 + highlightedCellY * 24 - worldRect.X;
+            int Y = my + localBaseY + highlightedCellY * 12 - worldRect.Y;
+
+            _logger.Debug($"[HIGHLIGHT-SK] worldRect=({worldRect.X},{worldRect.Y},{worldRect.Width},{worldRect.Height}), mx={mx}, my={my}, X={X}, Y={Y}");
+
+            // 菱形四個角點 (與原版完全一致: p1=左, p2=上, p3=右, p4=下)
+            using var path = new SKPath();
+            path.MoveTo(X + 0, Y + 12);   // p1 左
+            path.LineTo(X + 12, Y + 0);   // p2 上
+            path.LineTo(X + 24, Y + 12);  // p3 右
+            path.LineTo(X + 12, Y + 24);  // p4 下
+            path.Close();
+
+            canvas.DrawPath(path, fillPaint);
+            canvas.DrawPath(path, strokePaint);
+
+            _logger.Debug($"[HIGHLIGHT-SK] Done drawing at ({X},{Y})");
+        }
+
+        // 繪製選取的格子（SK 版本）- 用於 MapViewerControl.PaintOverlaySK callback
+        // 參考 DrawSelectedCells
+        private void DrawSelectedCellsSK(SKCanvas canvas, float zoomLevel, int scrollX, int scrollY)
+        {
+            if (_editState.SelectedCells.Count == 0) return;
+
+            // 判斷顏色（區域選取模式用綠色，其他用橙色）
+            bool isSelectingRegion = _viewState.ShowSafeZones || _viewState.ShowCombatZones ||
+                                      currentRegionEditMode != RegionEditMode.None;
+            var color = isSelectingRegion ? new SKColor(0, 255, 0) : new SKColor(255, 165, 0); // 綠/橙
+
+            using var fillPaint = new SKPaint
+            {
+                IsAntialias = false,
+                Style = SKPaintStyle.Fill,
+                Color = new SKColor(color.Red, color.Green, color.Blue, 80) // 半透明
+            };
+            using var strokePaint = new SKPaint
+            {
+                IsAntialias = true,
+                Style = SKPaintStyle.Stroke,
+                StrokeWidth = 2,
+                Color = color
+            };
+
+            foreach (var cell in _editState.SelectedCells)
+            {
+                // 與 DrawSelectedCells 完全相同的座標計算
+                int[] loc = cell.S32Data.SegInfo.GetLoc(1.0);
+                int mx = loc[0];
+                int my = loc[1];
+
+                int x = cell.LocalX;  // Layer1 座標 (0-127)
+                int y = cell.LocalY;  // (0-63)
+
+                int localBaseX = 0 - 24 * (x / 2);
+                int localBaseY = 63 * 12 - 12 * (x / 2);
+
+                // 計算世界座標
+                int worldX = mx + localBaseX + x * 24 + y * 24;
+                int worldY = my + localBaseY + y * 12;
+
+                // 轉換為螢幕座標（考慮捲動位置和縮放）
+                float screenX = (worldX - scrollX) * zoomLevel;
+                float screenY = (worldY - scrollY) * zoomLevel;
+                float scaledWidth = 48 * zoomLevel;   // Layer3 格子寬度
+                float scaledHeight = 24 * zoomLevel;  // Layer3 格子高度
+
+                // Layer3 菱形四個頂點
+                using var path = new SKPath();
+                path.MoveTo(screenX, screenY + scaledHeight / 2);                    // 左
+                path.LineTo(screenX + scaledWidth / 2, screenY);                     // 上
+                path.LineTo(screenX + scaledWidth, screenY + scaledHeight / 2);      // 右
+                path.LineTo(screenX + scaledWidth / 2, screenY + scaledHeight);      // 下
+                path.Close();
+
+                canvas.DrawPath(path, fillPaint);
+                canvas.DrawPath(path, strokePaint);
+            }
+
+            // 顯示選取數量（在選取區域模式下）
+            if (isSelectingRegion && _editState.SelectedCells.Count > 0)
+            {
+                string info = $"選取 {_editState.SelectedCells.Count} 格";
+                using var textPaint = new SKPaint
+                {
+                    IsAntialias = true,
+                    TextSize = 12,
+                    Color = SKColors.White,
+                    Typeface = SKTypeface.FromFamilyName("Arial", SKFontStyle.Bold)
+                };
+                using var bgPaint = new SKPaint
+                {
+                    IsAntialias = false,
+                    Style = SKPaintStyle.Fill,
+                    Color = new SKColor(0, 0, 0, 180)
+                };
+
+                var bounds = new SKRect();
+                textPaint.MeasureText(info, ref bounds);
+
+                // 在畫面右上角顯示
+                float textX = canvas.LocalClipBounds.Right - bounds.Width - 10;
+                float textY = 30;
+
+                canvas.DrawRect(textX - 4, textY - bounds.Height - 2, bounds.Width + 8, bounds.Height + 6, bgPaint);
+                canvas.DrawText(info, textX, textY, textPaint);
+            }
+        }
+
+        #endregion
+    }
+}

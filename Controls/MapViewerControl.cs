@@ -5,10 +5,12 @@ using System.Diagnostics;
 using System.Threading;
 using Eto.Forms;
 using Eto.Drawing;
+using Eto.SkiaDraw;
 using L1MapViewer.Compatibility;
 using L1MapViewer.Models;
 using L1MapViewer.Rendering;
 using NLog;
+using SkiaSharp;
 
 namespace L1MapViewer.Controls
 {
@@ -23,14 +25,14 @@ namespace L1MapViewer.Controls
         private static readonly Logger _logger = LogManager.GetCurrentClassLogger();
 
         private Panel _mapPanel;
-        private PictureBox _mapPictureBox;
+        private MapSkiaDrawable _mapDrawable;
         private readonly MapRenderingCore _renderingCore;
 
         // ViewState（可由外部注入或內部建立）
         private ViewState _viewState;
 
         // 渲染相關
-        private Bitmap _viewportBitmap;
+        private SKBitmap _skViewportBitmap;
         private readonly object _viewportBitmapLock = new object();
         private CancellationTokenSource _renderCts;
 
@@ -188,6 +190,12 @@ namespace L1MapViewer.Controls
         /// </summary>
         public event EventHandler<PaintEventArgs> PaintOverlay;
 
+        /// <summary>
+        /// SK 繪製覆蓋層 callback（讓 MapForm 繪製選取格子等編輯層）
+        /// 參數: (SKCanvas canvas, float zoomLevel, int scrollX, int scrollY)
+        /// </summary>
+        public Action<SKCanvas, float, int, int> PaintOverlaySK { get; set; }
+
         #endregion
 
         #region 建構函式
@@ -251,20 +259,20 @@ namespace L1MapViewer.Controls
         }
 
         /// <summary>
-        /// 設定外部渲染的 Bitmap（用於舊版渲染整合）
+        /// 設定外部渲染的 SKBitmap（用於 SkiaSharp 渲染整合）
         /// </summary>
-        public void SetExternalBitmap(Bitmap bitmap)
+        public void SetExternalBitmap(SKBitmap skBitmap)
         {
             var sw = Stopwatch.StartNew();
-            _logger.Debug($"[UI] SetExternalBitmap start: bitmap={bitmap?.Width}x{bitmap?.Height}");
-            Console.WriteLine($"[MapViewerControl.SetExternalBitmap] bitmap={bitmap?.Width}x{bitmap?.Height}, RenderWidth={_viewState.RenderWidth}, RenderHeight={_viewState.RenderHeight}, PictureBox.Size={_mapPictureBox.Width}x{_mapPictureBox.Height}, Visible={_mapPictureBox.Visible}");
+            _logger.Debug($"[UI] SetExternalBitmap start: skBitmap={skBitmap?.Width}x{skBitmap?.Height}");
+            Console.WriteLine($"[MapViewerControl.SetExternalBitmap] skBitmap={skBitmap?.Width}x{skBitmap?.Height}, RenderWidth={_viewState.RenderWidth}, RenderHeight={_viewState.RenderHeight}, Drawable.Size={_mapDrawable.Width}x{_mapDrawable.Height}");
             lock (_viewportBitmapLock)
             {
-                _viewportBitmap?.Dispose();
-                _viewportBitmap = bitmap;
+                _skViewportBitmap?.Dispose();
+                _skViewportBitmap = skBitmap;
             }
             _logger.Debug($"[UI] SetExternalBitmap calling Invalidate after {sw.ElapsedMilliseconds}ms");
-            _mapPictureBox.Invalidate();
+            _mapDrawable.Invalidate();
             sw.Stop();
             _logger.Debug($"[UI] SetExternalBitmap complete in {sw.ElapsedMilliseconds}ms");
         }
@@ -322,7 +330,7 @@ namespace L1MapViewer.Controls
         /// </summary>
         public void InvalidateOverlay()
         {
-            _mapPictureBox.Invalidate();
+            _mapDrawable.Invalidate();
         }
 
         /// <summary>
@@ -331,7 +339,7 @@ namespace L1MapViewer.Controls
         /// </summary>
         public void InvalidateAnimationOverlay()
         {
-            _mapPictureBox?.Invalidate();
+            _mapDrawable?.Invalidate();
         }
 
         /// <summary>
@@ -386,24 +394,18 @@ namespace L1MapViewer.Controls
                 BackColor = Eto.Drawing.Colors.Black
             };
 
-            // 建立 PictureBox
-            _mapPictureBox = new PictureBox
-            {
-                Dock = DockStyle.Fill,
-                SizeMode = PictureBoxSizeMode.Normal,
-                BackColor = Colors.Black
-            };
+            // 建立 SkiaDrawable（直接用 SKCanvas 繪製，不需轉換）
+            _mapDrawable = new MapSkiaDrawable(this);
 
             // 註冊事件
-            _mapPictureBox.Paint += MapPictureBox_Paint;
-            _mapPictureBox.MouseDown += MapPictureBox_MouseDown;
-            _mapPictureBox.MouseMove += MapPictureBox_MouseMove;
-            _mapPictureBox.MouseUp += MapPictureBox_MouseUp;
-            _mapPictureBox.MouseDoubleClick += MapPictureBox_MouseDoubleClick;
+            _mapDrawable.MouseDown += MapDrawable_MouseDown;
+            _mapDrawable.MouseMove += MapDrawable_MouseMove;
+            _mapDrawable.MouseUp += MapDrawable_MouseUp;
+            _mapDrawable.MouseDoubleClick += MapDrawable_MouseDoubleClick;
             _mapPanel.MouseWheel += MapPanel_MouseWheel;
             _mapPanel.Resize += MapPanel_Resize;
 
-            _mapPanel.GetControls().Add(_mapPictureBox);
+            _mapPanel.GetControls().Add(_mapDrawable);
             this.GetControls().Add(_mapPanel);
 
             this.ResumeLayout(false);
@@ -526,7 +528,7 @@ namespace L1MapViewer.Controls
 
         #region 滑鼠事件處理
 
-        private void MapPictureBox_MouseDown(object sender, MouseEventArgs e)
+        private void MapDrawable_MouseDown(object sender, MouseEventArgs e)
         {
             // 中鍵拖曳
             if (e.GetButton() == MouseButtons.Middle)
@@ -556,7 +558,7 @@ namespace L1MapViewer.Controls
             }
         }
 
-        private void MapPictureBox_MouseMove(object sender, MouseEventArgs e)
+        private void MapDrawable_MouseMove(object sender, MouseEventArgs e)
         {
             if (_isDragging)
             {
@@ -567,7 +569,7 @@ namespace L1MapViewer.Controls
                 int newScrollY = _dragStartScroll.Y - (int)(deltaY / _viewState.ZoomLevel);
 
                 _viewState.SetScrollSilent(newScrollX, newScrollY);
-                _mapPictureBox.Invalidate();
+                _mapDrawable.Invalidate();
             }
             else
             {
@@ -582,7 +584,7 @@ namespace L1MapViewer.Controls
             }
         }
 
-        private void MapPictureBox_MouseUp(object sender, MouseEventArgs e)
+        private void MapDrawable_MouseUp(object sender, MouseEventArgs e)
         {
             if (e.GetButton() == MouseButtons.Middle && _isDragging)
             {
@@ -608,7 +610,7 @@ namespace L1MapViewer.Controls
             }
         }
 
-        private void MapPictureBox_MouseDoubleClick(object sender, MouseEventArgs e)
+        private void MapDrawable_MouseDoubleClick(object sender, MouseEventArgs e)
         {
             // 轉發給外部處理雙擊
             var worldPoint = ScreenToWorld(e.Location.ToPoint());
@@ -645,7 +647,7 @@ namespace L1MapViewer.Controls
         private void MapPanel_Resize(object sender, EventArgs e)
         {
             // Eto.Forms doesn't support DockStyle.Fill, so we need to manually resize the PictureBox
-            _mapPictureBox.Size = new Eto.Drawing.Size(_mapPanel.Width, _mapPanel.Height);
+            _mapDrawable.Size = new Eto.Drawing.Size(_mapPanel.Width, _mapPanel.Height);
 
             if (_document != null)
             {
@@ -708,20 +710,20 @@ namespace L1MapViewer.Controls
                     if (!token.IsCancellationRequested && bitmap != null)
                     {
                         // 回到 UI 執行緒更新
+                        // 注意：這是內部 Render 路徑，目前使用外部 SetExternalBitmap，此程式碼可能不執行
                         this.BeginInvoke((MethodInvoker)delegate
                         {
-                            lock (_viewportBitmapLock)
-                            {
-                                _viewportBitmap?.Dispose();
-                                _viewportBitmap = bitmap;
-                            }
+                            // 內部渲染返回的是 Eto.Bitmap，需要轉換（或者暫時不支援）
+                            // 目前改為使用外部 SKBitmap，此路徑暫時不支援
+                            _logger.Warn("[Internal Render] This path is deprecated. Use SetExternalBitmap with SKBitmap instead.");
+                            bitmap?.Dispose();
 
                             _viewState.SetRenderResult(
                                 worldRect.X, worldRect.Y,
                                 worldRect.Width, worldRect.Height,
                                 _viewState.ZoomLevel);
 
-                            _mapPictureBox.Invalidate();
+                            _mapDrawable.Invalidate();
                             RenderCompleted?.Invoke(this, new RenderCompletedEventArgs(sw.ElapsedMilliseconds));
                         });
                     }
@@ -741,71 +743,8 @@ namespace L1MapViewer.Controls
             }
             else
             {
-                _mapPictureBox.Invalidate();
+                _mapDrawable.Invalidate();
             }
-        }
-
-        private void MapPictureBox_Paint(object sender, PaintEventArgs e)
-        {
-            var sw = Stopwatch.StartNew();
-            _logger.Debug("[UI] MapPictureBox_Paint start");
-
-            // DEBUG: 無條件繪製邊框確認 Paint 被呼叫
-            using (var pen = new Pen(Colors.Yellow, 2))
-            {
-                e.Graphics.DrawRectangle(pen, 1, 1, _mapPictureBox.Width - 3, _mapPictureBox.Height - 3);
-            }
-
-            lock (_viewportBitmapLock)
-            {
-                if (_viewportBitmap != null && _viewState.RenderWidth > 0)
-                {
-                    int drawX = (int)((_viewState.RenderOriginX - _viewState.ScrollX) * _viewState.ZoomLevel);
-                    int drawY = (int)((_viewState.RenderOriginY - _viewState.ScrollY) * _viewState.ZoomLevel);
-                    int drawW = (int)(_viewState.RenderWidth * _viewState.ZoomLevel);
-                    int drawH = (int)(_viewState.RenderHeight * _viewState.ZoomLevel);
-
-                    // DEBUG: 計算 bitmap 右邊緣和 viewport 右邊緣
-                    int bitmapRightEdge = drawX + drawW;
-                    int viewportWidth = _mapPictureBox.Width;
-                    int gap = viewportWidth - bitmapRightEdge;
-
-                    var drawSw = Stopwatch.StartNew();
-                    e.Graphics.SetInterpolationMode(InterpolationMode.NearestNeighbor);
-                    e.Graphics.DrawImage(_viewportBitmap, drawX, drawY, drawW, drawH);
-                    drawSw.Stop();
-                    _logger.Debug($"[UI] DrawImage took {drawSw.ElapsedMilliseconds}ms for {drawW}x{drawH}");
-
-                    // DEBUG: 如果 bitmap 沒有覆蓋整個 viewport，顯示提示
-                    if (gap > 10)
-                    {
-                        using (var font = new Font("Consolas", 9))
-                        using (var brush = new SolidBrush(Colors.Orange))
-                        {
-                            string info = $"Gap: {gap}px | RenderOrigin=({_viewState.RenderOriginX},{_viewState.RenderOriginY}) | Map={_viewState.MapWidth}x{_viewState.MapHeight}";
-                            e.Graphics.DrawString(info, font, brush, bitmapRightEdge + 5, 30);
-                        }
-                    }
-                }
-                else
-                {
-                    // DEBUG: 顯示狀態資訊
-                    string debugInfo = $"bitmap={(_viewportBitmap != null)}, RenderW={_viewState.RenderWidth}, VS.hash={_viewState.GetHashCode()}";
-                    using (var font = new Font("Consolas", 10))
-                    using (var brush = new SolidBrush(Colors.Red))
-                    {
-                        e.Graphics.DrawString(debugInfo, font, brush, 10, 10);
-                    }
-                }
-            }
-
-            // 讓外部繪製覆蓋層（L8 動畫 + 編輯層）
-            var overlaySw = Stopwatch.StartNew();
-            PaintOverlay?.Invoke(this, e);
-            overlaySw.Stop();
-
-            sw.Stop();
-            _logger.Debug($"[UI] MapPictureBox_Paint complete: total={sw.ElapsedMilliseconds}ms, overlay={overlaySw.ElapsedMilliseconds}ms");
         }
 
         #endregion
@@ -839,11 +778,101 @@ namespace L1MapViewer.Controls
 
                 lock (_viewportBitmapLock)
                 {
-                    _viewportBitmap?.Dispose();
+                    _skViewportBitmap?.Dispose();
                 }
             }
 
             base.Dispose(disposing);
+        }
+
+        #endregion
+
+        #region 內部 SkiaDrawable 類
+
+        /// <summary>
+        /// 地圖繪製控件 - 使用 SkiaSharp 直接繪製，無需轉換
+        /// </summary>
+        private class MapSkiaDrawable : SkiaDrawable
+        {
+            private static readonly Logger _logger = LogManager.GetCurrentClassLogger();
+            private readonly MapViewerControl _parent;
+
+            public MapSkiaDrawable(MapViewerControl parent)
+            {
+                _parent = parent;
+                BackgroundColor = Eto.Drawing.Colors.Black;
+            }
+
+            protected override void OnPaint(SKPaintEventArgs e)
+            {
+                var sw = Stopwatch.StartNew();
+                var canvas = e.Surface.Canvas;
+
+                // 清除背景
+                canvas.Clear(SKColors.Black);
+
+                _logger.Debug("[UI] MapSkiaDrawable.OnPaint start");
+
+                // DEBUG: 繪製邊框確認 Paint 被呼叫
+                using (var borderPaint = new SKPaint { Color = SKColors.Yellow, Style = SKPaintStyle.Stroke, StrokeWidth = 2 })
+                {
+                    canvas.DrawRect(1, 1, Width - 3, Height - 3, borderPaint);
+                }
+
+                lock (_parent._viewportBitmapLock)
+                {
+                    if (_parent._skViewportBitmap != null && _parent._viewState.RenderWidth > 0)
+                    {
+                        float drawX = (float)((_parent._viewState.RenderOriginX - _parent._viewState.ScrollX) * _parent._viewState.ZoomLevel);
+                        float drawY = (float)((_parent._viewState.RenderOriginY - _parent._viewState.ScrollY) * _parent._viewState.ZoomLevel);
+                        float drawW = (float)(_parent._viewState.RenderWidth * _parent._viewState.ZoomLevel);
+                        float drawH = (float)(_parent._viewState.RenderHeight * _parent._viewState.ZoomLevel);
+
+                        var drawSw = Stopwatch.StartNew();
+
+                        // 直接用 SKCanvas 繪製 SKBitmap - 零轉換！
+                        var destRect = new SKRect(drawX, drawY, drawX + drawW, drawY + drawH);
+                        using (var paint = new SKPaint { FilterQuality = SKFilterQuality.None }) // NearestNeighbor
+                        {
+                            canvas.DrawBitmap(_parent._skViewportBitmap, destRect, paint);
+                        }
+
+                        drawSw.Stop();
+                        _logger.Debug($"[UI] DrawBitmap took {drawSw.ElapsedMilliseconds}ms for {drawW}x{drawH}");
+
+                        // DEBUG: 如果 bitmap 沒有覆蓋整個 viewport，顯示提示
+                        float bitmapRightEdge = drawX + drawW;
+                        float gap = Width - bitmapRightEdge;
+                        if (gap > 10)
+                        {
+                            using (var textPaint = new SKPaint { Color = SKColors.Orange, TextSize = 12 })
+                            {
+                                string info = $"Gap: {gap:F0}px | RenderOrigin=({_parent._viewState.RenderOriginX},{_parent._viewState.RenderOriginY})";
+                                canvas.DrawText(info, bitmapRightEdge + 5, 30, textPaint);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // DEBUG: 顯示狀態資訊
+                        string debugInfo = $"skBitmap={(_parent._skViewportBitmap != null)}, RenderW={_parent._viewState.RenderWidth}";
+                        using (var textPaint = new SKPaint { Color = SKColors.Red, TextSize = 14 })
+                        {
+                            canvas.DrawText(debugInfo, 10, 20, textPaint);
+                        }
+                    }
+                }
+
+                // 讓外部繪製覆蓋層（選取格子等編輯層）
+                var overlaySw = Stopwatch.StartNew();
+                _parent.PaintOverlaySK?.Invoke(canvas, (float)_parent._viewState.ZoomLevel, _parent._viewState.ScrollX, _parent._viewState.ScrollY);
+                overlaySw.Stop();
+                if (overlaySw.ElapsedMilliseconds > 0)
+                    _logger.Debug($"[UI] PaintOverlaySK took {overlaySw.ElapsedMilliseconds}ms");
+
+                sw.Stop();
+                _logger.Debug($"[UI] MapSkiaDrawable.OnPaint complete: total={sw.ElapsedMilliseconds}ms");
+            }
         }
 
         #endregion

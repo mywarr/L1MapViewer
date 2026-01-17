@@ -455,6 +455,7 @@ namespace L1FlyMapViewer
             _mapViewerControl.MapMouseMove += MapViewerControl_MapMouseMove;
             _mapViewerControl.MapMouseUp += MapViewerControl_MapMouseUp;
             _mapViewerControl.PaintOverlay += MapViewerControl_PaintOverlay;
+            _mapViewerControl.PaintOverlaySK = DrawSelectedCellsSK;
             _mapViewerControl.CoordinateChanged += MapViewerControl_CoordinateChanged;
             _mapViewerControl.RenderCompleted += MapViewerControl_RenderCompleted;
             _mapViewerControl.ScrollChanged += (s, e) => UpdateMiniMapViewportRect();
@@ -7497,9 +7498,11 @@ namespace L1FlyMapViewer
                 int blockWidth = 64 * 24 * 2;  // 3072
                 int blockHeight = 64 * 12 * 2; // 1536
 
-                // 創建新的 Viewport Bitmap
+                // 創建新的 Viewport SKBitmap（使用 RGB565 格式，與 Tile 資料相同，可直接使用 RenderBlockDirect）
                 var createBmpSw = Stopwatch.StartNew();
-                Bitmap viewportBitmap = new Bitmap(worldRect.Width, worldRect.Height, PixelFormat.Format16bppRgb555);
+                _logger.Debug($"[RENDER-SK] Creating SKBitmap: {worldRect.Width}x{worldRect.Height}, Rgb565");
+                var skBitmap = new SKBitmap(worldRect.Width, worldRect.Height, SKColorType.Rgb565, SKAlphaType.Opaque);
+                _logger.Debug($"[RENDER-SK] SKBitmap created: IsNull={skBitmap == null}, Info={skBitmap?.Info}");
                 createBmpSw.Stop();
                 long createBmpMs = createBmpSw.ElapsedMilliseconds;
                 HashSet<string> newRenderedBlocks = new HashSet<string>();
@@ -7546,7 +7549,7 @@ namespace L1FlyMapViewer
                 {
                     LogPerf($"[RENDER-CANCELLED] before parallel render");
                     _isRendering = false;
-                    viewportBitmap.Dispose();
+                    skBitmap.Dispose();
                     LogPerf($"[RENDER-VIEWMAP DISPOSED]");
 
                     return;
@@ -7624,32 +7627,57 @@ namespace L1FlyMapViewer
                 {
                     LogPerf($"[RENDER-CANCELLED] after collecting tiles");
                     _isRendering = false;
-                    viewportBitmap.Dispose();
+                    skBitmap.Dispose();
                     return;
                 }
 
-                // 3. 按 Layer 全域排序後繪製
+                // 3. 按 Layer 全域排序後繪製（直接寫入 SKBitmap pixels）
                 var drawSw = Stopwatch.StartNew();
                 var sortedTiles = allTiles.OrderBy(t => t.layer).ToList();
+                _logger.Debug($"[RENDER-SK] Sorted tiles: count={sortedTiles.Count}");
 
-                Rectangle rect = new Rectangle(0, 0, viewportBitmap.Width, viewportBitmap.Height);
-                BitmapData bmpData = viewportBitmap.LockBits(rect, ImageLockMode.ReadWrite, viewportBitmap.PixelFormat);
-                int rowpix = bmpData.Stride;
+                // SKBitmap 使用 GetPixels() 取得 pointer，stride = width * bytesPerPixel (BGRA8888 = 4 bytes)
+                int rowpix = skBitmap.RowBytes;
+                _logger.Debug($"[RENDER-SK] RowBytes={rowpix}, Width={skBitmap.Width}, Height={skBitmap.Height}");
 
-                unsafe
+                int drawnCount = 0;
+                int errorCount = 0;
+                try
                 {
-                    byte* ptr = (byte*)bmpData.Scan0;
-
-                    foreach (var tile in sortedTiles)
+                    unsafe
                     {
-                        DrawTilToBufferDirect(tile.pixelX, tile.pixelY, tile.tileId, tile.indexId,
-                            rowpix, ptr, viewportBitmap.Width, viewportBitmap.Height);
+                        byte* ptr = (byte*)skBitmap.GetPixels().ToPointer();
+                        _logger.Debug($"[RENDER-SK] Got pixel pointer, starting tile loop");
+
+                        foreach (var tile in sortedTiles)
+                        {
+                            try
+                            {
+                                // 使用 RGB565 版本的繪製函數（直接使用 Lin.Helper.Core 的 RenderBlockDirect）
+                                DrawTilToBufferDirect(tile.pixelX, tile.pixelY, tile.tileId, tile.indexId,
+                                    rowpix, ptr, skBitmap.Width, skBitmap.Height);
+                                drawnCount++;
+                            }
+                            catch (Exception tileEx)
+                            {
+                                errorCount++;
+                                if (errorCount <= 5) // 只記錄前 5 個錯誤
+                                {
+                                    _logger.Error(tileEx, $"[RENDER-SK] Error drawing tile: px={tile.pixelX}, py={tile.pixelY}, tileId={tile.tileId}, indexId={tile.indexId}");
+                                }
+                            }
+                        }
                     }
                 }
-
-                viewportBitmap.UnlockBits(bmpData);
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, $"[RENDER-SK] Critical error in tile drawing loop");
+                }
+                _logger.Debug($"[RENDER-SK] Tile loop done: drawn={drawnCount}, errors={errorCount}");
+                // SKBitmap 不需要 UnlockBits
                 drawSw.Stop();
                 totalDrawImageMs = drawSw.ElapsedMilliseconds;
+                _logger.Debug($"[RENDER-SK] Tiles drawn: count={sortedTiles.Count}, drawTime={totalDrawImageMs}ms");
                 renderSw.Stop();
                 _logger.Debug($"[RENDER] Background render done: total={renderSw.ElapsedMilliseconds}ms, createBmp={createBmpMs}ms, getBlock={totalGetBlockMs}ms, drawImage={totalDrawImageMs}ms, blocks={renderedCount}");
                 LogPerf($"[RENDER] total={renderSw.ElapsedMilliseconds}ms | createBmp={createBmpMs}ms, getBlock={totalGetBlockMs}ms, drawImage={totalDrawImageMs}ms | blocks={renderedCount}, cacheHit={_renderCache.CacheHits}, cacheMiss={_renderCache.CacheMisses}");
@@ -7666,57 +7694,56 @@ namespace L1FlyMapViewer
 
                 if (cancellationToken.IsCancellationRequested)
                 {
-                    viewportBitmap.Dispose();
+                    skBitmap.Dispose();
                     return;
                 }
 
-                // 繪製覆蓋層（需要傳入世界座標偏移）
-                // 共用 Graphics 物件以避免多次 Dispose 造成的效能問題
+                // 繪製覆蓋層（使用 SKCanvas 直接繪製，避免 Eto.Graphics.Dispose 的效能問題）
                 var overlaySw = Stopwatch.StartNew();
-                using (Graphics sharedGraphics = GraphicsHelper.FromImage(viewportBitmap))
+                using (var skCanvas = new SKCanvas(skBitmap))
                 {
-                    _logger.Debug($"[RENDER-OVERLAY] Shared Graphics created in {overlaySw.ElapsedMilliseconds}ms");
+                    _logger.Debug($"[RENDER-OVERLAY] SKCanvas created in {overlaySw.ElapsedMilliseconds}ms");
 
                     if (showLayer3)
                     {
                         var sw = Stopwatch.StartNew();
-                        DrawLayer3AttributesViewport(sharedGraphics, currentMap, worldRect);
+                        DrawLayer3AttributesViewportSK(skCanvas, currentMap, worldRect);
                         _logger.Debug($"[RENDER-OVERLAY] Layer3 took {sw.ElapsedMilliseconds}ms");
                     }
 
                     if (showPassable)
                     {
                         var sw = Stopwatch.StartNew();
-                        DrawPassableOverlayViewport(sharedGraphics, currentMap, worldRect);
+                        DrawPassableOverlayViewportSK(skCanvas, currentMap, worldRect);
                         _logger.Debug($"[RENDER-OVERLAY] Passable took {sw.ElapsedMilliseconds}ms");
                     }
 
                     if (showSafeZones || showCombatZones)
                     {
                         var sw = Stopwatch.StartNew();
-                        DrawRegionsOverlayViewport(sharedGraphics, currentMap, worldRect, showSafeZones, showCombatZones);
+                        DrawRegionsOverlayViewportSK(skCanvas, currentMap, worldRect, showSafeZones, showCombatZones);
                         _logger.Debug($"[RENDER-OVERLAY] Regions took {sw.ElapsedMilliseconds}ms");
                     }
 
                     if (showGrid)
                     {
                         var sw = Stopwatch.StartNew();
-                        DrawS32GridViewport(sharedGraphics, currentMap, worldRect);
-                        DrawCoordinateLabelsViewport(sharedGraphics, currentMap, worldRect);
+                        DrawS32GridViewportSK(skCanvas, currentMap, worldRect);
+                        DrawCoordinateLabelsViewportSK(skCanvas, currentMap, worldRect);
                         _logger.Debug($"[RENDER-OVERLAY] Grid took {sw.ElapsedMilliseconds}ms");
                     }
 
                     if (showS32Boundary)
                     {
                         var sw = Stopwatch.StartNew();
-                        DrawS32BoundaryOnlyViewport(sharedGraphics, currentMap, worldRect);
+                        DrawS32BoundaryOnlyViewportSK(skCanvas, currentMap, worldRect);
                         _logger.Debug($"[RENDER-OVERLAY] S32Boundary took {sw.ElapsedMilliseconds}ms");
                     }
 
                     if (showLayer5)
                     {
                         var sw = Stopwatch.StartNew();
-                        DrawLayer5OverlayViewport(sharedGraphics, currentMap, worldRect, isLayer5Edit);
+                        DrawLayer5OverlayViewportSK(skCanvas, currentMap, worldRect, isLayer5Edit);
                         _logger.Debug($"[RENDER-OVERLAY] Layer5 took {sw.ElapsedMilliseconds}ms");
                     }
 
@@ -7724,27 +7751,24 @@ namespace L1FlyMapViewer
                     if (groupHighlightCells != null && groupHighlightCells.Count > 0)
                     {
                         var sw = Stopwatch.StartNew();
-                        DrawGroupHighlightOverlay(sharedGraphics, worldRect, groupHighlightCells);
+                        DrawGroupHighlightOverlaySK(skCanvas, worldRect, groupHighlightCells);
                         _logger.Debug($"[RENDER-OVERLAY] GroupHighlight took {sw.ElapsedMilliseconds}ms");
                     }
 
-                    // 繪製選中格子的高亮（黃色）
-                    if (hasHighlight && highlightedS32Data != null)
-                    {
-                        var sw = Stopwatch.StartNew();
-                        DrawHighlightedCellViewport(sharedGraphics, worldRect, highlightedS32Data, highlightedCellX, highlightedCellY);
-                        _logger.Debug($"[RENDER-OVERLAY] Highlight took {sw.ElapsedMilliseconds}ms");
-                    }
+                    // 黃色高亮已移除（用戶要求）
 
-                    _logger.Debug($"[RENDER-OVERLAY] All overlays done, before Graphics dispose: {overlaySw.ElapsedMilliseconds}ms");
-                } // sharedGraphics dispose here
-                _logger.Debug($"[RENDER-OVERLAY] Total overlay time (after Graphics dispose): {overlaySw.ElapsedMilliseconds}ms");
+                    _logger.Debug($"[RENDER-OVERLAY] All overlays done, before SKCanvas dispose: {overlaySw.ElapsedMilliseconds}ms");
+                } // skCanvas dispose here (should be fast)
+                _logger.Debug($"[RENDER-OVERLAY] Total overlay time (after SKCanvas dispose): {overlaySw.ElapsedMilliseconds}ms");
 
                 if (cancellationToken.IsCancellationRequested)
                 {
-                    viewportBitmap.Dispose();
+                    skBitmap.Dispose();
                     return;
                 }
+
+                // 直接傳遞 SKBitmap 給 MapViewerControl（不在 background thread 轉換）
+                // MapViewerControl 會在 Paint 時才轉換，並快取結果
 
                 // 回到 UI Thread 更新
                 var queueTime = DateTime.UtcNow;
@@ -7756,7 +7780,7 @@ namespace L1FlyMapViewer
                     if (this.IsDisposed || !this.IsHandleCreated)
                     {
                         _isRendering = false;
-                        viewportBitmap.Dispose();
+                        skBitmap.Dispose();
                         return;
                     }
                     this.BeginInvoke((MethodInvoker)delegate
@@ -7771,41 +7795,44 @@ namespace L1FlyMapViewer
                         // 安全檢查
                         if (this.IsDisposed)
                         {
-                            viewportBitmap.Dispose();
+                            skBitmap.Dispose();
                             return;
                         }
 
                         if (cancellationToken.IsCancellationRequested)
                         {
-                            viewportBitmap.Dispose();
+                            skBitmap.Dispose();
                             LogPerf($"[RENDER-INVOKE] cancelled, total={invokeSw.ElapsedMilliseconds}ms");
                             return;
                         }
 
                         _logger.Debug($"[RENDER] After safety check: {invokeSw.ElapsedMilliseconds}ms");
 
-                        // Highlight 已移到 background thread 的 sharedGraphics 區塊
+                        // Highlight 已移到 background thread 的 SKCanvas 區塊
 
                         // Layer8 標記和 SPR 動畫統一在 overlay 繪製（PaintOverlay 事件）
                         // 這樣 marker 和動畫可以一起更新，不需要等完整重繪
 
                         // 保存渲染結果元數據
+                        _logger.Debug($"[RENDER-SK] Before SetRenderResult: worldRect=({worldRect.X},{worldRect.Y},{worldRect.Width},{worldRect.Height})");
                         _viewState.SetRenderResult(worldRect.X, worldRect.Y, worldRect.Width, worldRect.Height, _viewState.ZoomLevel);
+                        _logger.Debug($"[RENDER-SK] After SetRenderResult: RenderWidth={_viewState.RenderWidth}, RenderHeight={_viewState.RenderHeight}");
 
                         _logger.Debug($"[RENDER] After SetRenderResult: {invokeSw.ElapsedMilliseconds}ms");
 
                         invokeSw.Stop();
-                        _logger.Debug($"[RENDER] BeginInvoke callback complete: invokeTime={invokeSw.ElapsedMilliseconds}ms, bmpSize={viewportBitmap.Width}x{viewportBitmap.Height}");
-                        LogPerf($"[RENDER-COMPLETE] size={viewportBitmap.Width}x{viewportBitmap.Height}, invokeTime={invokeSw.ElapsedMilliseconds}ms");
+                        _logger.Debug($"[RENDER] BeginInvoke callback complete: invokeTime={invokeSw.ElapsedMilliseconds}ms, bmpSize={skBitmap.Width}x{skBitmap.Height}");
+                        LogPerf($"[RENDER-COMPLETE] size={skBitmap.Width}x{skBitmap.Height}, invokeTime={invokeSw.ElapsedMilliseconds}ms");
 
-                        // 傳遞 bitmap 給 MapViewerControl（MapViewerControl 取得所有權並負責 dispose）
-                        _mapViewerControl.SetExternalBitmap(viewportBitmap);
+                        // 傳遞 SKBitmap 給 MapViewerControl（MapViewerControl 取得所有權並負責 dispose）
+                        _logger.Debug($"[RENDER-SK] Calling SetExternalBitmap: skBitmap={skBitmap.Width}x{skBitmap.Height}");
+                        _mapViewerControl.SetExternalBitmap(skBitmap);
                     });
                 }
                 catch
                 {
                     _isRendering = false;  // 發生錯誤也要重置
-                    viewportBitmap.Dispose();
+                    skBitmap.Dispose();
                 }
             });
         }
@@ -9485,152 +9512,7 @@ namespace L1FlyMapViewer
 
         #endregion
 
-        // 繪製 Tile 到緩衝區（簡化版）
-        private unsafe void DrawTilToBuffer(int x, int y, int tileId, int indexId, int rowpix, byte* ptr, int maxWidth, int maxHeight, int mapHeightInCells)
-        {
-            try
-            {
-                // 使用快取減少重複讀取（ConcurrentDictionary.GetOrAdd 是執行緒安全的）
-                string cacheKey = $"{tileId}_{indexId}";
-                byte[] tilData = _renderCache.TileDataCache.GetOrAdd(cacheKey, _ =>
-                {
-                    string key = $"{tileId}.til";
-                    byte[] data = L1PakReader.UnPack("Tile", key);
-                    if (data == null) return null;
-
-                    var tilArray = L1Til.Parse(data);
-                    if (indexId >= tilArray.Count) return null;
-
-                    return tilArray[indexId];
-                });
-
-                if (tilData == null) return;
-
-                fixed (byte* til_ptr_fixed = tilData)
-                {
-                    byte* til_ptr = til_ptr_fixed;
-                    byte type = *(til_ptr++);
-
-                    int baseX = 0;
-                    int baseY = (mapHeightInCells - 1) * 12;
-                    baseX -= 24 * (x / 2);
-                    baseY -= 12 * (x / 2);
-
-                    if ((type & 0x02) == 0 && (type & 0x01) != 0 )
-                    {
-                        for (int ty = 0; ty < 24; ty++)
-                        {
-                            int n = (ty <= 11) ? (ty + 1) * 2 : (23 - ty) * 2;
-                            int tx = 0;
-                            for (int p = 0; p < n; p++)
-                            {
-                                ushort color = (ushort)(*(til_ptr++) | (*(til_ptr++) << 8));
-                                int startX = baseX + x * 24 + y * 24 + tx;
-                                int startY = baseY + y * 12 + ty;
-                                if (startX >= 0 && startX < maxWidth && startY >= 0 && startY < maxHeight)
-                                {
-                                    int v = startY * rowpix + (startX * 2);
-                                    *(ptr + v) = (byte)(color & 0x00FF);
-                                    *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
-                                }
-                                tx++;
-                            }
-                        }
-                    }
-                    else if ((type & 0x02) == 0 && (type & 0x01) == 0)
-                    {
-                        for (int ty = 0; ty < 24; ty++)
-                        {
-                            int n = (ty <= 11) ? (ty + 1) * 2 : (23 - ty) * 2;
-                            int tx = 24 - n;
-                            for (int p = 0; p < n; p++)
-                            {
-                                ushort color = (ushort)(*(til_ptr++) | (*(til_ptr++) << 8));
-                                int startX = baseX + x * 24 + y * 24 + tx;
-                                int startY = baseY + y * 12 + ty;
-                                if (startX >= 0 && startX < maxWidth && startY >= 0 && startY < maxHeight)
-                                {
-                                    int v = startY * rowpix + (startX * 2);
-                                    *(ptr + v) = (byte)(color & 0x00FF);
-                                    *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
-                                }
-                                tx++;
-                            }
-                        }
-                    }
-                    else if (type == 34 || type == 35)
-                    {
-                        // 壓縮格式 - 需要與背景混合
-                        byte x_offset = *(til_ptr++);
-                        byte y_offset = *(til_ptr++);
-                        byte xxLen = *(til_ptr++);
-                        byte yLen = *(til_ptr++);
-
-                        for (int ty = 0; ty < yLen; ty++)
-                        {
-                            int tx = x_offset;
-                            byte xSegmentCount = *(til_ptr++);
-                            for (int nx = 0; nx < xSegmentCount; nx++)
-                            {
-                                tx += *(til_ptr++) / 2;
-                                int xLen = *(til_ptr++);
-                                for (int p = 0; p < xLen; p++)
-                                {
-                                    ushort color = (ushort)(*(til_ptr++) | (*(til_ptr++) << 8));
-                                    int startX = baseX + x * 24 + y * 24 + tx;
-                                    int startY = baseY + y * 12 + ty + y_offset;
-                                    if (startX >= 0 && startX < maxWidth && startY >= 0 && startY < maxHeight)
-                                    {
-                                        int v = startY * rowpix + (startX * 2);
-                                        *(ptr + v) = (byte)(color & 0x00FF);
-                                        *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
-                                    }
-                                    tx++;
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        // 其他壓縮格式
-                        byte x_offset = *(til_ptr++);
-                        byte y_offset = *(til_ptr++);
-                        byte xxLen = *(til_ptr++);
-                        byte yLen = *(til_ptr++);
-
-                        for (int ty = 0; ty < yLen; ty++)
-                        {
-                            int tx = x_offset;
-                            byte xSegmentCount = *(til_ptr++);
-                            for (int nx = 0; nx < xSegmentCount; nx++)
-                            {
-                                tx += *(til_ptr++) / 2;
-                                int xLen = *(til_ptr++);
-                                for (int p = 0; p < xLen; p++)
-                                {
-                                    ushort color = (ushort)(*(til_ptr++) | (*(til_ptr++) << 8));
-                                    int startX = baseX + x * 24 + y * 24 + tx;
-                                    int startY = baseY + y * 12 + ty + y_offset;
-                                    if (startX >= 0 && startX < maxWidth && startY >= 0 && startY < maxHeight)
-                                    {
-                                        int v = startY * rowpix + (startX * 2);
-                                        *(ptr + v) = (byte)(color & 0x00FF);
-                                        *(ptr + v + 1) = (byte)((color & 0xFF00) >> 8);
-                                    }
-                                    tx++;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            catch
-            {
-                // 忽略錯誤
-            }
-        }
-
-        // 繪製 Tile 到緩衝區（直接使用像素座標）
+        // 繪製 Tile 到緩衝區（直接使用像素座標）- RGB565 版本
         private unsafe void DrawTilToBufferDirect(int pixelX, int pixelY, int tileId, int indexId, int rowpix, byte* ptr, int maxWidth, int maxHeight)
         {
             try
@@ -9641,8 +9523,8 @@ namespace L1FlyMapViewer
                 byte[] tilData = tilArray[indexId];
                 if (tilData == null) return;
 
-                // 使用 Lin.Helper.Core.L1Til 渲染，支援 type 6/7 半透明效果
-                Lin.Helper.Core.Tile.L1Til.RenderBlockDirect(tilData, pixelX, pixelY, ptr, rowpix, maxWidth, maxHeight, applyTypeAlpha: true);
+                // 使用 Lin.Helper.Core.L1Til 渲染 RGB565，支援 type 6/7 半透明效果
+                Lin.Helper.Core.Tile.L1Til.RenderBlockDirectRgb565(tilData, pixelX, pixelY, ptr, rowpix, maxWidth, maxHeight, applyTypeAlpha: true);
             }
             catch
             {
