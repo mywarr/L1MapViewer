@@ -35,9 +35,9 @@ namespace L1FlyMapViewer
 
         // 繪製 Layer3 屬性覆蓋層 (SkiaSharp 版本)
         // 參考 DrawLayer3AttributesViewport
-        private void DrawLayer3AttributesViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect)
+        private void DrawLayer3AttributesViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect, IEnumerable<S32Data> s32FilesSnapshot)
         {
-            foreach (var s32Data in _document.S32Files.Values)
+            foreach (var s32Data in s32FilesSnapshot)
             {
                 int[] loc = s32Data.SegInfo.GetLoc(1.0);
                 int mx = loc[0];
@@ -98,7 +98,7 @@ namespace L1FlyMapViewer
         // 繪製通行性覆蓋層 (SkiaSharp 版本)
         // 參考 DrawPassableOverlayViewport - 繪製邊線而非填充
         // Attribute1 = 左上邊線, Attribute2 = 右上邊線
-        private void DrawPassableOverlayViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect)
+        private void DrawPassableOverlayViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect, IEnumerable<S32Data> s32FilesSnapshot)
         {
             // 不可通行：紫色粗線，可通行：青色細線
             using var penImpassable = new SKPaint
@@ -116,7 +116,7 @@ namespace L1FlyMapViewer
                 Color = new SKColor(50, 200, 255, 255)  // 青色
             };
 
-            foreach (var s32Data in _document.S32Files.Values)
+            foreach (var s32Data in s32FilesSnapshot)
             {
                 int[] loc = s32Data.SegInfo.GetLoc(1.0);
                 int mx = loc[0];
@@ -159,7 +159,7 @@ namespace L1FlyMapViewer
         // 繪製區域覆蓋層 (SkiaSharp 版本)
         // 參考 DrawRegionsOverlayViewport - 使用 Attribute1 低4位判斷整個格子
         // 低4位: 0-3=一般, 4-7/C-F=安全(bit2), 8-B=戰鬥(bit3且非bit2)
-        private void DrawRegionsOverlayViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect, bool showSafe, bool showCombat)
+        private void DrawRegionsOverlayViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect, bool showSafe, bool showCombat, IEnumerable<S32Data> s32FilesSnapshot)
         {
             // 安全區：藍色，戰鬥區：紅色（與舊版一致）
             using var safeBrush = new SKPaint
@@ -175,7 +175,7 @@ namespace L1FlyMapViewer
                 Color = new SKColor(255, 50, 50, 80)  // 紅色半透明
             };
 
-            foreach (var s32Data in _document.S32Files.Values)
+            foreach (var s32Data in s32FilesSnapshot)
             {
                 int[] loc = s32Data.SegInfo.GetLoc(1.0);
                 int mx = loc[0];
@@ -228,7 +228,7 @@ namespace L1FlyMapViewer
 
         // 繪製格線 (SkiaSharp 版本)
         // 參考 DrawS32GridViewport
-        private void DrawS32GridViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect)
+        private void DrawS32GridViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect, IEnumerable<S32Data> s32FilesSnapshot)
         {
             using var gridPaint = new SKPaint
             {
@@ -237,8 +237,6 @@ namespace L1FlyMapViewer
                 StrokeWidth = 1,
                 Color = new SKColor(255, 0, 0, 100)
             };
-
-            var s32FilesSnapshot = _document.S32Files.Values.ToList();
 
             foreach (var s32Data in s32FilesSnapshot)
             {
@@ -295,7 +293,7 @@ namespace L1FlyMapViewer
 
         // 繪製座標標籤 (SkiaSharp 版本)
         // 參考 DrawCoordinateLabelsViewport
-        private void DrawCoordinateLabelsViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect)
+        private void DrawCoordinateLabelsViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect, IEnumerable<S32Data> s32FilesSnapshot)
         {
             using var textPaint = new SKPaint
             {
@@ -313,7 +311,7 @@ namespace L1FlyMapViewer
 
             int interval = 10;
 
-            foreach (var s32Data in _document.S32Files.Values)
+            foreach (var s32Data in s32FilesSnapshot)
             {
                 int[] loc = s32Data.SegInfo.GetLoc(1.0);
                 int mx = loc[0];
@@ -353,7 +351,7 @@ namespace L1FlyMapViewer
 
         // 繪製 S32 邊界 (SkiaSharp 版本)
         // 參考 DrawS32BoundaryOnlyViewport
-        private void DrawS32BoundaryOnlyViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect)
+        private void DrawS32BoundaryOnlyViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect, IEnumerable<S32Data> s32FilesSnapshot)
         {
             using var boundaryPaint = new SKPaint
             {
@@ -376,7 +374,7 @@ namespace L1FlyMapViewer
                 Color = new SKColor(0, 0, 0, 200)
             };
 
-            foreach (var s32Data in _document.S32Files.Values)
+            foreach (var s32Data in s32FilesSnapshot)
             {
                 int[] loc = s32Data.SegInfo.GetLoc(1.0);
                 int mx = loc[0];
@@ -420,7 +418,7 @@ namespace L1FlyMapViewer
 
         // 繪製 Layer5 覆蓋層 (SkiaSharp 版本)
         // 完全複製自 DrawLayer5OverlayViewport
-        private void DrawLayer5OverlayViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect, bool isLayer5Edit)
+        private void DrawLayer5OverlayViewportSK(SKCanvas canvas, Struct.L1Map currentMap, Rectangle worldRect, bool isLayer5Edit, IEnumerable<S32Data> s32FilesSnapshot, HashSet<string> checkedFilePaths)
         {
             // 收集所有 Layer5 位置（去重）
             var drawnPositions = new HashSet<(int mx, int my, int x, int y)>();
@@ -447,10 +445,10 @@ namespace L1FlyMapViewer
                 Color = new SKColor(150, 200, 255, 200)
             };
 
-            foreach (var s32Data in _document.S32Files.Values)
+            foreach (var s32Data in s32FilesSnapshot)
             {
                 // 只繪製已啟用的 S32
-                if (!_checkedS32Files.Contains(s32Data.FilePath)) continue;
+                if (!checkedFilePaths.Contains(s32Data.FilePath)) continue;
                 if (s32Data.Layer5.Count == 0) continue;
 
                 int[] loc = s32Data.SegInfo.GetLoc(1.0);
@@ -523,13 +521,13 @@ namespace L1FlyMapViewer
             // 在透明編輯模式下，繪製已設定 Layer5 的群組物件覆蓋層
             if (isLayer5Edit)
             {
-                DrawLayer5GroupOverlaySK(canvas, worldRect);
+                DrawLayer5GroupOverlaySK(canvas, worldRect, s32FilesSnapshot, checkedFilePaths);
             }
         }
 
         // 繪製 Layer5 群組覆蓋層 (SkiaSharp 版本)
         // 完全複製自 DrawLayer5GroupOverlay
-        private void DrawLayer5GroupOverlaySK(SKCanvas canvas, Rectangle worldRect)
+        private void DrawLayer5GroupOverlaySK(SKCanvas canvas, Rectangle worldRect, IEnumerable<S32Data> s32FilesSnapshot, HashSet<string> checkedFilePaths)
         {
             // 只有在有選取格子時才顯示
             if (_editState.SelectedCells.Count == 0) return;
@@ -575,10 +573,10 @@ namespace L1FlyMapViewer
                 Color = new SKColor(255, 80, 80, 100)
             };
 
-            foreach (var s32Data in _document.S32Files.Values)
+            foreach (var s32Data in s32FilesSnapshot)
             {
                 // 只繪製已啟用的 S32
-                if (!_checkedS32Files.Contains(s32Data.FilePath)) continue;
+                if (!checkedFilePaths.Contains(s32Data.FilePath)) continue;
 
                 int[] loc = s32Data.SegInfo.GetLoc(1.0);
                 int mx = loc[0];
@@ -619,7 +617,7 @@ namespace L1FlyMapViewer
 
         // 繪製群組高亮覆蓋層 (SkiaSharp 版本)
         // 參考 DrawGroupHighlightOverlay
-        private void DrawGroupHighlightOverlaySK(SKCanvas canvas, Rectangle worldRect, List<(int, int)> groupHighlightCells)
+        private void DrawGroupHighlightOverlaySK(SKCanvas canvas, Rectangle worldRect, List<(int, int)> groupHighlightCells, IEnumerable<S32Data> s32FilesSnapshot)
         {
             using var fillPaint = new SKPaint
             {
@@ -638,7 +636,7 @@ namespace L1FlyMapViewer
             foreach (var (cellX, cellY) in groupHighlightCells)
             {
                 // 找到包含這個遊戲座標的 S32
-                foreach (var s32Data in _document.S32Files.Values)
+                foreach (var s32Data in s32FilesSnapshot)
                 {
                     if (cellX < s32Data.SegInfo.nLinBeginX || cellX >= s32Data.SegInfo.nLinEndX ||
                         cellY < s32Data.SegInfo.nLinBeginY || cellY >= s32Data.SegInfo.nLinEndY)

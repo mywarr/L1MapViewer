@@ -264,17 +264,64 @@ namespace L1MapViewer.Controls
         public void SetExternalBitmap(SKBitmap skBitmap)
         {
             var sw = Stopwatch.StartNew();
-            _logger.Debug($"[UI] SetExternalBitmap start: skBitmap={skBitmap?.Width}x{skBitmap?.Height}");
+            int threadId = Environment.CurrentManagedThreadId;
+            _logger.Debug($"[UI] SetExternalBitmap start: skBitmap={skBitmap?.Width}x{skBitmap?.Height}, threadId={threadId}");
             Console.WriteLine($"[MapViewerControl.SetExternalBitmap] skBitmap={skBitmap?.Width}x{skBitmap?.Height}, RenderWidth={_viewState.RenderWidth}, RenderHeight={_viewState.RenderHeight}, Drawable.Size={_mapDrawable.Width}x{_mapDrawable.Height}");
+
+            SKBitmap oldBitmap = null;
             lock (_viewportBitmapLock)
             {
-                _skViewportBitmap?.Dispose();
+                oldBitmap = _skViewportBitmap;
                 _skViewportBitmap = skBitmap;
             }
-            _logger.Debug($"[UI] SetExternalBitmap calling Invalidate after {sw.ElapsedMilliseconds}ms");
+
+            // 先 Invalidate，再 Dispose 舊的 bitmap（避免 OnPaint 存取到 disposed bitmap）
+            _logger.Debug($"[UI] SetExternalBitmap calling Invalidate after {sw.ElapsedMilliseconds}ms, oldBitmap={oldBitmap?.Width}x{oldBitmap?.Height}, threadId={threadId}, DrawableVisible={_mapDrawable.Visible}, DrawableSize={_mapDrawable.Width}x{_mapDrawable.Height}");
+
+            // 使用 Invalidate 標記需要重繪
+            _logger.Debug($"[UI] SetExternalBitmap calling _mapDrawable.Invalidate, _mapDrawable.Visible={_mapDrawable.Visible}");
             _mapDrawable.Invalidate();
+            _logger.Debug("[UI] SetExternalBitmap _mapDrawable.Invalidate returned");
+
+            // 確認設定後的狀態
+            lock (_viewportBitmapLock)
+            {
+                _logger.Debug($"[UI] SetExternalBitmap after set: _skViewportBitmap={_skViewportBitmap?.Width}x{_skViewportBitmap?.Height}, IsNull={_skViewportBitmap == null}");
+            }
+
+            // 強制同步重繪（Invalidate 只標記需重繪，Update 才會立即執行）
+            _logger.Debug("[UI] SetExternalBitmap calling Update to force synchronous repaint");
+            try
+            {
+                // 嘗試使用 Refresh 來強制重繪 (Refresh = Invalidate + Update)
+                // Eto.Forms 可能不支援 Update，改用多次 Invalidate
+                _mapDrawable.Invalidate();
+                // 使用 SuspendLayout/ResumeLayout 來確保布局更新
+                _mapPanel?.Invalidate();
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "[UI] SetExternalBitmap Update failed");
+            }
+
+            // 額外使用 AsyncInvoke 確保訊息迴圈有機會處理重繪
+            Eto.Forms.Application.Instance.AsyncInvoke(() =>
+            {
+                lock (_viewportBitmapLock)
+                {
+                    _logger.Debug($"[UI] SetExternalBitmap AsyncInvoke callback: _skViewportBitmap={_skViewportBitmap?.Width}x{_skViewportBitmap?.Height}, IsNull={_skViewportBitmap == null}");
+                }
+                _logger.Debug($"[UI] AsyncInvoke: _mapDrawable.Visible={_mapDrawable.Visible}, Parent={_mapDrawable.Parent?.GetType().Name}, Size={_mapDrawable.Width}x{_mapDrawable.Height}");
+                // 再次 Invalidate 確保重繪
+                _mapDrawable.Invalidate();
+                _logger.Debug("[UI] AsyncInvoke: Invalidate called");
+            });
+
+            // 現在可以安全 dispose 舊 bitmap（在 Invalidate 之後）
+            oldBitmap?.Dispose();
+
             sw.Stop();
-            _logger.Debug($"[UI] SetExternalBitmap complete in {sw.ElapsedMilliseconds}ms");
+            _logger.Debug($"[UI] SetExternalBitmap complete in {sw.ElapsedMilliseconds}ms, threadId={threadId}");
         }
 
         /// <summary>
@@ -811,7 +858,28 @@ namespace L1MapViewer.Controls
                 // 清除背景
                 canvas.Clear(SKColors.Black);
 
-                _logger.Debug("[UI] MapSkiaDrawable.OnPaint start");
+                // 詳細記錄 bitmap 狀態
+                SKBitmap bitmapRef;
+                lock (_parent._viewportBitmapLock)
+                {
+                    bitmapRef = _parent._skViewportBitmap;
+                }
+                bool bitmapIsNull = bitmapRef == null;
+                bool bitmapIsDisposed = false;
+                int bitmapWidth = 0, bitmapHeight = 0;
+                if (!bitmapIsNull)
+                {
+                    try
+                    {
+                        bitmapWidth = bitmapRef.Width;
+                        bitmapHeight = bitmapRef.Height;
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        bitmapIsDisposed = true;
+                    }
+                }
+                _logger.Debug($"[UI] MapSkiaDrawable.OnPaint start: bitmapIsNull={bitmapIsNull}, bitmapIsDisposed={bitmapIsDisposed}, bitmapSize={bitmapWidth}x{bitmapHeight}, RenderWidth={_parent._viewState.RenderWidth}");
 
                 // DEBUG: 繪製邊框確認 Paint 被呼叫
                 using (var borderPaint = new SKPaint { Color = SKColors.Yellow, Style = SKPaintStyle.Stroke, StrokeWidth = 2 })

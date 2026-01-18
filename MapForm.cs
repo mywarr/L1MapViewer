@@ -519,6 +519,19 @@ namespace L1FlyMapViewer
             lblDefaultHint.BringToFront();
             lblDefaultHint.SetLocation(new Point(10, 10));
 
+            // 建立 Layer5 透明編輯操作說明標籤（預先創建，避免運行時添加控件導致的布局問題）
+            lblLayer5Help = new Label();
+            lblLayer5Help.SetAutoSize(false);
+            lblLayer5Help.Size = new Size(200, 130);
+            lblLayer5Help.BackgroundColor = Color.FromArgb(220, 30, 30, 50);
+            lblLayer5Help.TextColor = Color.FromArgb(100, 180, 255);
+            lblLayer5Help.Font = new Font("Microsoft JhengHei", 9F, FontStyle.None);
+            lblLayer5Help.Padding = new Padding(8);
+            lblLayer5Help.BorderStyle = BorderStyle.FixedSingle;
+            lblLayer5Help.Visible = false; // 初始隱藏
+            this.s32MapPanel.GetControls().Add(lblLayer5Help);
+            lblLayer5Help.SetLocation(new Point(10, 10));
+
             // 建立區域類型切換按鈕
             btnRegionNormal = new Button
             {
@@ -2696,6 +2709,12 @@ namespace L1FlyMapViewer
                                                  worldBottom - worldTop + 6144);
             var candidateFiles = GetS32FilesInRect(queryRect);
 
+            _logger.Debug($"[GetCellsInIsometricRange] gameRange=({minGameX},{minGameY})-({maxGameX},{maxGameY}), queryRect=({queryRect.X},{queryRect.Y},{queryRect.Width},{queryRect.Height}), candidateFiles.Count={candidateFiles.Count}");
+            foreach (var f in candidateFiles)
+            {
+                _logger.Debug($"[GetCellsInIsometricRange] candidateFile: {Path.GetFileName(f)}");
+            }
+
             // 收集候選 S32 資料
             var candidateS32s = new List<S32Data>();
             foreach (var filePath in candidateFiles)
@@ -2703,13 +2722,32 @@ namespace L1FlyMapViewer
                 if (_document.S32Files.TryGetValue(filePath, out var s32Data))
                 {
                     candidateS32s.Add(s32Data);
+                    _logger.Debug($"[GetCellsInIsometricRange] candidateS32: {Path.GetFileName(s32Data.FilePath)}, nLinBeginX={s32Data.SegInfo.nLinBeginX}, nLinBeginY={s32Data.SegInfo.nLinBeginY}");
                 }
             }
 
             // 使用 CoordinateHelper 的優化版本收集格子（支援擴展區域）
-            return CoordinateHelper.GetCellsInGameCoordRange(
+            var result = CoordinateHelper.GetCellsInGameCoordRange(
                 minGameX, maxGameX, minGameY, maxGameY,
                 candidateS32s, currentS32Data);
+
+            _logger.Debug($"[GetCellsInIsometricRange] result.Count={result.Count}");
+
+            // 統計每個 S32 有多少格子被選中
+            var s32CellCounts = new Dictionary<string, int>();
+            foreach (var cell in result)
+            {
+                var fname = Path.GetFileName(cell.S32Data.FilePath);
+                if (!s32CellCounts.ContainsKey(fname))
+                    s32CellCounts[fname] = 0;
+                s32CellCounts[fname]++;
+            }
+            foreach (var kvp in s32CellCounts)
+            {
+                _logger.Debug($"[GetCellsInIsometricRange] S32 {kvp.Key} has {kvp.Value} cells selected");
+            }
+
+            return result;
         }
 
         // 重新載入當前地圖
@@ -7054,6 +7092,7 @@ namespace L1FlyMapViewer
         // 透明編輯按鈕點擊事件
         private void btnEditLayer5_Click(object sender, EventArgs e)
         {
+            _logger.Debug($"[Layer5Edit] btnEditLayer5_Click: current IsLayer5EditMode={_editState.IsLayer5EditMode}");
             if (_editState.IsLayer5EditMode)
             {
                 // 取消模式
@@ -7061,6 +7100,7 @@ namespace L1FlyMapViewer
                 btnEditLayer5.BackgroundColor = SystemColors.Control;
                 this.toolStripStatusLabel1.Text = "已取消透明編輯模式";
                 UpdateLayer5HelpLabel();
+                _logger.Debug("[Layer5Edit] Disabled, calling RenderS32Map");
                 RenderS32Map();  // 重新渲染以移除群組覆蓋層
             }
             else
@@ -7073,11 +7113,14 @@ namespace L1FlyMapViewer
                 btnEditPassable.BackgroundColor = SystemColors.Control;
                 UpdatePassabilityHelpLabel();
                 // 自動顯示 Layer5 覆蓋層
+                _logger.Debug("[Layer5Edit] Enabled, calling EnsureLayer5Visible");
                 EnsureLayer5Visible();
                 this.toolStripStatusLabel1.Text = "透明編輯模式：左鍵添加/右鍵刪除透明設定";
                 UpdateLayer5HelpLabel();
+                _logger.Debug("[Layer5Edit] Calling RenderS32Map");
                 RenderS32Map();  // 重新渲染以顯示群組覆蓋層
             }
+            _logger.Debug($"[Layer5Edit] btnEditLayer5_Click done: IsLayer5EditMode={_editState.IsLayer5EditMode}");
         }
 
         // 確保 Layer5 圖層可見
@@ -7088,44 +7131,50 @@ namespace L1FlyMapViewer
                 chkShowLayer5.Checked = true;
                 chkFloatLayer5.Checked = true;
                 UpdateLayerIconText();
-                RenderS32Map();
+                // 不需要在這裡呼叫 RenderS32Map，因為：
+                // 1. chkShowLayer5.Checked 會觸發 S32Layer_CheckedChanged，它會啟動 debounce timer
+                // 2. btnEditLayer5_Click 最後會呼叫 RenderS32Map
+                // 移除多餘呼叫以避免多個渲染任務競爭
             }
         }
 
         // 更新 Layer5 編輯操作說明標籤
         private void UpdateLayer5HelpLabel()
         {
-            if (lblLayer5Help == null)
+            _logger.Debug("[UpdateLayer5HelpLabel] Start");
+            try
             {
-                lblLayer5Help = new Label();
-                lblLayer5Help.SetAutoSize(false);
-                lblLayer5Help.Size = new Size(200, 130);
-                lblLayer5Help.BackgroundColor = Color.FromArgb(220, 30, 30, 50);
-                lblLayer5Help.TextColor = Color.FromArgb(100, 180, 255);
-                lblLayer5Help.Font = new Font("Microsoft JhengHei", 9F, FontStyle.None);
-                lblLayer5Help.Padding = new Padding(8);
-                lblLayer5Help.BorderStyle = BorderStyle.FixedSingle;
-                s32MapPanel.GetControls().Add(lblLayer5Help);
-            }
+                // lblLayer5Help 現在在表單初始化時已創建，不需要動態創建
 
-            if (!_editState.IsLayer5EditMode)
+                if (!_editState.IsLayer5EditMode)
+                {
+                    _logger.Debug("[UpdateLayer5HelpLabel] Not in edit mode, hiding");
+                    lblLayer5Help.Visible = false;
+                    UpdateDefaultHintVisibility();
+                    return;
+                }
+
+                _logger.Debug("[UpdateLayer5HelpLabel] Setting text and location");
+                lblLayer5Help.Text = "【透明編輯模式】\n" +
+                                     "• 左鍵：選取地圖格子\n" +
+                                     "• 查看右側【附近群組】\n" +
+                                     "• 右鍵：設定半透明/消失\n" +
+                                     "  紫色 = 半透明區塊\n" +
+                                     "  紅色 = 消失區塊\n" +
+                                     "• 再按按鈕：取消模式";
+                lblLayer5Help.SetLocation(new Point(10, 10));
+
+                _logger.Debug("[UpdateLayer5HelpLabel] Setting Visible = true");
+                lblLayer5Help.Visible = true;
+                lblLayer5Help.BringToFront();
+
+                lblDefaultHint.Visible = false;
+                _logger.Debug("[UpdateLayer5HelpLabel] Done");
+            }
+            catch (Exception ex)
             {
-                lblLayer5Help.Visible = false;
-                UpdateDefaultHintVisibility();
-                return;
+                _logger.Error(ex, "[UpdateLayer5HelpLabel] Exception occurred");
             }
-
-            lblLayer5Help.Text = "【透明編輯模式】\n" +
-                                 "• 左鍵：選取地圖格子\n" +
-                                 "• 查看右側【附近群組】\n" +
-                                 "• 右鍵：設定半透明/消失\n" +
-                                 "  紫色 = 半透明區塊\n" +
-                                 "  紅色 = 消失區塊\n" +
-                                 "• 再按按鈕：取消模式";
-            lblLayer5Help.SetLocation(new Point(10, 10));
-            lblLayer5Help.Visible = true;
-            lblLayer5Help.BringToFront();
-            lblDefaultHint.Visible = false;
         }
 
         // 更新通行性編輯操作說明標籤
@@ -7166,18 +7215,104 @@ namespace L1FlyMapViewer
         {
             if (_editState.SelectedCells.Count == 0) return;
 
+            _logger.Debug($"[Passability] SetSelectedCellsPassability: target={target}, passable={passable}, cellCount={_editState.SelectedCells.Count}");
+
+            // 記錄選取區域的範圍（用於診斷）
+            if (_editState.SelectedCells.Count > 0)
+            {
+                var gameCoords = _editState.SelectedCells
+                    .Where(c => c.S32Data != null)
+                    .Select(c => {
+                        int l3x = c.LocalX / 2;
+                        int l3y = c.LocalY;
+                        return (
+                            gameX: c.S32Data.SegInfo.nLinBeginX + l3x,
+                            gameY: c.S32Data.SegInfo.nLinBeginY + l3y,
+                            s32: Path.GetFileName(c.S32Data.FilePath),
+                            localX: c.LocalX,
+                            localY: c.LocalY,
+                            layer3X: l3x,
+                            layer3Y: l3y
+                        );
+                    }).ToList();
+
+                int minGameX = gameCoords.Min(c => c.gameX);
+                int maxGameX = gameCoords.Max(c => c.gameX);
+                int minGameY = gameCoords.Min(c => c.gameY);
+                int maxGameY = gameCoords.Max(c => c.gameY);
+
+                _logger.Info($"[Passability] ========== 選取區域摘要 ==========");
+                _logger.Info($"[Passability] 遊戲座標範圍: X=[{minGameX}~{maxGameX}], Y=[{minGameY}~{maxGameY}]");
+                _logger.Info($"[Passability] 預期格子數: {(maxGameX - minGameX + 1) * (maxGameY - minGameY + 1)}");
+                _logger.Info($"[Passability] 實際選取格子數: {gameCoords.Count}");
+
+                // 按 S32 分組統計
+                var byS32 = gameCoords.GroupBy(c => c.s32).OrderBy(g => g.Key);
+                foreach (var grp in byS32)
+                {
+                    var minL3X = grp.Min(c => c.layer3X);
+                    var maxL3X = grp.Max(c => c.layer3X);
+                    var minL3Y = grp.Min(c => c.layer3Y);
+                    var maxL3Y = grp.Max(c => c.layer3Y);
+                    var outOfRange = grp.Count(c => c.layer3X >= 64 || c.layer3Y >= 64);
+                    _logger.Info($"[Passability] {grp.Key}: {grp.Count()} 格, Layer3=({minL3X}~{maxL3X}, {minL3Y}~{maxL3Y}), 超出範圍={outOfRange}");
+                }
+                _logger.Info($"[Passability] =====================================");
+            }
+
             int modifiedCount = 0;
             HashSet<S32Data> modifiedS32s = new HashSet<S32Data>();
+            // 追蹤已處理的 Layer3 座標，避免重複設定
+            var processedCoords = new HashSet<(string s32Path, int layer3X, int layer3Y)>();
+            // Undo 記錄：key = (s32Path, layer3X, layer3Y), value = (oldAttr1, oldAttr2, newAttr1, newAttr2)
+            var undoRecords = new Dictionary<(string, int, int), (short oldAttr1, short oldAttr2, short newAttr1, short newAttr2)>();
+
+            // 輔助函數：記錄修改前的值（如果尚未記錄）
+            void RecordOldValue(S32Data s32, int layer3X, int layer3Y)
+            {
+                if (layer3X < 0 || layer3X >= 64 || layer3Y < 0 || layer3Y >= 64) return;
+                var key = (s32.FilePath, layer3X, layer3Y);
+                if (!undoRecords.ContainsKey(key))
+                {
+                    var attr = s32.Layer3[layer3Y, layer3X];
+                    short oldAttr1 = attr?.Attribute1 ?? 0;
+                    short oldAttr2 = attr?.Attribute2 ?? 0;
+                    undoRecords[key] = (oldAttr1, oldAttr2, oldAttr1, oldAttr2); // 初始時 new = old
+                }
+            }
+
+            // 輔助函數：記錄修改後的值
+            void RecordNewValue(S32Data s32, int layer3X, int layer3Y)
+            {
+                if (layer3X < 0 || layer3X >= 64 || layer3Y < 0 || layer3Y >= 64) return;
+                var key = (s32.FilePath, layer3X, layer3Y);
+                if (undoRecords.ContainsKey(key))
+                {
+                    var attr = s32.Layer3[layer3Y, layer3X];
+                    var record = undoRecords[key];
+                    undoRecords[key] = (record.oldAttr1, record.oldAttr2, attr?.Attribute1 ?? 0, attr?.Attribute2 ?? 0);
+                }
+            }
 
             // 輔助函數：設定單一格子的屬性
             void SetPassabilityBit(S32Data s32, int layer3X, int layer3Y, bool isAttr1, bool pass)
             {
-                if (layer3X < 0 || layer3X >= 64 || layer3Y < 0 || layer3Y >= 64) return;
+                _logger.Debug($"[Passability] SetPassabilityBit: s32={Path.GetFileName(s32.FilePath)}, layer3=({layer3X},{layer3Y}), isAttr1={isAttr1}, pass={pass}");
+                if (layer3X < 0 || layer3X >= 64 || layer3Y < 0 || layer3Y >= 64)
+                {
+                    _logger.Debug($"[Passability] SetPassabilityBit: OUT OF RANGE, skipping");
+                    return;
+                }
+                // 記錄修改前的值
+                RecordOldValue(s32, layer3X, layer3Y);
+
                 if (s32.Layer3[layer3Y, layer3X] == null)
                 {
+                    _logger.Debug($"[Passability] SetPassabilityBit: Creating new MapAttribute");
                     s32.Layer3[layer3Y, layer3X] = new MapAttribute { Attribute1 = 0, Attribute2 = 0 };
                 }
                 var attr = s32.Layer3[layer3Y, layer3X];
+                short oldValue = isAttr1 ? attr.Attribute1 : attr.Attribute2;
                 if (isAttr1)
                 {
                     attr.Attribute1 = pass ? (short)(attr.Attribute1 & ~0x01) : (short)(attr.Attribute1 | 0x01);
@@ -7186,6 +7321,11 @@ namespace L1FlyMapViewer
                 {
                     attr.Attribute2 = pass ? (short)(attr.Attribute2 & ~0x01) : (short)(attr.Attribute2 | 0x01);
                 }
+                short newValue = isAttr1 ? attr.Attribute1 : attr.Attribute2;
+                _logger.Debug($"[Passability] SetPassabilityBit: {(isAttr1 ? "Attr1" : "Attr2")} changed from {oldValue} to {newValue}");
+
+                // 記錄修改後的值
+                RecordNewValue(s32, layer3X, layer3Y);
                 modifiedS32s.Add(s32);
             }
 
@@ -7212,49 +7352,77 @@ namespace L1FlyMapViewer
 
             foreach (var cell in _editState.SelectedCells)
             {
-                if (cell.S32Data == null) continue;
+                // 使用 SelectedCell 的 GetLayer3Info 方法取得正確的 S32 和本地座標
+                var layer3Info = cell.GetLayer3Info(_document.S32Files);
+                if (layer3Info == null)
+                {
+                    _logger.Debug($"[Passability] No S32 found for cell LocalX={cell.LocalX}, LocalY={cell.LocalY}, skipping");
+                    continue;
+                }
 
-                // 計算第三層座標（第三層是 64x64，第一層是 64x128）
-                int layer3X = cell.LocalX / 2;
-                if (layer3X >= 64) layer3X = 63;
-                int layer3Y = cell.LocalY;
+                int gameX = layer3Info.GameX;
+                int gameY = layer3Info.GameY;
+                var targetS32 = layer3Info.S32Data;
+                int targetLocalX = layer3Info.LocalX;
+                int targetLocalY = layer3Info.LocalY;
 
-                // 計算遊戲座標
-                int gameX = cell.S32Data.SegInfo.nLinBeginX + layer3X;
-                int gameY = cell.S32Data.SegInfo.nLinBeginY + layer3Y;
+                _logger.Debug($"[Passability] Processing cell: LocalX={cell.LocalX}, LocalY={cell.LocalY}, gameX={gameX}, gameY={gameY}, targetS32={Path.GetFileName(targetS32.FilePath)}, targetLocal=({targetLocalX},{targetLocalY})");
+
+                // 跳過已處理的遊戲座標（避免重複處理同一個格子）
+                // 使用遊戲座標而非本地座標，因為跨 S32 邊界時同一個遊戲座標可能來自不同的本地座標
+                var coordKey = ("game", gameX, gameY);
+                if (processedCoords.Contains(coordKey))
+                {
+                    _logger.Debug($"[Passability] Skipping duplicate game coord: ({gameX},{gameY})");
+                    continue;
+                }
+                processedCoords.Add(coordKey);
 
                 // 根據目標設定對應的屬性
                 if (target == PassabilityTarget.LeftTop || target == PassabilityTarget.All)
                 {
-                    SetPassabilityBit(cell.S32Data, layer3X, layer3Y, true, passable);
+                    _logger.Debug($"[Passability] Setting LeftTop (Attr1) for ({targetLocalX},{targetLocalY})");
+                    SetPassabilityBit(targetS32, targetLocalX, targetLocalY, true, passable);
                 }
 
                 if (target == PassabilityTarget.RightTop || target == PassabilityTarget.All)
                 {
-                    SetPassabilityBit(cell.S32Data, layer3X, layer3Y, false, passable);
+                    SetPassabilityBit(targetS32, targetLocalX, targetLocalY, false, passable);
                 }
 
                 // 左下：設定 (gameX-1, gameY) 的 Attr2（左邊格子的右上）
                 if (target == PassabilityTarget.LeftBottom || target == PassabilityTarget.All)
                 {
+                    _logger.Debug($"[Passability] LeftBottom: looking for neighbor at game({gameX - 1},{gameY})");
                     var neighborS32 = FindNeighborS32(cell.S32Data, gameX - 1, gameY);
                     if (neighborS32 != null)
                     {
                         int neighborLocalX = gameX - 1 - neighborS32.SegInfo.nLinBeginX;
                         int neighborLocalY = gameY - neighborS32.SegInfo.nLinBeginY;
+                        _logger.Debug($"[Passability] LeftBottom: found neighbor in {Path.GetFileName(neighborS32.FilePath)}, local=({neighborLocalX},{neighborLocalY})");
                         SetPassabilityBit(neighborS32, neighborLocalX, neighborLocalY, false, passable);
+                    }
+                    else
+                    {
+                        _logger.Debug($"[Passability] LeftBottom: NO neighbor found for game({gameX - 1},{gameY})");
                     }
                 }
 
                 // 右下：設定 (gameX, gameY+1) 的 Attr1（下方格子的左上）
                 if (target == PassabilityTarget.RightBottom || target == PassabilityTarget.All)
                 {
+                    _logger.Debug($"[Passability] RightBottom: looking for neighbor at game({gameX},{gameY + 1})");
                     var neighborS32 = FindNeighborS32(cell.S32Data, gameX, gameY + 1);
                     if (neighborS32 != null)
                     {
                         int neighborLocalX = gameX - neighborS32.SegInfo.nLinBeginX;
                         int neighborLocalY = gameY + 1 - neighborS32.SegInfo.nLinBeginY;
+                        _logger.Debug($"[Passability] RightBottom: found neighbor in {Path.GetFileName(neighborS32.FilePath)}, local=({neighborLocalX},{neighborLocalY})");
                         SetPassabilityBit(neighborS32, neighborLocalX, neighborLocalY, true, passable);
+                    }
+                    else
+                    {
+                        _logger.Debug($"[Passability] RightBottom: NO neighbor found for game({gameX},{gameY + 1})");
                     }
                 }
 
@@ -7267,12 +7435,64 @@ namespace L1FlyMapViewer
                 s32.IsModified = true;
             }
 
+            // 記錄實際處理結果摘要
+            _logger.Info($"[Passability] ========== 處理結果摘要 ==========");
+            _logger.Info($"[Passability] 實際處理格子數: {modifiedCount}");
+            _logger.Info($"[Passability] 處理過的座標數: {processedCoords.Count}");
+            _logger.Info($"[Passability] 修改過的 S32 數: {modifiedS32s.Count}");
+            foreach (var s32 in modifiedS32s)
+            {
+                _logger.Info($"[Passability] 修改的 S32: {Path.GetFileName(s32.FilePath)}");
+            }
+            _logger.Info($"[Passability] =====================================");
+
+            // 建立 Undo 記錄（只有實際有修改的才記錄）
+            var actualChanges = undoRecords.Where(kvp =>
+                kvp.Value.oldAttr1 != kvp.Value.newAttr1 ||
+                kvp.Value.oldAttr2 != kvp.Value.newAttr2).ToList();
+
+            if (actualChanges.Count > 0)
+            {
+                string targetName = target switch
+                {
+                    PassabilityTarget.LeftTop => "左上",
+                    PassabilityTarget.RightTop => "右上",
+                    PassabilityTarget.LeftBottom => "左下",
+                    PassabilityTarget.RightBottom => "右下",
+                    PassabilityTarget.All => "整格",
+                    _ => ""
+                };
+                string passableText = passable ? "可通行" : "不可通行";
+
+                var undoAction = new UndoAction
+                {
+                    Description = $"設定 {actualChanges.Count} 格 {targetName} {passableText}"
+                };
+
+                foreach (var kvp in actualChanges)
+                {
+                    undoAction.ModifiedLayer3.Add(new UndoLayer3Info
+                    {
+                        S32FilePath = kvp.Key.Item1,
+                        LocalX = kvp.Key.Item2,
+                        LocalY = kvp.Key.Item3,
+                        OldAttribute1 = kvp.Value.oldAttr1,
+                        OldAttribute2 = kvp.Value.oldAttr2,
+                        NewAttribute1 = kvp.Value.newAttr1,
+                        NewAttribute2 = kvp.Value.newAttr2
+                    });
+                }
+
+                PushUndoAction(undoAction);
+                _logger.Debug($"[Passability] Created undo action with {actualChanges.Count} changes");
+            }
+
             // 重繪（保留選取狀態）
             ClearS32BlockCache();
             RenderS32Map();
 
             // 顯示結果
-            string targetName = target switch
+            string targetNameResult = target switch
             {
                 PassabilityTarget.LeftTop => "左上",
                 PassabilityTarget.RightTop => "右上",
@@ -7281,8 +7501,8 @@ namespace L1FlyMapViewer
                 PassabilityTarget.All => "整格",
                 _ => ""
             };
-            string passableText = passable ? "可通行" : "不可通行";
-            this.toolStripStatusLabel1.Text = $"已設定 {modifiedCount} 格的 {targetName} 為{passableText}";
+            string passableTextResult = passable ? "可通行" : "不可通行";
+            this.toolStripStatusLabel1.Text = $"已設定 {modifiedCount} 格的 {targetNameResult} 為{passableTextResult} (Ctrl+Z 可還原)";
         }
 
         // 更新區域編輯操作說明標籤
@@ -7472,6 +7692,7 @@ namespace L1FlyMapViewer
 
             // 複製需要的資料（避免跨執行緒存取）
             var s32FilesSnapshot = _document.S32Files.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+            var checkedFilesSnapshot = new HashSet<string>(checkedFilePaths);
 
             // MapViewerControl 使用 Dock=Fill，不需要手動設定大小
             s32MapPanel.AutoScroll = false;
@@ -7699,66 +7920,128 @@ namespace L1FlyMapViewer
                 }
 
                 // 繪製覆蓋層（使用 SKCanvas 直接繪製，避免 Eto.Graphics.Dispose 的效能問題）
+                // 使用快照資料避免跨執行緒存取問題
+                var s32ValuesSnapshot = s32FilesSnapshot.Values;
+                _logger.Debug($"[RENDER-OVERLAY] s32ValuesSnapshot.Count={s32ValuesSnapshot.Count}, checkedFilesSnapshot.Count={checkedFilesSnapshot.Count}");
+                _logger.Debug($"[RENDER-OVERLAY] showLayer3={showLayer3}, showPassable={showPassable}, showSafeZones={showSafeZones}, showCombatZones={showCombatZones}");
+                _logger.Debug($"[RENDER-OVERLAY] showGrid={showGrid}, showS32Boundary={showS32Boundary}, showLayer5={showLayer5}, isLayer5Edit={isLayer5Edit}");
                 var overlaySw = Stopwatch.StartNew();
-                using (var skCanvas = new SKCanvas(skBitmap))
+                try
                 {
-                    _logger.Debug($"[RENDER-OVERLAY] SKCanvas created in {overlaySw.ElapsedMilliseconds}ms");
-
-                    if (showLayer3)
+                    using (var skCanvas = new SKCanvas(skBitmap))
                     {
-                        var sw = Stopwatch.StartNew();
-                        DrawLayer3AttributesViewportSK(skCanvas, currentMap, worldRect);
-                        _logger.Debug($"[RENDER-OVERLAY] Layer3 took {sw.ElapsedMilliseconds}ms");
-                    }
+                        _logger.Debug($"[RENDER-OVERLAY] SKCanvas created in {overlaySw.ElapsedMilliseconds}ms");
 
-                    if (showPassable)
-                    {
-                        var sw = Stopwatch.StartNew();
-                        DrawPassableOverlayViewportSK(skCanvas, currentMap, worldRect);
-                        _logger.Debug($"[RENDER-OVERLAY] Passable took {sw.ElapsedMilliseconds}ms");
-                    }
+                        if (showLayer3)
+                        {
+                            try
+                            {
+                                var sw = Stopwatch.StartNew();
+                                DrawLayer3AttributesViewportSK(skCanvas, currentMap, worldRect, s32ValuesSnapshot);
+                                _logger.Debug($"[RENDER-OVERLAY] Layer3 took {sw.ElapsedMilliseconds}ms");
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Error(ex, "[RENDER-OVERLAY] Layer3 failed");
+                            }
+                        }
 
-                    if (showSafeZones || showCombatZones)
-                    {
-                        var sw = Stopwatch.StartNew();
-                        DrawRegionsOverlayViewportSK(skCanvas, currentMap, worldRect, showSafeZones, showCombatZones);
-                        _logger.Debug($"[RENDER-OVERLAY] Regions took {sw.ElapsedMilliseconds}ms");
-                    }
+                        if (showPassable)
+                        {
+                            try
+                            {
+                                var sw = Stopwatch.StartNew();
+                                DrawPassableOverlayViewportSK(skCanvas, currentMap, worldRect, s32ValuesSnapshot);
+                                _logger.Debug($"[RENDER-OVERLAY] Passable took {sw.ElapsedMilliseconds}ms");
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Error(ex, "[RENDER-OVERLAY] Passable failed");
+                            }
+                        }
 
-                    if (showGrid)
-                    {
-                        var sw = Stopwatch.StartNew();
-                        DrawS32GridViewportSK(skCanvas, currentMap, worldRect);
-                        DrawCoordinateLabelsViewportSK(skCanvas, currentMap, worldRect);
-                        _logger.Debug($"[RENDER-OVERLAY] Grid took {sw.ElapsedMilliseconds}ms");
-                    }
+                        if (showSafeZones || showCombatZones)
+                        {
+                            try
+                            {
+                                var sw = Stopwatch.StartNew();
+                                DrawRegionsOverlayViewportSK(skCanvas, currentMap, worldRect, showSafeZones, showCombatZones, s32ValuesSnapshot);
+                                _logger.Debug($"[RENDER-OVERLAY] Regions took {sw.ElapsedMilliseconds}ms");
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Error(ex, "[RENDER-OVERLAY] Regions failed");
+                            }
+                        }
 
-                    if (showS32Boundary)
-                    {
-                        var sw = Stopwatch.StartNew();
-                        DrawS32BoundaryOnlyViewportSK(skCanvas, currentMap, worldRect);
-                        _logger.Debug($"[RENDER-OVERLAY] S32Boundary took {sw.ElapsedMilliseconds}ms");
-                    }
+                        if (showGrid)
+                        {
+                            try
+                            {
+                                var sw = Stopwatch.StartNew();
+                                DrawS32GridViewportSK(skCanvas, currentMap, worldRect, s32ValuesSnapshot);
+                                DrawCoordinateLabelsViewportSK(skCanvas, currentMap, worldRect, s32ValuesSnapshot);
+                                _logger.Debug($"[RENDER-OVERLAY] Grid took {sw.ElapsedMilliseconds}ms");
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Error(ex, "[RENDER-OVERLAY] Grid failed");
+                            }
+                        }
 
-                    if (showLayer5)
-                    {
-                        var sw = Stopwatch.StartNew();
-                        DrawLayer5OverlayViewportSK(skCanvas, currentMap, worldRect, isLayer5Edit);
-                        _logger.Debug($"[RENDER-OVERLAY] Layer5 took {sw.ElapsedMilliseconds}ms");
-                    }
+                        if (showS32Boundary)
+                        {
+                            try
+                            {
+                                var sw = Stopwatch.StartNew();
+                                DrawS32BoundaryOnlyViewportSK(skCanvas, currentMap, worldRect, s32ValuesSnapshot);
+                                _logger.Debug($"[RENDER-OVERLAY] S32Boundary took {sw.ElapsedMilliseconds}ms");
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Error(ex, "[RENDER-OVERLAY] S32Boundary failed");
+                            }
+                        }
 
-                    // 繪製群組高亮覆蓋層（綠色）
-                    if (groupHighlightCells != null && groupHighlightCells.Count > 0)
-                    {
-                        var sw = Stopwatch.StartNew();
-                        DrawGroupHighlightOverlaySK(skCanvas, worldRect, groupHighlightCells);
-                        _logger.Debug($"[RENDER-OVERLAY] GroupHighlight took {sw.ElapsedMilliseconds}ms");
-                    }
+                        if (showLayer5)
+                        {
+                            try
+                            {
+                                var sw = Stopwatch.StartNew();
+                                _logger.Debug($"[RENDER-OVERLAY] Layer5 starting: isLayer5Edit={isLayer5Edit}");
+                                DrawLayer5OverlayViewportSK(skCanvas, currentMap, worldRect, isLayer5Edit, s32ValuesSnapshot, checkedFilesSnapshot);
+                                _logger.Debug($"[RENDER-OVERLAY] Layer5 took {sw.ElapsedMilliseconds}ms");
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Error(ex, "[RENDER-OVERLAY] Layer5 failed");
+                            }
+                        }
 
-                    // 黃色高亮已移除（用戶要求）
+                        // 繪製群組高亮覆蓋層（綠色）
+                        if (groupHighlightCells != null && groupHighlightCells.Count > 0)
+                        {
+                            try
+                            {
+                                var sw = Stopwatch.StartNew();
+                                DrawGroupHighlightOverlaySK(skCanvas, worldRect, groupHighlightCells, s32ValuesSnapshot);
+                                _logger.Debug($"[RENDER-OVERLAY] GroupHighlight took {sw.ElapsedMilliseconds}ms");
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Error(ex, "[RENDER-OVERLAY] GroupHighlight failed");
+                            }
+                        }
 
-                    _logger.Debug($"[RENDER-OVERLAY] All overlays done, before SKCanvas dispose: {overlaySw.ElapsedMilliseconds}ms");
-                } // skCanvas dispose here (should be fast)
+                        // 黃色高亮已移除（用戶要求）
+
+                        _logger.Debug($"[RENDER-OVERLAY] All overlays done, before SKCanvas dispose: {overlaySw.ElapsedMilliseconds}ms");
+                    } // skCanvas dispose here (should be fast)
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "[RENDER-OVERLAY] Critical error in overlay rendering");
+                }
                 _logger.Debug($"[RENDER-OVERLAY] Total overlay time (after SKCanvas dispose): {overlaySw.ElapsedMilliseconds}ms");
 
                 if (cancellationToken.IsCancellationRequested)
