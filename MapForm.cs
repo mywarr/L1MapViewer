@@ -2747,38 +2747,26 @@ namespace L1FlyMapViewer
 
         private void openToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            _logger.Info("[OpenClient] Start");
             using (FolderBrowserDialog folderDialog = new FolderBrowserDialog())
             {
                 folderDialog.Description = "請選擇天堂資料夾";
                 folderDialog.ShowNewFolderButton = false;
 
                 string iniPath = Path.GetTempPath() + "mapviewer.ini";
-                _logger.Debug($"[OpenClient] iniPath={iniPath}");
                 if (File.Exists(iniPath))
                 {
                     string savedPath = Utils.GetINI("Path", "LineagePath", "", iniPath);
-                    _logger.Debug($"[OpenClient] savedPath from ini={savedPath}");
                     if (!string.IsNullOrEmpty(savedPath) && Directory.Exists(savedPath))
                         folderDialog.SelectedPath = savedPath;
                 }
                 else
                 {
                     folderDialog.SelectedPath = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-                    _logger.Debug($"[OpenClient] Using default path={folderDialog.SelectedPath}");
                 }
 
-                _logger.Info("[OpenClient] Showing folder dialog...");
-                var dialogResult = folderDialog.ShowDialog(this);
-                _logger.Info($"[OpenClient] Dialog result={dialogResult}, SelectedPath={folderDialog.SelectedPath}");
-
-                if (dialogResult != DialogResult.Ok || string.IsNullOrEmpty(folderDialog.SelectedPath))
-                {
-                    _logger.Info("[OpenClient] User cancelled or empty path");
+                if (folderDialog.ShowDialog(this) != DialogResult.Ok || string.IsNullOrEmpty(folderDialog.SelectedPath))
                     return;
-                }
 
-                _logger.Info($"[OpenClient] Loading map from: {folderDialog.SelectedPath}");
                 this.toolStripStatusLabel3.Text = folderDialog.SelectedPath;
                 Share.LineagePath = folderDialog.SelectedPath;
                 Utils.WriteINI("Path", "LineagePath", folderDialog.SelectedPath, iniPath);

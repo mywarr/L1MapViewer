@@ -2049,9 +2049,18 @@ public class WinFormsSaveFileDialog : Eto.Forms.SaveFileDialog
 /// </summary>
 public class WinFormsFolderBrowserDialog : Eto.Forms.SelectFolderDialog
 {
-    private static readonly NLog.Logger _logger = NLog.LogManager.GetCurrentClassLogger();
+    private string _selectedPath;
 
-    public string SelectedPath { get => Directory; set => Directory = value; }
+    public string SelectedPath
+    {
+        get => _selectedPath;
+        set
+        {
+            _selectedPath = value;
+            Directory = value;
+        }
+    }
+
     public string Description { get => Title; set => Title = value; }
     public bool ShowNewFolderButton { get; set; } = true;
 
@@ -2060,32 +2069,24 @@ public class WinFormsFolderBrowserDialog : Eto.Forms.SelectFolderDialog
     /// </summary>
     public new DialogResultCompat ShowDialog(Eto.Forms.Control owner)
     {
-        _logger.Debug($"[FolderBrowser] ShowDialog called, owner={owner?.GetType().Name}");
-        _logger.Debug($"[FolderBrowser] Initial Directory={Directory}, Title={Title}");
-
         Eto.Forms.DialogResult result;
-        try
+
+        // 在 GTK 上，有時需要使用 Window 而不是 Control
+        if (owner is Eto.Forms.Window window)
         {
-            // 在 GTK 上，有時需要使用 Window 而不是 Control
-            if (owner is Eto.Forms.Window window)
-            {
-                _logger.Debug("[FolderBrowser] Calling base.ShowDialog(Window)...");
-                result = base.ShowDialog(window);
-            }
-            else
-            {
-                _logger.Debug("[FolderBrowser] Calling base.ShowDialog(Control)...");
-                result = base.ShowDialog(owner);
-            }
-            _logger.Debug($"[FolderBrowser] base.ShowDialog returned: {result}");
+            result = base.ShowDialog(window);
         }
-        catch (Exception ex)
+        else
         {
-            _logger.Error(ex, "[FolderBrowser] Exception in ShowDialog");
-            return DialogResultCompat.Cancel;
+            result = base.ShowDialog(owner);
         }
 
-        _logger.Debug($"[FolderBrowser] Final Directory={Directory}");
+        // 對話框關閉後才讀取 Directory
+        if (result == Eto.Forms.DialogResult.Ok)
+        {
+            _selectedPath = Directory;
+        }
+
         return result == Eto.Forms.DialogResult.Ok ? DialogResultCompat.Ok : DialogResultCompat.Cancel;
     }
 
@@ -2094,7 +2095,6 @@ public class WinFormsFolderBrowserDialog : Eto.Forms.SelectFolderDialog
     /// </summary>
     public new DialogResultCompat ShowDialog()
     {
-        _logger.Debug("[FolderBrowser] ShowDialog() called (no owner)");
         return ShowDialog(null);
     }
 }
