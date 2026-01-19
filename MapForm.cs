@@ -3318,10 +3318,12 @@ namespace L1FlyMapViewer
             LogPerf("[LOADMAP] Start");
 
             // 先在 UI 執行緒檢查路徑是否有效（避免 MessageBox 在背景執行緒彈出）
-            string szMapPath = string.Format(@"{0}\map\", selectedPath);
+            string szMapPath = Path.Combine(selectedPath, "map");
+            _logger.Debug($"[LOADMAP] Checking map path: {szMapPath}");
             if (!Directory.Exists(szMapPath))
             {
-                WinFormsMessageBox.Show("錯誤的天堂路徑");
+                _logger.Warn($"[LOADMAP] Map path not found: {szMapPath}");
+                WinFormsMessageBox.Show($"錯誤的天堂路徑\n找不到 map 資料夾：{szMapPath}");
                 return;
             }
 

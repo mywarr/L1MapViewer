@@ -40,8 +40,8 @@ namespace L1MapViewer.Reader {
                 DebugLog.Log($"[L1IdxReader.Load] Already cached: {szIdxType}, count={Share.IdxDataList[szIdxType].Count}");
                 return Share.IdxDataList[szIdxType];
             }
-            //idx/pak檔的路徑
-            string szIdxFullName = string.Format(@"{0}\{1}.idx", Share.LineagePath, szIdxType);
+            //idx/pak檔的路徑 (使用 Path.Combine 支援跨平台)
+            string szIdxFullName = Path.Combine(Share.LineagePath, szIdxType + ".idx");
             string szPakFullName = szIdxFullName.Replace(".idx", ".pak");
 
             DebugLog.Log($"[L1IdxReader.Load] Idx path: {szIdxFullName}");

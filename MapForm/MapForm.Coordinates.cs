@@ -445,10 +445,11 @@ namespace L1FlyMapViewer
 
             // 取得相對於 client 的路徑
             string s32RelativePath = s32Data.FilePath;
-            int clientIndex = s32RelativePath.IndexOf("\\client\\", StringComparison.OrdinalIgnoreCase);
+            string clientPathSeparator = Path.DirectorySeparatorChar + "client" + Path.DirectorySeparatorChar;
+            int clientIndex = s32RelativePath.IndexOf(clientPathSeparator, StringComparison.OrdinalIgnoreCase);
             if (clientIndex >= 0)
             {
-                s32RelativePath = s32RelativePath.Substring(clientIndex + 1);  // 從 "client\" 開始
+                s32RelativePath = s32RelativePath.Substring(clientIndex + 1);  // 從 "client/" 或 "client\" 開始
             }
 
             // S32 邊界的遊戲座標（四個角落）

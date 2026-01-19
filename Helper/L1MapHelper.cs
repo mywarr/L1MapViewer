@@ -58,8 +58,8 @@ namespace L1MapViewer.Helper {
                 return Share.MapDataList;
             }
 
-            //確認路徑
-            string szMapPath = string.Format(@"{0}\map\", szSelectedPath);
+            //確認路徑 (使用 Path.Combine 支援跨平台)
+            string szMapPath = Path.Combine(szSelectedPath, "map");
             DebugLog.Log($"[L1MapHelper.Read] Checking map path: {szMapPath}");
 
             if (!Directory.Exists(szMapPath)) {
@@ -70,8 +70,8 @@ namespace L1MapViewer.Helper {
 
             _isReading = true;
             try {
-            //是否為天R - 每次都需要重新判斷
-            isRemastered = Directory.Exists(szSelectedPath + @"/bin32/") || Directory.Exists(szSelectedPath + @"\bin32\");
+            //是否為天R - 每次都需要重新判斷 (使用 Path.Combine 支援跨平台)
+            isRemastered = Directory.Exists(Path.Combine(szSelectedPath, "bin32"));
             DebugLog.Log($"[L1MapHelper.Read] isRemastered={isRemastered}");
 
             var stopwatch = Stopwatch.StartNew();
@@ -831,7 +831,7 @@ namespace L1MapViewer.Helper {
                     sha1.Dispose();
                     szTmpBmpName = BitConverter.ToString(bytes_all).Replace("-", "");
 
-                    string szTmpBmpFile = string.Format(@"{0}\{1}.bmp", Path.GetTempPath(), szTmpBmpName);
+                    string szTmpBmpFile = Path.Combine(Path.GetTempPath(), szTmpBmpName + ".bmp");
                     if (File.Exists(szTmpBmpFile)) {
                         Bitmap tmpBmp = new Bitmap(szTmpBmpFile);
                         viewer.pictureBox1.Image = tmpBmp;
@@ -923,7 +923,8 @@ namespace L1MapViewer.Helper {
 
                 //大地圖的暫存檔
                 if (szTmpBmpName != null) {
-                    bitmap.Save(string.Format(@"{0}\{1}.bmp", Path.GetTempPath(), szTmpBmpName), ImageFormat.Bmp);
+                    string szTmpBmpFile = Path.Combine(Path.GetTempPath(), szTmpBmpName + ".bmp");
+                    bitmap.Save(szTmpBmpFile, ImageFormat.Bmp);
                 }
             } finally {
                 //在地圖上再加一層用來畫範圍的圈圈
