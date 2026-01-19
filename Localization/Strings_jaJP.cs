@@ -180,7 +180,7 @@ namespace L1MapViewer.Localization
             { "Layer_L8Marker", "L8 補助" },
 
             // === Hints ===
-            { "Hint_MouseControls", "中クリックでドラッグ | Ctrl+スクロールでズーム | 左クリックで選択" },
+            { "Hint_MouseControls", "中クリックでドラッグ | 左クリックで選択" },
 
             // === Tooltips ===
             { "Tooltip_Copy", "コピー (Ctrl+C)" },
@@ -547,6 +547,55 @@ namespace L1MapViewer.Localization
             { "MapList_ExportResult", "{0} にエクスポートしました\n({1} ブロック, {2} タイル, {3} SPR)" },
             { "MapList_ExportComplete", "エクスポート完了" },
             { "MapList_ExportFailed", "エクスポート失敗: {0}" },
+
+            // === S32 List Context Menu ===
+            { "S32Menu_JumpToBlock", "このブロックへジャンプ" },
+            { "S32Menu_ViewDetails", "詳細を表示" },
+            { "S32Menu_ExportMapAsFs32", "マップ全体を fs32 パッケージとしてエクスポート..." },
+            { "S32Menu_ExportCheckedAsFs32", "チェックした {0} ブロックを fs32 パッケージとしてエクスポート..." },
+            { "S32Menu_ImportFs32", "fs32 パッケージをインポート..." },
+            { "S32Menu_ClearBlockData", "⚠ ブロックデータをクリア..." },
+            { "S32Menu_DeleteBlock", "⚠ このブロックを削除..." },
+            { "S32Menu_DeleteCheckedBlocks", "⚠ チェックした {0} ブロックを削除..." },
+
+            // === MiniMap Context Menu ===
+            { "MiniMap_AddS32Block", "➕ ここに S32 ブロックを追加 ({0})..." },
+            { "MiniMap_ImportFs32Here", "📦 ここに fs32 をインポート..." },
+            { "MiniMap_EstimatedPosition", "推定位置: {0} ({1},{2})" },
+            { "MiniMap_CurrentBlock", "現在のブロック: {0}" },
+            { "MiniMap_TargetPosition", "ターゲット位置: {0} ({1},{2})" },
+            { "MiniMap_AddS32Title", "S32 追加" },
+            { "MiniMap_AddS32Confirm", "この位置に S32 ブロックを追加しますか？\n\nファイル名: {0}\nブロック座標: ({1}, {2})\nゲーム座標: ({3},{4}) ~ ({5},{6})\nパス: {7}" },
+
+            // === Selection Context Menu ===
+            { "Selection_ViewDetails", "詳細を表示..." },
+            { "Selection_ExportAsFs32", "fs32 パッケージとしてエクスポート..." },
+            { "Selection_SaveAsFs3p", "素材として保存 (fs3p)..." },
+            { "Selection_Copy", "コピー (Ctrl+C)" },
+            { "Selection_FillWithFloor", "コピーした床で選択範囲を塗りつぶす" },
+            { "Selection_ClearData", "選択範囲のデータをクリア..." },
+            { "Selection_ShowGroupArea", "グループエリアの位置を表示" },
+
+            // === L5 Editor Context Menu ===
+            { "L5Menu_EditItem", "この L5 項目を編集" },
+            { "L5Menu_DeleteItem", "この L5 項目を削除" },
+
+            // === Tile List Context Menu ===
+            { "TileList_CopyRow", "行全体をコピー" },
+            { "TileList_ViewDetails", "詳細を表示" },
+            { "TileList_ExportSelectedTile", "選択したタイル画像をエクスポート" },
+
+            // === Material Context Menu ===
+            { "Material_ViewDetails", "詳細を表示..." },
+            { "Material_UseMaterial", "素材を使用" },
+            { "Material_Rename", "名前を変更..." },
+            { "Material_CopyPath", "ファイルパスをコピー" },
+            { "Material_Export", "素材をエクスポート..." },
+            { "Material_Delete", "素材を削除" },
+
+            // === Group Thumbnail Context Menu ===
+            { "GroupThumbnail_GotoLocation", "位置へ移動" },
+            { "GroupThumbnail_ShowCells", "グループのセルを表示" },
         };
     }
 }

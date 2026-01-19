@@ -180,7 +180,7 @@ namespace L1MapViewer.Localization
             { "Layer_L8Marker", "L8 Marker" },
 
             // === Hints ===
-            { "Hint_MouseControls", "Middle-click to drag | Ctrl+Scroll to zoom | Left-click to select" },
+            { "Hint_MouseControls", "Middle-click to drag | Left-click to select" },
 
             // === Tooltips ===
             { "Tooltip_Copy", "Copy (Ctrl+C)" },
@@ -547,6 +547,55 @@ namespace L1MapViewer.Localization
             { "MapList_ExportResult", "Exported to {0}\n({1} blocks, {2} tiles, {3} SPR)" },
             { "MapList_ExportComplete", "Export Complete" },
             { "MapList_ExportFailed", "Export failed: {0}" },
+
+            // === S32 List Context Menu ===
+            { "S32Menu_JumpToBlock", "Jump to this block" },
+            { "S32Menu_ViewDetails", "View details" },
+            { "S32Menu_ExportMapAsFs32", "Export entire map as fs32 package..." },
+            { "S32Menu_ExportCheckedAsFs32", "Export {0} checked blocks as fs32 package..." },
+            { "S32Menu_ImportFs32", "Import fs32 package..." },
+            { "S32Menu_ClearBlockData", "⚠ Clear block data..." },
+            { "S32Menu_DeleteBlock", "⚠ Delete this block..." },
+            { "S32Menu_DeleteCheckedBlocks", "⚠ Delete {0} checked blocks..." },
+
+            // === MiniMap Context Menu ===
+            { "MiniMap_AddS32Block", "➕ Add S32 block here ({0})..." },
+            { "MiniMap_ImportFs32Here", "📦 Import fs32 here..." },
+            { "MiniMap_EstimatedPosition", "Estimated position: {0} ({1},{2})" },
+            { "MiniMap_CurrentBlock", "Current block: {0}" },
+            { "MiniMap_TargetPosition", "Target position: {0} ({1},{2})" },
+            { "MiniMap_AddS32Title", "Add S32" },
+            { "MiniMap_AddS32Confirm", "Add S32 block at this position?\n\nFilename: {0}\nBlock coordinates: ({1}, {2})\nGame coordinates: ({3},{4}) ~ ({5},{6})\nPath: {7}" },
+
+            // === Selection Context Menu ===
+            { "Selection_ViewDetails", "View details..." },
+            { "Selection_ExportAsFs32", "Export as fs32 package..." },
+            { "Selection_SaveAsFs3p", "Save as material (fs3p)..." },
+            { "Selection_Copy", "Copy (Ctrl+C)" },
+            { "Selection_FillWithFloor", "Fill selection with copied floor" },
+            { "Selection_ClearData", "Clear selection data..." },
+            { "Selection_ShowGroupArea", "Show group area location" },
+
+            // === L5 Editor Context Menu ===
+            { "L5Menu_EditItem", "Edit this L5 item" },
+            { "L5Menu_DeleteItem", "Delete this L5 item" },
+
+            // === Tile List Context Menu ===
+            { "TileList_CopyRow", "Copy entire row" },
+            { "TileList_ViewDetails", "View details" },
+            { "TileList_ExportSelectedTile", "Export selected tile image" },
+
+            // === Material Context Menu ===
+            { "Material_ViewDetails", "View details..." },
+            { "Material_UseMaterial", "Use material" },
+            { "Material_Rename", "Rename..." },
+            { "Material_CopyPath", "Copy file path" },
+            { "Material_Export", "Export material..." },
+            { "Material_Delete", "Delete material" },
+
+            // === Group Thumbnail Context Menu ===
+            { "GroupThumbnail_GotoLocation", "Go to location" },
+            { "GroupThumbnail_ShowCells", "Show group cells" },
         };
     }
 }

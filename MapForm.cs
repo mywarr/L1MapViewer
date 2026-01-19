@@ -454,7 +454,12 @@ namespace L1FlyMapViewer
             _mapViewerControl.PaintOverlaySK = DrawSelectedCellsSK;
             _mapViewerControl.CoordinateChanged += MapViewerControl_CoordinateChanged;
             _mapViewerControl.RenderCompleted += MapViewerControl_RenderCompleted;
-            _mapViewerControl.ScrollChanged += (s, e) => UpdateMiniMapViewportRect();
+            _mapViewerControl.ScrollChanged += (s, e) =>
+            {
+                UpdateMiniMapViewportRect();
+                // 方向按鈕觸發捲動後，檢查是否需要重新渲染
+                CheckAndRerenderIfNeeded();
+            };
             _mapViewerControl.ZoomChanged += (s, e) =>
             {
                 // 縮放按鈕觸發時，重新渲染並更新小地圖
@@ -4755,7 +4760,7 @@ namespace L1FlyMapViewer
             ContextMenuStrip menu = new ContextMenuStrip();
 
             // 跳轉選項
-            ToolStripMenuItem jumpItem = new ToolStripMenuItem("跳轉至此區塊");
+            ToolStripMenuItem jumpItem = new ToolStripMenuItem(LocalizationManager.L("S32Menu_JumpToBlock"));
             jumpItem.Click += (s, args) =>
             {
                 JumpToS32Block(item);
@@ -4763,7 +4768,7 @@ namespace L1FlyMapViewer
             menu.Items.Add(jumpItem);
 
             // 查看詳細選項
-            ToolStripMenuItem detailItem = new ToolStripMenuItem("查看詳細資料");
+            ToolStripMenuItem detailItem = new ToolStripMenuItem(LocalizationManager.L("S32Menu_ViewDetails"));
             detailItem.Click += (s, args) =>
             {
                 ShowS32Details(item);
@@ -4773,7 +4778,7 @@ namespace L1FlyMapViewer
             menu.Items.Add(new ToolStripSeparator());
 
             // 匯出整張地圖
-            ToolStripMenuItem exportMapItem = new ToolStripMenuItem("匯出整張地圖為 fs32 地圖包...");
+            ToolStripMenuItem exportMapItem = new ToolStripMenuItem(LocalizationManager.L("S32Menu_ExportMapAsFs32"));
             exportMapItem.Click += (s, args) => ExportCurrentMapAsFs32();
             menu.Items.Add(exportMapItem);
 
@@ -4781,7 +4786,7 @@ namespace L1FlyMapViewer
             int checkedCount = lstS32Files.CheckedItems.Count;
             if (checkedCount > 0)
             {
-                ToolStripMenuItem exportCheckedItem = new ToolStripMenuItem($"匯出已勾選的 {checkedCount} 個區塊為 fs32 地圖包...");
+                ToolStripMenuItem exportCheckedItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("S32Menu_ExportCheckedAsFs32"), checkedCount));
                 exportCheckedItem.Click += (s, args) => ExportCheckedS32AsFs32();
                 menu.Items.Add(exportCheckedItem);
             }
@@ -4789,7 +4794,7 @@ namespace L1FlyMapViewer
             menu.Items.Add(new ToolStripSeparator());
 
             // 匯入 fs32 地圖包
-            ToolStripMenuItem importFs32Item = new ToolStripMenuItem("匯入 fs32 地圖包...");
+            ToolStripMenuItem importFs32Item = new ToolStripMenuItem(LocalizationManager.L("S32Menu_ImportFs32"));
             importFs32Item.Click += (s, args) => ImportFs32ToCurrentMap();
             menu.Items.Add(importFs32Item);
 
@@ -4797,13 +4802,13 @@ namespace L1FlyMapViewer
 
             // ⚠ 危險操作區
             // 清空 S32 資料
-            ToolStripMenuItem clearS32Item = new ToolStripMenuItem("⚠ 清空此區塊資料...");
+            ToolStripMenuItem clearS32Item = new ToolStripMenuItem(LocalizationManager.L("S32Menu_ClearBlockData"));
             clearS32Item.TextColor = Colors.Red;
             clearS32Item.Click += (s, args) => ClearS32Data(item);
             menu.Items.Add(clearS32Item);
 
             // 刪除 S32 檔案
-            ToolStripMenuItem deleteS32Item = new ToolStripMenuItem("⚠ 刪除此區塊...");
+            ToolStripMenuItem deleteS32Item = new ToolStripMenuItem(LocalizationManager.L("S32Menu_DeleteBlock"));
             deleteS32Item.TextColor = Colors.Red;
             deleteS32Item.Click += (s, args) => DeleteS32File(item);
             menu.Items.Add(deleteS32Item);
@@ -4811,7 +4816,7 @@ namespace L1FlyMapViewer
             // 刪除已勾選的所有區塊
             if (checkedCount > 0)
             {
-                ToolStripMenuItem deleteCheckedItem = new ToolStripMenuItem($"⚠ 刪除已勾選的 {checkedCount} 個區塊...");
+                ToolStripMenuItem deleteCheckedItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("S32Menu_DeleteCheckedBlocks"), checkedCount));
                 deleteCheckedItem.TextColor = Colors.Red;
                 deleteCheckedItem.Click += (s, args) => DeleteCheckedS32Files();
                 menu.Items.Add(deleteCheckedItem);
@@ -10759,7 +10764,7 @@ namespace L1FlyMapViewer
         {
             ContextMenuStrip menu = new ContextMenuStrip();
 
-            ToolStripMenuItem addS32Item = new ToolStripMenuItem("➕ 在此位置新增 S32 區塊...");
+            ToolStripMenuItem addS32Item = new ToolStripMenuItem(LocalizationManager.L("MiniMap_AddS32Block"));
             addS32Item.Font = FontExtensions.CreateFont(addS32Item.Font, FontStyle.Bold);
             addS32Item.Click += (s, args) =>
             {
@@ -10768,7 +10773,7 @@ namespace L1FlyMapViewer
             menu.Items.Add(addS32Item);
 
             // 在此位置匯入 fs32
-            ToolStripMenuItem importFs32Item = new ToolStripMenuItem("📦 在此位置匯入 fs32...");
+            ToolStripMenuItem importFs32Item = new ToolStripMenuItem(LocalizationManager.L("MiniMap_ImportFs32Here"));
             importFs32Item.Click += (s, args) =>
             {
                 ImportFs32AtPosition(worldPos, currentMap);
@@ -10782,7 +10787,7 @@ namespace L1FlyMapViewer
                 string fileName = $"{blockX:X4}{blockY:X4}.s32".ToLower();
 
                 menu.Items.Add(new ToolStripSeparator());
-                ToolStripMenuItem infoItem = new ToolStripMenuItem($"預估位置: {fileName} ({blockX:X4},{blockY:X4})");
+                ToolStripMenuItem infoItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("MiniMap_EstimatedPosition"), fileName, $"{blockX:X4}", $"{blockY:X4}"));
                 infoItem.Enabled = false;
                 menu.Items.Add(infoItem);
             }
@@ -10796,7 +10801,7 @@ namespace L1FlyMapViewer
             ContextMenuStrip menu = new ContextMenuStrip();
 
             // 在此位置匯入 fs32（覆蓋現有區塊）
-            ToolStripMenuItem importFs32Item = new ToolStripMenuItem("📦 在此位置匯入 fs32...");
+            ToolStripMenuItem importFs32Item = new ToolStripMenuItem(LocalizationManager.L("MiniMap_ImportFs32Here"));
             importFs32Item.Click += (s, args) =>
             {
                 ImportFs32AtPosition(worldPos, currentMap);
@@ -10806,14 +10811,14 @@ namespace L1FlyMapViewer
             // 顯示當前區塊資訊
             menu.Items.Add(new ToolStripSeparator());
             string blockFileName = Path.GetFileName(currentS32.FilePath);
-            ToolStripMenuItem infoItem = new ToolStripMenuItem($"當前區塊: {blockFileName}");
+            ToolStripMenuItem infoItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("MiniMap_CurrentBlock"), blockFileName));
             infoItem.Enabled = false;
             menu.Items.Add(infoItem);
 
             // 顯示目標位置資訊
             var (blockX, blockY) = EstimateBlockCoordinates(worldPos, currentMap);
             string targetFileName = $"{blockX:X4}{blockY:X4}.s32".ToLower();
-            ToolStripMenuItem targetItem = new ToolStripMenuItem($"目標位置: {targetFileName} ({blockX:X4},{blockY:X4})");
+            ToolStripMenuItem targetItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("MiniMap_TargetPosition"), targetFileName, $"{blockX:X4}", $"{blockY:X4}"));
             targetItem.Enabled = false;
             menu.Items.Add(targetItem);
 
@@ -11066,12 +11071,10 @@ namespace L1FlyMapViewer
 
             // 確認新增
             var confirmResult = WinFormsMessageBox.Show(
-                $"要在此位置新增 S32 區塊嗎？\n\n" +
-                $"檔案名稱: {fileName}\n" +
-                $"Block座標: ({blockX:X4}, {blockY:X4})\n" +
-                $"遊戲座標: ({linBeginX},{linBeginY}) ~ ({linEndX},{linEndY})\n" +
-                $"路徑: {filePath}",
-                "新增 S32",
+                string.Format(LocalizationManager.L("MiniMap_AddS32Confirm"),
+                    fileName, $"{blockX:X4}", $"{blockY:X4}",
+                    linBeginX, linBeginY, linEndX, linEndY, filePath),
+                LocalizationManager.L("MiniMap_AddS32Title"),
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question);
 
@@ -11814,7 +11817,7 @@ namespace L1FlyMapViewer
 
             if (detailCell != null)
             {
-                var detailItem = new ToolStripMenuItem("查看詳細資料...");
+                var detailItem = new ToolStripMenuItem(LocalizationManager.L("Selection_ViewDetails"));
                 detailItem.Click += (s, e) => {
                     _editState.HighlightedS32Data = detailCell.S32Data;
                     _editState.HighlightedCellX = detailCell.LocalX;
@@ -11825,34 +11828,34 @@ namespace L1FlyMapViewer
                 menu.Items.Add(new ToolStripSeparator());
             }
 
-            var exportFs32Item = new ToolStripMenuItem("匯出為 fs32 地圖包...");
+            var exportFs32Item = new ToolStripMenuItem(LocalizationManager.L("Selection_ExportAsFs32"));
             exportFs32Item.Click += (s, e) => ExportSelectionAsFs32();
             menu.Items.Add(exportFs32Item);
 
-            var saveAsFs3pItem = new ToolStripMenuItem("儲存為素材 (fs3p)...");
+            var saveAsFs3pItem = new ToolStripMenuItem(LocalizationManager.L("Selection_SaveAsFs3p"));
             saveAsFs3pItem.Click += (s, e) => SaveSelectionAsMaterial();
             menu.Items.Add(saveAsFs3pItem);
 
             menu.Items.Add(new ToolStripSeparator());
 
-            var copyItem = new ToolStripMenuItem("複製 (Ctrl+C)");
+            var copyItem = new ToolStripMenuItem(LocalizationManager.L("Selection_Copy"));
             copyItem.Click += (s, e) => CopySelectedCells();
             menu.Items.Add(copyItem);
 
             // 用剪貼簿的地板填滿選取區
             bool hasLayer1InClipboard = _editState.CellClipboard.Any(c => c.Layer1Cell1 != null || c.Layer1Cell2 != null);
-            var fillWithFloorItem = new ToolStripMenuItem("用複製中的地板填滿選取區");
+            var fillWithFloorItem = new ToolStripMenuItem(LocalizationManager.L("Selection_FillWithFloor"));
             fillWithFloorItem.Enabled = hasLayer1InClipboard && _editState.SelectedCells.Count > 0;
             fillWithFloorItem.Click += (s, e) => FillSelectionWithClipboardFloor();
             menu.Items.Add(fillWithFloorItem);
 
-            var clearItem = new ToolStripMenuItem("清除選取區域資料...");
+            var clearItem = new ToolStripMenuItem(LocalizationManager.L("Selection_ClearData"));
             clearItem.Click += (s, e) => ClearSelectedCellsWithDialog();
             menu.Items.Add(clearItem);
 
             menu.Items.Add(new ToolStripSeparator());
 
-            var showGroupAreaItem = new ToolStripMenuItem("顯示區域群組所在位置");
+            var showGroupAreaItem = new ToolStripMenuItem(LocalizationManager.L("Selection_ShowGroupArea"));
             showGroupAreaItem.Click += (s, e) => ShowGroupsInSelectedArea();
             menu.Items.Add(showGroupAreaItem);
 
@@ -11946,7 +11949,7 @@ namespace L1FlyMapViewer
                 var (blockX, blockY) = EstimateBlockCoordinates(new Point(worldPoint.X, worldPoint.Y), currentMap);
                 string fileName = $"{blockX:X4}{blockY:X4}.s32".ToLower();
 
-                var addS32Item = new ToolStripMenuItem($"➕ 在此位置新增 S32 區塊 ({fileName})...");
+                var addS32Item = new ToolStripMenuItem(string.Format(LocalizationManager.L("MiniMap_AddS32Block"), fileName));
                 addS32Item.Click += (s, e) => TryCreateS32AtClickPosition(new Point(worldPoint.X, worldPoint.Y), currentMap);
                 menu.Items.Add(addS32Item);
             }
@@ -14823,7 +14826,7 @@ namespace L1FlyMapViewer
                         var contextMenu = new ContextMenuStrip();
 
                         // 編輯 L5 項目
-                        var editItem = new ToolStripMenuItem("編輯此 L5 項目");
+                        var editItem = new ToolStripMenuItem(LocalizationManager.L("L5Menu_EditItem"));
                         editItem.Click += (s, ev) =>
                         {
                             if (tagIndex >= 0 && tagIndex < tagS32Data.Layer5.Count)
@@ -14878,7 +14881,7 @@ namespace L1FlyMapViewer
                         contextMenu.Items.Add(editItem);
 
                         // 刪除 L5 項目
-                        var deleteItem = new ToolStripMenuItem("刪除此 L5 項目");
+                        var deleteItem = new ToolStripMenuItem(LocalizationManager.L("L5Menu_DeleteItem"));
                         deleteItem.Click += (s, ev) =>
                         {
                             if (tagIndex >= 0 && tagIndex < tagS32Data.Layer5.Count)
@@ -15430,7 +15433,7 @@ namespace L1FlyMapViewer
 
             // 右鍵選單 - 複製整行
             ContextMenuStrip lvContextMenu = new ContextMenuStrip();
-            ToolStripMenuItem copyRowItem = new ToolStripMenuItem("複製整行");
+            ToolStripMenuItem copyRowItem = new ToolStripMenuItem(LocalizationManager.L("TileList_CopyRow"));
             copyRowItem.Click += (s, ev) =>
             {
                 if (lvLocations.SelectedItems.Count > 0)
@@ -15628,14 +15631,14 @@ namespace L1FlyMapViewer
             };
 
             // 查看 Tile 詳細資訊
-            ToolStripMenuItem infoItem = new ToolStripMenuItem("查看詳細資訊");
+            ToolStripMenuItem infoItem = new ToolStripMenuItem(LocalizationManager.L("TileList_ViewDetails"));
             infoItem.Click += (s, ev) =>
             {
                 ShowTileInfoWithPreview(tileInfo);
             };
 
             // 匯出選中的 Tile
-            ToolStripMenuItem exportSelectedItem = new ToolStripMenuItem("匯出選中的 Tile 圖片");
+            ToolStripMenuItem exportSelectedItem = new ToolStripMenuItem(LocalizationManager.L("TileList_ExportSelectedTile"));
             exportSelectedItem.Click += (s, ev) =>
             {
                 var selectedTiles = new List<TileInfo>();
@@ -16430,7 +16433,7 @@ namespace L1FlyMapViewer
 
             // 右鍵選單 - 複製整行
             ContextMenuStrip lvContextMenu = new ContextMenuStrip();
-            ToolStripMenuItem copyRowItem = new ToolStripMenuItem("複製整行");
+            ToolStripMenuItem copyRowItem = new ToolStripMenuItem(LocalizationManager.L("TileList_CopyRow"));
             copyRowItem.Click += (s, ev) =>
             {
                 if (lvLocations.SelectedItems.Count > 0)
@@ -17711,12 +17714,12 @@ namespace L1FlyMapViewer
             var menu = new ContextMenuStrip();
 
             // 查看詳情
-            var detailItem = new ToolStripMenuItem("查看詳情...");
+            var detailItem = new ToolStripMenuItem(LocalizationManager.L("Material_ViewDetails"));
             detailItem.Click += (s, ev) => ShowMaterialDetails(filePath);
             menu.Items.Add(detailItem);
 
             // 使用素材
-            var useItem = new ToolStripMenuItem("使用素材");
+            var useItem = new ToolStripMenuItem(LocalizationManager.L("Material_UseMaterial"));
             useItem.Click += (s, ev) =>
             {
                 try
@@ -17735,12 +17738,12 @@ namespace L1FlyMapViewer
             menu.Items.Add(new ToolStripSeparator());
 
             // 重新命名
-            var renameItem = new ToolStripMenuItem("重新命名...");
+            var renameItem = new ToolStripMenuItem(LocalizationManager.L("Material_Rename"));
             renameItem.Click += (s, ev) => RenameMaterial(filePath, item);
             menu.Items.Add(renameItem);
 
             // 複製檔案路徑
-            var copyPathItem = new ToolStripMenuItem("複製檔案路徑");
+            var copyPathItem = new ToolStripMenuItem(LocalizationManager.L("Material_CopyPath"));
             copyPathItem.Click += (s, ev) =>
             {
                 ClipboardHelper.SetText(filePath);
@@ -17749,14 +17752,14 @@ namespace L1FlyMapViewer
             menu.Items.Add(copyPathItem);
 
             // 匯出（另存新檔）
-            var exportItem = new ToolStripMenuItem("匯出素材...");
+            var exportItem = new ToolStripMenuItem(LocalizationManager.L("Material_Export"));
             exportItem.Click += (s, ev) => ExportMaterial(filePath);
             menu.Items.Add(exportItem);
 
             menu.Items.Add(new ToolStripSeparator());
 
             // 刪除素材
-            var deleteItem = new ToolStripMenuItem("刪除素材");
+            var deleteItem = new ToolStripMenuItem(LocalizationManager.L("Material_Delete"));
             deleteItem.Click += (s, ev) =>
             {
                 if (WinFormsMessageBox.Show($"確定要刪除素材 \"{item.Text}\" 嗎？", "確認刪除",
@@ -20672,10 +20675,10 @@ namespace L1FlyMapViewer
                 ToolStripMenuItem copyItem = new ToolStripMenuItem($"複製群組 {info.GroupId}");
                 copyItem.Click += (s, ev) => CopyGroupToClipboard(info);
 
-                ToolStripMenuItem gotoItem = new ToolStripMenuItem("跳轉到位置");
+                ToolStripMenuItem gotoItem = new ToolStripMenuItem(LocalizationManager.L("GroupThumbnail_GotoLocation"));
                 gotoItem.Click += (s, ev) => JumpToGroupLocation(info);
 
-                ToolStripMenuItem showCellsItem = new ToolStripMenuItem("顯示群組所在格子");
+                ToolStripMenuItem showCellsItem = new ToolStripMenuItem(LocalizationManager.L("GroupThumbnail_ShowCells"));
                 showCellsItem.Click += (s, ev) => ShowLayer4GroupCells(info);
 
                 ToolStripMenuItem detailItem = new ToolStripMenuItem($"列出 L4 明細 ({info.Objects.Count} 個物件)");

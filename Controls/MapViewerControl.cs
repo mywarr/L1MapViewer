@@ -51,6 +51,16 @@ namespace L1MapViewer.Controls
         private Button _btnZoomOut;
         private Button _btnZoomReset;
 
+        // 方向導航面板（右下角）
+        private Panel _navControlPanel;
+        private Button _btnNavUp;
+        private Button _btnNavDown;
+        private Button _btnNavLeft;
+        private Button _btnNavRight;
+        private Timer _navRepeatTimer;
+        private int _navDeltaX;
+        private int _navDeltaY;
+
         // 地圖資料
         private MapDocument _document;
         private RenderOptions _renderOptions = RenderOptions.Default;
@@ -206,6 +216,7 @@ namespace L1MapViewer.Controls
             InitializeComponents();
             InitializeTimers();
             SetupZoomControls();
+            SetupNavControls();
         }
 
         /// <summary>
@@ -566,6 +577,128 @@ namespace L1MapViewer.Controls
             }
         }
 
+        private void SetupNavControls()
+        {
+            // 建立方向導航面板（十字形佈局）
+            // 佈局: 上方一個按鈕，中間左右兩個按鈕，下方一個按鈕
+            int btnSize = 36;
+            int spacing = 2;
+            int panelWidth = btnSize * 3 + spacing * 2;
+            int panelHeight = btnSize * 3 + spacing * 2;
+
+            _navControlPanel = new Panel
+            {
+                Size = new Size(panelWidth, panelHeight),
+                BackColor = Colors.Transparent,
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
+            };
+
+            // 上
+            _btnNavUp = CreateNavButton("▲", btnSize + spacing, 0, btnSize);
+            _btnNavUp.MouseDown += (s, e) => StartNavScroll(0, -1);
+            _btnNavUp.MouseUp += (s, e) => StopNavScroll();
+            _btnNavUp.MouseLeave += (s, e) => StopNavScroll();
+
+            // 下
+            _btnNavDown = CreateNavButton("▼", btnSize + spacing, (btnSize + spacing) * 2, btnSize);
+            _btnNavDown.MouseDown += (s, e) => StartNavScroll(0, 1);
+            _btnNavDown.MouseUp += (s, e) => StopNavScroll();
+            _btnNavDown.MouseLeave += (s, e) => StopNavScroll();
+
+            // 左
+            _btnNavLeft = CreateNavButton("◀", 0, btnSize + spacing, btnSize);
+            _btnNavLeft.MouseDown += (s, e) => StartNavScroll(-1, 0);
+            _btnNavLeft.MouseUp += (s, e) => StopNavScroll();
+            _btnNavLeft.MouseLeave += (s, e) => StopNavScroll();
+
+            // 右
+            _btnNavRight = CreateNavButton("▶", (btnSize + spacing) * 2, btnSize + spacing, btnSize);
+            _btnNavRight.MouseDown += (s, e) => StartNavScroll(1, 0);
+            _btnNavRight.MouseUp += (s, e) => StopNavScroll();
+            _btnNavRight.MouseLeave += (s, e) => StopNavScroll();
+
+            _navControlPanel.GetControls().Add(_btnNavUp);
+            _navControlPanel.GetControls().Add(_btnNavDown);
+            _navControlPanel.GetControls().Add(_btnNavLeft);
+            _navControlPanel.GetControls().Add(_btnNavRight);
+
+            _mapPanel.GetControls().Add(_navControlPanel);
+            _navControlPanel.BringToFront();
+
+            // 設定初始位置
+            UpdateNavControlPosition();
+            _mapPanel.Resize += (s, e) => UpdateNavControlPosition();
+
+            // 初始化連續移動計時器
+            _navRepeatTimer = new Timer { Interval = 50 };
+            _navRepeatTimer.Tick += NavRepeatTimer_Tick;
+        }
+
+        private Button CreateNavButton(string text, int left, int top, int size)
+        {
+            var btn = new Button
+            {
+                Text = text,
+                Font = FontHelper.CreateUIFont(12, FontStyle.Bold),
+                Size = new Size(size, size),
+                Location = new Point(left, top),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(240, 255, 255, 255),
+                ForeColor = Color.FromArgb(102, 102, 102),
+                Cursor = Cursors.Hand,
+            };
+            btn.FlatAppearance.BorderColor = Color.FromArgb(218, 218, 218);
+            btn.FlatAppearance.BorderSize = 1;
+            btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(245, 245, 245);
+            btn.FlatAppearance.MouseDownBackColor = Color.FromArgb(235, 235, 235);
+            return btn;
+        }
+
+        private void UpdateNavControlPosition()
+        {
+            if (_navControlPanel != null && _mapPanel != null)
+            {
+                _navControlPanel.SetLocation(new Point(
+                    _mapPanel.Width - _navControlPanel.Width - 10,
+                    _mapPanel.Height - _navControlPanel.Height - 10));
+            }
+        }
+
+        private void StartNavScroll(int deltaX, int deltaY)
+        {
+            _navDeltaX = deltaX;
+            _navDeltaY = deltaY;
+            // 立即執行一次移動
+            PerformNavScroll();
+            // 開始連續移動
+            _navRepeatTimer?.Start();
+        }
+
+        private void StopNavScroll()
+        {
+            _navRepeatTimer?.Stop();
+            _navDeltaX = 0;
+            _navDeltaY = 0;
+            // 停止移動後觸發 ScrollChanged，讓 MapForm 重新渲染
+            _logger.Debug($"[Nav] StopNavScroll: ScrollX={_viewState.ScrollX}, ScrollY={_viewState.ScrollY}");
+            ScrollChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void NavRepeatTimer_Tick(object sender, EventArgs e)
+        {
+            PerformNavScroll();
+        }
+
+        private void PerformNavScroll()
+        {
+            int scrollAmount = (int)(100 / _viewState.ZoomLevel);
+            int newScrollX = _viewState.ScrollX + _navDeltaX * scrollAmount;
+            int newScrollY = _viewState.ScrollY + _navDeltaY * scrollAmount;
+            _viewState.SetScrollSilent(newScrollX, newScrollY);
+            // 移動時立即重繪（使用已快取的 bitmap），不觸發 ScrollChanged
+            _mapDrawable.Invalidate();
+        }
+
         #endregion
 
         #region 滑鼠事件處理
@@ -817,6 +950,7 @@ namespace L1MapViewer.Controls
             {
                 _zoomDebounceTimer?.Dispose();
                 _dragRenderTimer?.Dispose();
+                _navRepeatTimer?.Dispose();
                 _renderCts?.Cancel();
                 _renderCts?.Dispose();
 

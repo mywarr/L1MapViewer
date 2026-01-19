@@ -180,7 +180,7 @@ namespace L1MapViewer.Localization
             { "Layer_L8Marker", "L8 輔助" },
 
             // === Hints ===
-            { "Hint_MouseControls", "滑鼠中鍵拖移 | Ctrl+滾輪縮放 | 左鍵選取格子" },
+            { "Hint_MouseControls", "滑鼠中鍵拖移 | 左鍵選取格子" },
 
             // === Tooltips ===
             { "Tooltip_Copy", "複製 (Ctrl+C)" },
@@ -547,6 +547,55 @@ namespace L1MapViewer.Localization
             { "MapList_ExportResult", "已匯出至 {0}\n({1} 區塊, {2} 圖塊, {3} SPR)" },
             { "MapList_ExportComplete", "匯出完成" },
             { "MapList_ExportFailed", "匯出失敗: {0}" },
+
+            // === S32 List Context Menu ===
+            { "S32Menu_JumpToBlock", "跳轉至此區塊" },
+            { "S32Menu_ViewDetails", "查看詳細資料" },
+            { "S32Menu_ExportMapAsFs32", "匯出整張地圖為 fs32 地圖包..." },
+            { "S32Menu_ExportCheckedAsFs32", "匯出已勾選的 {0} 個區塊為 fs32 地圖包..." },
+            { "S32Menu_ImportFs32", "匯入 fs32 地圖包..." },
+            { "S32Menu_ClearBlockData", "⚠ 清空此區塊資料..." },
+            { "S32Menu_DeleteBlock", "⚠ 刪除此區塊..." },
+            { "S32Menu_DeleteCheckedBlocks", "⚠ 刪除已勾選的 {0} 個區塊..." },
+
+            // === MiniMap Context Menu ===
+            { "MiniMap_AddS32Block", "➕ 在此位置新增 S32 區塊 ({0})..." },
+            { "MiniMap_ImportFs32Here", "📦 在此位置匯入 fs32..." },
+            { "MiniMap_EstimatedPosition", "預估位置: {0} ({1},{2})" },
+            { "MiniMap_CurrentBlock", "當前區塊: {0}" },
+            { "MiniMap_TargetPosition", "目標位置: {0} ({1},{2})" },
+            { "MiniMap_AddS32Title", "新增 S32" },
+            { "MiniMap_AddS32Confirm", "要在此位置新增 S32 區塊嗎？\n\n檔案名稱: {0}\nBlock座標: ({1}, {2})\n遊戲座標: ({3},{4}) ~ ({5},{6})\n路徑: {7}" },
+
+            // === Selection Context Menu ===
+            { "Selection_ViewDetails", "查看詳細資料..." },
+            { "Selection_ExportAsFs32", "匯出為 fs32 地圖包..." },
+            { "Selection_SaveAsFs3p", "儲存為素材 (fs3p)..." },
+            { "Selection_Copy", "複製 (Ctrl+C)" },
+            { "Selection_FillWithFloor", "用複製中的地板填滿選取區" },
+            { "Selection_ClearData", "清除選取區域資料..." },
+            { "Selection_ShowGroupArea", "顯示區域群組所在位置" },
+
+            // === L5 Editor Context Menu ===
+            { "L5Menu_EditItem", "編輯此 L5 項目" },
+            { "L5Menu_DeleteItem", "刪除此 L5 項目" },
+
+            // === Tile List Context Menu ===
+            { "TileList_CopyRow", "複製整行" },
+            { "TileList_ViewDetails", "查看詳細資訊" },
+            { "TileList_ExportSelectedTile", "匯出選中的 Tile 圖片" },
+
+            // === Material Context Menu ===
+            { "Material_ViewDetails", "查看詳情..." },
+            { "Material_UseMaterial", "使用素材" },
+            { "Material_Rename", "重新命名..." },
+            { "Material_CopyPath", "複製檔案路徑" },
+            { "Material_Export", "匯出素材..." },
+            { "Material_Delete", "刪除素材" },
+
+            // === Group Thumbnail Context Menu ===
+            { "GroupThumbnail_GotoLocation", "跳轉到位置" },
+            { "GroupThumbnail_ShowCells", "顯示群組所在格子" },
         };
     }
 }

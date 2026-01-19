@@ -752,7 +752,7 @@ namespace L1FlyMapViewer
             //
             this.toolStripStatusLabel1.SetName("toolStripStatusLabel1");
             this.toolStripStatusLabel1.Size = new Size(300, 17);
-            this.toolStripStatusLabel1.Text = "點擊獲取座標 | Ctrl+拖拽選擇範圍 | Ctrl+滾輪縮放";
+            this.toolStripStatusLabel1.Text = "點擊獲取座標 | Ctrl+拖拽選擇範圍";
 
             //
             // toolStripStatusLabel2

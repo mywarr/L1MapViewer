@@ -180,7 +180,7 @@ namespace L1MapViewer.Localization
             { "Layer_L8Marker", "L8 보조" },
 
             // === Hints ===
-            { "Hint_MouseControls", "마우스 가운데 버튼으로 드래그 | Ctrl+휠로 확대/축소 | 좌클릭으로 선택" },
+            { "Hint_MouseControls", "마우스 가운데 버튼으로 드래그 | 좌클릭으로 선택" },
 
             // === Tooltips ===
             { "Tooltip_Copy", "복사 (Ctrl+C)" },
@@ -547,6 +547,55 @@ namespace L1MapViewer.Localization
             { "MapList_ExportResult", "{0}에 내보냈습니다\n({1}개 블록, {2}개 타일, {3}개 SPR)" },
             { "MapList_ExportComplete", "내보내기 완료" },
             { "MapList_ExportFailed", "내보내기 실패: {0}" },
+
+            // === S32 List Context Menu ===
+            { "S32Menu_JumpToBlock", "이 블록으로 이동" },
+            { "S32Menu_ViewDetails", "상세 정보 보기" },
+            { "S32Menu_ExportMapAsFs32", "전체 맵을 fs32 패키지로 내보내기..." },
+            { "S32Menu_ExportCheckedAsFs32", "선택한 {0}개 블록을 fs32 패키지로 내보내기..." },
+            { "S32Menu_ImportFs32", "fs32 패키지 가져오기..." },
+            { "S32Menu_ClearBlockData", "⚠ 블록 데이터 지우기..." },
+            { "S32Menu_DeleteBlock", "⚠ 이 블록 삭제..." },
+            { "S32Menu_DeleteCheckedBlocks", "⚠ 선택한 {0}개 블록 삭제..." },
+
+            // === MiniMap Context Menu ===
+            { "MiniMap_AddS32Block", "➕ 여기에 S32 블록 추가 ({0})..." },
+            { "MiniMap_ImportFs32Here", "📦 여기에 fs32 가져오기..." },
+            { "MiniMap_EstimatedPosition", "예상 위치: {0} ({1},{2})" },
+            { "MiniMap_CurrentBlock", "현재 블록: {0}" },
+            { "MiniMap_TargetPosition", "목표 위치: {0} ({1},{2})" },
+            { "MiniMap_AddS32Title", "S32 추가" },
+            { "MiniMap_AddS32Confirm", "이 위치에 S32 블록을 추가하시겠습니까?\n\n파일명: {0}\n블록 좌표: ({1}, {2})\n게임 좌표: ({3},{4}) ~ ({5},{6})\n경로: {7}" },
+
+            // === Selection Context Menu ===
+            { "Selection_ViewDetails", "상세 정보 보기..." },
+            { "Selection_ExportAsFs32", "fs32 패키지로 내보내기..." },
+            { "Selection_SaveAsFs3p", "재료로 저장 (fs3p)..." },
+            { "Selection_Copy", "복사 (Ctrl+C)" },
+            { "Selection_FillWithFloor", "복사한 바닥으로 선택 영역 채우기" },
+            { "Selection_ClearData", "선택 영역 데이터 지우기..." },
+            { "Selection_ShowGroupArea", "그룹 영역 위치 표시" },
+
+            // === L5 Editor Context Menu ===
+            { "L5Menu_EditItem", "이 L5 항목 편집" },
+            { "L5Menu_DeleteItem", "이 L5 항목 삭제" },
+
+            // === Tile List Context Menu ===
+            { "TileList_CopyRow", "전체 행 복사" },
+            { "TileList_ViewDetails", "상세 정보 보기" },
+            { "TileList_ExportSelectedTile", "선택한 타일 이미지 내보내기" },
+
+            // === Material Context Menu ===
+            { "Material_ViewDetails", "상세 정보 보기..." },
+            { "Material_UseMaterial", "재료 사용" },
+            { "Material_Rename", "이름 바꾸기..." },
+            { "Material_CopyPath", "파일 경로 복사" },
+            { "Material_Export", "재료 내보내기..." },
+            { "Material_Delete", "재료 삭제" },
+
+            // === Group Thumbnail Context Menu ===
+            { "GroupThumbnail_GotoLocation", "위치로 이동" },
+            { "GroupThumbnail_ShowCells", "그룹 셀 표시" },
         };
     }
 }
