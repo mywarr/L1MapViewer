@@ -181,12 +181,20 @@ namespace L1FlyMapViewer
                     }
                 }
 
-                // 並行載入所有 til 檔案
+                // 並行載入所有 til 檔案（限制並行度避免檔案存取錯誤）
                 int loadedCount = 0;
-                System.Threading.Tasks.Parallel.ForEach(tileIds, tileId =>
+                var parallelOptions = new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = 4 };
+                System.Threading.Tasks.Parallel.ForEach(tileIds, parallelOptions, tileId =>
                 {
-                    TileProvider.Instance.Preload(tileId);
-                    System.Threading.Interlocked.Increment(ref loadedCount);
+                    try
+                    {
+                        TileProvider.Instance.Preload(tileId);
+                        System.Threading.Interlocked.Increment(ref loadedCount);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warn(ex, $"Failed to preload tile {tileId}");
+                    }
                 });
 
                 sw.Stop();

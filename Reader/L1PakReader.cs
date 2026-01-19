@@ -54,8 +54,41 @@ namespace L1MapViewer.Reader {
             //有壓縮過的要取壓縮後的長度
             int len = pIdx.nCompressSize > 0 ? pIdx.nCompressSize : pIdx.nSize;
 
+            // 驗證參數
+            if (len <= 0) {
+                DebugLog.Log($"[L1PakReader.Read] Invalid length: {len} for {pIdx.szFileName}");
+                return Array.Empty<byte>();
+            }
+
+            if (pIdx.nPosition < 0) {
+                DebugLog.Log($"[L1PakReader.Read] Invalid position: {pIdx.nPosition} for {pIdx.szFileName}");
+                return Array.Empty<byte>();
+            }
+
             byte[] data = new byte[len];
 
+            // 重試機制，避免並行存取時的暫時性錯誤
+            const int maxRetries = 3;
+            for (int retry = 0; retry < maxRetries; retry++) {
+                try {
+                    using (FileStream fs = File.Open(pIdx.szPakFullName, FileMode.Open, FileAccess.Read, FileShare.Read)) {
+                        // 驗證 Seek 位置不超過檔案大小
+                        if (pIdx.nPosition > fs.Length) {
+                            DebugLog.Log($"[L1PakReader.Read] Position {pIdx.nPosition} exceeds file length {fs.Length} for {pIdx.szFileName}");
+                            return Array.Empty<byte>();
+                        }
+                        fs.Seek(pIdx.nPosition, SeekOrigin.Begin);
+                        fs.Read(data, 0, data.Length);
+                    }
+                    return data;
+                } catch (IOException ex) when (retry < maxRetries - 1) {
+                    // 等待一小段時間後重試
+                    System.Threading.Thread.Sleep(10 * (retry + 1));
+                    DebugLog.Log($"[L1PakReader.Read] Retry {retry + 1}/{maxRetries} for {pIdx.szPakFullName} (pos={pIdx.nPosition}, len={len}): {ex.Message}");
+                }
+            }
+
+            // 最後一次嘗試，如果失敗則拋出例外
             using (FileStream fs = File.Open(pIdx.szPakFullName, FileMode.Open, FileAccess.Read, FileShare.Read)) {
                 fs.Seek(pIdx.nPosition, SeekOrigin.Begin);
                 fs.Read(data, 0, data.Length);

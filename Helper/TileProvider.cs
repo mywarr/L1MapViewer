@@ -142,8 +142,15 @@ namespace L1MapViewer.Helper
 
             return _tilRemasterCache.GetOrAdd(tileId, id =>
             {
-                byte[] rawData = L1PakReader.UnPack("Tile", $"{id}.til");
-                return rawData != null && L1Til.IsRemaster(rawData);
+                try
+                {
+                    byte[] rawData = L1PakReader.UnPack("Tile", $"{id}.til");
+                    return rawData != null && L1Til.IsRemaster(rawData);
+                }
+                catch
+                {
+                    return false;
+                }
             });
         }
 
