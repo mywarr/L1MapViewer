@@ -22257,7 +22257,7 @@ namespace L1FlyMapViewer
                 dialog.Close();
             };
 
-            dialog.ShowDialog(this);
+            dialog.ShowModal(this);
         }
 
         // 清除所有第七層（傳送點）資料

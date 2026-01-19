@@ -1,16 +1,14 @@
 using System;
-using System.Collections.Generic;
 using Eto.Forms;
 using Eto.Drawing;
-using L1MapViewer.Compatibility;
 using L1MapViewer.Localization;
 
 namespace L1MapViewer.Forms
 {
     /// <summary>
-    /// 批次替換 Tile 對話框
+    /// 批次替換 Tile 對話框 - 使用 Eto.Forms 原生佈局
     /// </summary>
-    public class BatchReplaceTileDialog : WinFormsDialog
+    public class BatchReplaceTileDialog : Dialog
     {
         #region 公開屬性
 
@@ -93,18 +91,23 @@ namespace L1MapViewer.Forms
         private RadioButton _rbLayer2;
         private RadioButton _rbLayer4;
 
-        private NumericUpDown _nudSrcTileId;
-        private NumericUpDown _nudSrcIndexId;
+        private NumericStepper _nudSrcTileId;
+        private NumericStepper _nudSrcIndexId;
         private CheckBox _chkMatchIndexId;
 
-        private NumericUpDown _nudDstTileId;
-        private NumericUpDown _nudDstIndexId;
+        private NumericStepper _nudDstTileId;
+        private NumericStepper _nudDstIndexId;
         private CheckBox _chkReplaceIndexId;
 
         private Button _btnPreview;
         private Button _btnExecute;
         private Button _btnCancel;
         private Label _lblResult;
+
+        private Label _lblSrcTileId;
+        private Label _lblSrcIndexId;
+        private Label _lblDstTileId;
+        private Label _lblDstIndexId;
 
         #endregion
 
@@ -117,245 +120,173 @@ namespace L1MapViewer.Forms
 
         private void OnLanguageChanged(object sender, EventArgs e)
         {
-            if (this.GetInvokeRequired())
-                this.Invoke(new Action(() => UpdateLocalization()));
-            else
-                UpdateLocalization();
+            Application.Instance.Invoke(() => UpdateLocalization());
         }
 
-        protected override void Dispose(bool disposing)
+        protected override void OnUnLoad(EventArgs e)
         {
-            if (disposing)
-            {
-                LocalizationManager.LanguageChanged -= OnLanguageChanged;
-            }
-            base.Dispose(disposing);
+            base.OnUnLoad(e);
+            LocalizationManager.LanguageChanged -= OnLanguageChanged;
         }
 
         private void InitializeComponents()
         {
-            Text = "批次替換 TileId";
-            Size = new Size(440, 380);
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            StartPosition = FormStartPosition.CenterParent;
-            MaximizeBox = false;
-            MinimizeBox = false;
-            Padding = new Padding(20);
-
-            int y = 15;
-            int groupWidth = 385;
-            int leftMargin = 15;
+            Title = "批次替換 TileId";
+            MinimumSize = new Size(420, 380);
+            Resizable = false;
+            Padding = new Padding(15);
 
             // === 圖層選擇 ===
+            _rbLayer1 = new RadioButton { Text = "Layer1 (地板)", Checked = true };
+            _rbLayer2 = new RadioButton(_rbLayer1) { Text = "Layer2 (索引)" };
+            _rbLayer4 = new RadioButton(_rbLayer1) { Text = "Layer4 (物件)" };
+
+            var layerLayout = new StackLayout
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 20,
+                Items = { _rbLayer1, _rbLayer2, _rbLayer4 }
+            };
+
             _grpLayer = new GroupBox
             {
                 Text = "選擇圖層",
-                Location = new Point(leftMargin, y),
-                Size = new Size(groupWidth, 55)
+                Padding = new Padding(10),
+                Content = layerLayout
             };
-            Controls.Add(_grpLayer);
-
-            _rbLayer1 = new RadioButton
-            {
-                Text = "Layer1 (地板)",
-                Location = new Point(20, 22),
-                Size = new Size(110, 22),
-                Checked = true
-            };
-
-            _rbLayer2 = new RadioButton
-            {
-                Text = "Layer2 (索引)",
-                Location = new Point(140, 22),
-                Size = new Size(110, 22)
-            };
-
-            _rbLayer4 = new RadioButton
-            {
-                Text = "Layer4 (物件)",
-                Location = new Point(260, 22),
-                Size = new Size(110, 22)
-            };
-
-            _grpLayer.GetControls().Add(_rbLayer1);
-            _grpLayer.GetControls().Add(_rbLayer2);
-            _grpLayer.GetControls().Add(_rbLayer4);
-
-            y += 65;
 
             // === 來源設定 ===
-            _grpSource = new GroupBox
-            {
-                Text = "來源",
-                Location = new Point(leftMargin, y),
-                Size = new Size(groupWidth, 90)
-            };
-            Controls.Add(_grpSource);
+            _lblSrcTileId = new Label { Text = "TileId:", VerticalAlignment = VerticalAlignment.Center };
+            _nudSrcTileId = new NumericStepper { MinValue = 0, MaxValue = 65535, Value = 0, Width = 100 };
 
-            var lblSrcTileId = new Label
-            {
-                Text = "TileId:",
-                Location = new Point(20, 28),
-                Size = new Size(50, 22)
-            };
-            _grpSource.GetControls().Add(lblSrcTileId);
+            _lblSrcIndexId = new Label { Text = "IndexId:", VerticalAlignment = VerticalAlignment.Center };
+            _nudSrcIndexId = new NumericStepper { MinValue = 0, MaxValue = 255, Value = 0, Width = 100 };
 
-            _nudSrcTileId = new NumericUpDown
-            {
-                Location = new Point(75, 25),
-                Size = new Size(100, 24),
-                Minimum = 0,
-                Maximum = 65535,
-                Value = 0
-            };
-            _grpSource.GetControls().Add(_nudSrcTileId);
-
-            var lblSrcIndexId = new Label
-            {
-                Text = "IndexId:",
-                Location = new Point(195, 28),
-                Size = new Size(55, 22)
-            };
-            _grpSource.GetControls().Add(lblSrcIndexId);
-
-            _nudSrcIndexId = new NumericUpDown
-            {
-                Location = new Point(255, 25),
-                Size = new Size(100, 24),
-                Minimum = 0,
-                Maximum = 255,
-                Value = 0
-            };
-            _grpSource.GetControls().Add(_nudSrcIndexId);
-
-            _chkMatchIndexId = new CheckBox
-            {
-                Text = "比對 IndexId",
-                Location = new Point(20, 58),
-                Size = new Size(150, 22),
-                Checked = true
-            };
+            _chkMatchIndexId = new CheckBox { Text = "比對 IndexId", Checked = true };
             _chkMatchIndexId.CheckedChanged += (s, e) =>
             {
                 _nudSrcIndexId.Enabled = _chkMatchIndexId.Checked ?? false;
             };
-            _grpSource.GetControls().Add(_chkMatchIndexId);
 
-            y += 100;
+            var srcRow1 = new TableLayout
+            {
+                Spacing = new Size(10, 5),
+                Rows =
+                {
+                    new TableRow(
+                        _lblSrcTileId,
+                        new TableCell(_nudSrcTileId, false),
+                        _lblSrcIndexId,
+                        new TableCell(_nudSrcIndexId, false),
+                        null  // 彈性空間
+                    )
+                }
+            };
+
+            var srcLayout = new StackLayout
+            {
+                Orientation = Orientation.Vertical,
+                Spacing = 8,
+                Items = { srcRow1, _chkMatchIndexId }
+            };
+
+            _grpSource = new GroupBox
+            {
+                Text = "來源",
+                Padding = new Padding(10),
+                Content = srcLayout
+            };
 
             // === 目標設定 ===
-            _grpTarget = new GroupBox
-            {
-                Text = "替換為",
-                Location = new Point(leftMargin, y),
-                Size = new Size(groupWidth, 90)
-            };
-            Controls.Add(_grpTarget);
+            _lblDstTileId = new Label { Text = "TileId:", VerticalAlignment = VerticalAlignment.Center };
+            _nudDstTileId = new NumericStepper { MinValue = 0, MaxValue = 65535, Value = 0, Width = 100 };
 
-            var lblDstTileId = new Label
-            {
-                Text = "TileId:",
-                Location = new Point(20, 28),
-                Size = new Size(50, 22)
-            };
-            _grpTarget.GetControls().Add(lblDstTileId);
+            _lblDstIndexId = new Label { Text = "IndexId:", VerticalAlignment = VerticalAlignment.Center };
+            _nudDstIndexId = new NumericStepper { MinValue = 0, MaxValue = 255, Value = 0, Width = 100 };
 
-            _nudDstTileId = new NumericUpDown
-            {
-                Location = new Point(75, 25),
-                Size = new Size(100, 24),
-                Minimum = 0,
-                Maximum = 65535,
-                Value = 0
-            };
-            _grpTarget.GetControls().Add(_nudDstTileId);
-
-            var lblDstIndexId = new Label
-            {
-                Text = "IndexId:",
-                Location = new Point(195, 28),
-                Size = new Size(55, 22)
-            };
-            _grpTarget.GetControls().Add(lblDstIndexId);
-
-            _nudDstIndexId = new NumericUpDown
-            {
-                Location = new Point(255, 25),
-                Size = new Size(100, 24),
-                Minimum = 0,
-                Maximum = 255,
-                Value = 0
-            };
-            _grpTarget.GetControls().Add(_nudDstIndexId);
-
-            _chkReplaceIndexId = new CheckBox
-            {
-                Text = "替換 IndexId",
-                Location = new Point(20, 58),
-                Size = new Size(150, 22),
-                Checked = true
-            };
+            _chkReplaceIndexId = new CheckBox { Text = "替換 IndexId", Checked = true };
             _chkReplaceIndexId.CheckedChanged += (s, e) =>
             {
                 _nudDstIndexId.Enabled = _chkReplaceIndexId.Checked ?? false;
             };
-            _grpTarget.GetControls().Add(_chkReplaceIndexId);
 
-            y += 105;
+            var dstRow1 = new TableLayout
+            {
+                Spacing = new Size(10, 5),
+                Rows =
+                {
+                    new TableRow(
+                        _lblDstTileId,
+                        new TableCell(_nudDstTileId, false),
+                        _lblDstIndexId,
+                        new TableCell(_nudDstIndexId, false),
+                        null  // 彈性空間
+                    )
+                }
+            };
+
+            var dstLayout = new StackLayout
+            {
+                Orientation = Orientation.Vertical,
+                Spacing = 8,
+                Items = { dstRow1, _chkReplaceIndexId }
+            };
+
+            _grpTarget = new GroupBox
+            {
+                Text = "替換為",
+                Padding = new Padding(10),
+                Content = dstLayout
+            };
 
             // === 按鈕列 ===
-            int btnWidth = 90;
-            int btnHeight = 32;
-            int btnSpacing = 15;
-            int totalBtnWidth = btnWidth * 3 + btnSpacing * 2;
-            int btnStartX = (groupWidth - totalBtnWidth) / 2 + leftMargin;
-
-            _btnPreview = new Button
-            {
-                Text = "預覽",
-                Location = new Point(btnStartX, y),
-                Size = new Size(btnWidth, btnHeight)
-            };
+            _btnPreview = new Button { Text = "預覽", Width = 90 };
             _btnPreview.Click += (s, e) => PreviewClicked?.Invoke(this, EventArgs.Empty);
-            Controls.Add(_btnPreview);
 
-            _btnExecute = new Button
-            {
-                Text = "執行替換",
-                Location = new Point(btnStartX + btnWidth + btnSpacing, y),
-                Size = new Size(btnWidth, btnHeight)
-            };
+            _btnExecute = new Button { Text = "執行替換", Width = 90 };
             _btnExecute.Click += (s, e) => ExecuteClicked?.Invoke(this, EventArgs.Empty);
-            Controls.Add(_btnExecute);
 
-            _btnCancel = new Button
-            {
-                Text = "取消",
-                Location = new Point(btnStartX + (btnWidth + btnSpacing) * 2, y),
-                Size = new Size(btnWidth, btnHeight),
-                DialogResult = DialogResult.Cancel
-            };
+            _btnCancel = new Button { Text = "取消", Width = 90 };
             _btnCancel.Click += (s, e) => Close();
-            Controls.Add(_btnCancel);
 
-            y += 45;
+            var buttonLayout = new StackLayout
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 15,
+                HorizontalContentAlignment = Eto.Forms.HorizontalAlignment.Center,
+                Items = { _btnPreview, _btnExecute, _btnCancel }
+            };
 
             // === 結果標籤 ===
             _lblResult = new Label
             {
                 Text = "",
-                Location = new Point(leftMargin, y),
-                Size = new Size(groupWidth, 22),
-                ForeColor = Color.FromArgb(0, 100, 180)
+                TextColor = Color.FromArgb(0, 100, 180)
             };
-            Controls.Add(_lblResult);
 
-            CancelButton = _btnCancel;
+            // === 主佈局 ===
+            Content = new StackLayout
+            {
+                Orientation = Orientation.Vertical,
+                Spacing = 12,
+                HorizontalContentAlignment = Eto.Forms.HorizontalAlignment.Stretch,
+                Items =
+                {
+                    _grpLayer,
+                    _grpSource,
+                    _grpTarget,
+                    buttonLayout,
+                    _lblResult
+                }
+            };
+
+            // 設定取消按鈕
+            AbortButton = _btnCancel;
         }
 
         private void UpdateLocalization()
         {
-            Text = LocalizationManager.L("Form_BatchReplaceTile_Title");
+            Title = LocalizationManager.L("Form_BatchReplaceTile_Title");
             _grpLayer.Text = LocalizationManager.L("BatchReplaceTile_SelectLayer");
             _rbLayer1.Text = LocalizationManager.L("BatchReplaceTile_Layer1");
             _rbLayer2.Text = LocalizationManager.L("BatchReplaceTile_Layer2");
