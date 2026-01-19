@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using L1MapViewer.Models;
 using L1MapViewer.Reader;
+using NLog;
 
 namespace L1MapViewer.Helper
 {
@@ -9,6 +10,7 @@ namespace L1MapViewer.Helper
     /// </summary>
     public class TileImportManager
     {
+        private static readonly Logger _logger = LogManager.GetCurrentClassLogger();
         /// <summary>
         /// 新 Tile 搜尋起始編號
         /// </summary>
@@ -155,6 +157,8 @@ namespace L1MapViewer.Helper
         /// </summary>
         public TileMappingResult ProcessTilesBatch(Dictionary<int, TilePackageData> packageTiles)
         {
+            _logger.Info($"[ProcessTilesBatch] Starting batch import of {packageTiles.Count} tiles");
+
             var result = new TileMappingResult();
             var tilesToImport = new Dictionary<string, byte[]>();
 
@@ -178,6 +182,7 @@ namespace L1MapViewer.Helper
                     {
                         result.AddMapping(originalId, originalId, TileMatchType.Exact);
                         TileHashManager.RegisterTileMd5(originalId, existingMd5);
+                        _logger.Debug($"[ProcessTilesBatch] Tile {originalId}: Exact match (MD5 identical)");
                     }
                     else
                     {
@@ -186,6 +191,7 @@ namespace L1MapViewer.Helper
                         tilesToImport[$"{newId}.til"] = packageData.TilData;
                         result.AddMapping(originalId, newId, TileMatchType.Remapped);
                         TileHashManager.RegisterTileMd5(newId, packageMd5);
+                        _logger.Info($"[ProcessTilesBatch] Tile {originalId}: Remapped to {newId} (MD5 different, ID conflict)");
                     }
                 }
                 else
@@ -195,6 +201,7 @@ namespace L1MapViewer.Helper
                     if (existingIdByMd5.HasValue)
                     {
                         result.AddMapping(originalId, existingIdByMd5.Value, TileMatchType.MergedByMd5);
+                        _logger.Debug($"[ProcessTilesBatch] Tile {originalId}: Merged to existing {existingIdByMd5.Value} (same MD5)");
                     }
                     else
                     {
@@ -204,6 +211,7 @@ namespace L1MapViewer.Helper
                             tilesToImport[$"{originalId}.til"] = packageData.TilData;
                             result.AddMapping(originalId, originalId, TileMatchType.NewOriginal);
                             TileHashManager.RegisterTileMd5(originalId, packageMd5);
+                            _logger.Info($"[ProcessTilesBatch] Tile {originalId}: New tile with original ID");
                         }
                         else
                         {
@@ -212,6 +220,7 @@ namespace L1MapViewer.Helper
                             tilesToImport[$"{newId}.til"] = packageData.TilData;
                             result.AddMapping(originalId, newId, TileMatchType.NewRemapped);
                             TileHashManager.RegisterTileMd5(newId, packageMd5);
+                            _logger.Info($"[ProcessTilesBatch] Tile {originalId}: New tile remapped to {newId} (original ID unavailable)");
                         }
                     }
                 }
@@ -220,9 +229,27 @@ namespace L1MapViewer.Helper
             // 批次寫入
             if (tilesToImport.Count > 0)
             {
-                L1PakWriter.AppendFiles(IdxType, tilesToImport);
+                _logger.Info($"[ProcessTilesBatch] Writing {tilesToImport.Count} tiles to {IdxType}.idx/pak...");
+                int written = L1PakWriter.AppendFiles(IdxType, tilesToImport);
+                if (written == tilesToImport.Count)
+                {
+                    _logger.Info($"[ProcessTilesBatch] Successfully wrote {written} tiles to {IdxType}.idx/pak");
+                }
+                else
+                {
+                    _logger.Error($"[ProcessTilesBatch] Failed to write tiles! Expected: {tilesToImport.Count}, Written: {written}");
+                    foreach (var tile in tilesToImport)
+                    {
+                        _logger.Error($"[ProcessTilesBatch] Tile to import: {tile.Key}, size: {tile.Value?.Length ?? 0} bytes");
+                    }
+                }
+            }
+            else
+            {
+                _logger.Info("[ProcessTilesBatch] No new tiles to write (all reused or merged)");
             }
 
+            _logger.Info($"[ProcessTilesBatch] Batch import completed. Mappings: {result.IdMapping.Count}, Imported: {result.ImportedCount}, Reused: {result.ReuseCount}, Remapped: {result.RemappedCount}");
             return result;
         }
     }

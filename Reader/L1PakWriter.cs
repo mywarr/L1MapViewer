@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using NLog;
 using static L1MapViewer.Other.Struct;
 
 namespace L1MapViewer.Reader
@@ -11,6 +12,7 @@ namespace L1MapViewer.Reader
     /// </summary>
     public static class L1PakWriter
     {
+        private static readonly Logger _logger = LogManager.GetCurrentClassLogger();
         /// <summary>
         /// idx 記錄結構
         /// </summary>
@@ -383,15 +385,32 @@ namespace L1MapViewer.Reader
         public static int AppendFiles(string idxType, Dictionary<string, byte[]> files)
         {
             if (files.Count == 0)
+            {
+                _logger.Debug($"[AppendFiles] No files to append for {idxType}");
                 return 0;
+            }
 
             string idxFilePath = Path.Combine(Share.LineagePath, $"{idxType}.idx");
             string pakFilePath = Path.Combine(Share.LineagePath, $"{idxType}.pak");
 
-            if (!File.Exists(idxFilePath) || !File.Exists(pakFilePath))
+            _logger.Info($"[AppendFiles] Starting batch append of {files.Count} files to {idxType}.idx/pak");
+            _logger.Debug($"[AppendFiles] idx path: {idxFilePath}");
+            _logger.Debug($"[AppendFiles] pak path: {pakFilePath}");
+
+            if (!File.Exists(idxFilePath))
+            {
+                _logger.Error($"[AppendFiles] idx file not found: {idxFilePath}");
                 return 0;
+            }
+
+            if (!File.Exists(pakFilePath))
+            {
+                _logger.Error($"[AppendFiles] pak file not found: {pakFilePath}");
+                return 0;
+            }
 
             IdxType structType = GetIdxType(idxFilePath);
+            _logger.Debug($"[AppendFiles] idx structure type: {structType}");
 
             // 建立備份
             string pakBackup = pakFilePath + ".bak";
@@ -404,20 +423,23 @@ namespace L1MapViewer.Reader
 
                 File.Copy(pakFilePath, pakBackup);
                 File.Copy(idxFilePath, idxBackup);
+                _logger.Debug("[AppendFiles] Backup files created");
             }
-            catch
+            catch (Exception ex)
             {
-                // 備份失敗，繼續執行（不中斷）
+                _logger.Warn(ex, "[AppendFiles] Failed to create backup files, continuing anyway");
             }
 
             try
             {
                 // 讀取現有記錄
                 var records = ReadIdxRecords(idxFilePath, structType);
+                _logger.Debug($"[AppendFiles] Read {records.Count} existing records from idx");
 
                 // 取得 pak 檔案目前大小作為起始偏移
                 var pakFileInfo = new FileInfo(pakFilePath);
                 int currentOffset = (int)pakFileInfo.Length;
+                _logger.Debug($"[AppendFiles] pak file current size: {currentOffset} bytes");
 
                 int successCount = 0;
                 var newRecords = new List<IdxRecord>();
@@ -430,6 +452,12 @@ namespace L1MapViewer.Reader
                         string fileName = kvp.Key;
                         byte[] data = kvp.Value;
 
+                        if (data == null || data.Length == 0)
+                        {
+                            _logger.Warn($"[AppendFiles] Skipping empty file: {fileName}");
+                            continue;
+                        }
+
                         pakFs.Write(data, 0, data.Length);
 
                         newRecords.Add(new IdxRecord
@@ -441,10 +469,13 @@ namespace L1MapViewer.Reader
                             CompressType = 0
                         });
 
+                        _logger.Debug($"[AppendFiles] Appended {fileName}: offset={currentOffset}, size={data.Length}");
                         currentOffset += data.Length;
                         successCount++;
                     }
                 }
+
+                _logger.Info($"[AppendFiles] Appended {successCount} files to pak");
 
                 // 使用二分搜尋將新記錄插入到正確位置
                 var comparer = new UnderscoreFirstComparer();
@@ -452,29 +483,40 @@ namespace L1MapViewer.Reader
                 {
                     int insertIndex = FindInsertIndex(records, newRec.FileName, comparer);
                     records.Insert(insertIndex, newRec);
+                    _logger.Debug($"[AppendFiles] Inserted idx record for {newRec.FileName} at index {insertIndex}");
                 }
 
                 // 重建 idx（已排序的記錄）
+                _logger.Debug($"[AppendFiles] Rebuilding idx with {records.Count} total records");
                 RebuildIdx(idxFilePath, structType, records);
+                _logger.Info($"[AppendFiles] idx rebuilt successfully");
 
                 // 成功後刪除備份
                 try
                 {
                     if (File.Exists(pakBackup)) File.Delete(pakBackup);
                     if (File.Exists(idxBackup)) File.Delete(idxBackup);
+                    _logger.Debug("[AppendFiles] Backup files removed");
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.Warn(ex, "[AppendFiles] Failed to remove backup files");
+                }
 
                 // 清除緩存
                 if (Share.IdxDataList.ContainsKey(idxType))
                 {
                     Share.IdxDataList.Remove(idxType);
+                    _logger.Debug($"[AppendFiles] Cleared idx cache for {idxType}");
                 }
 
+                _logger.Info($"[AppendFiles] Successfully completed batch append: {successCount} files");
                 return successCount;
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.Error(ex, $"[AppendFiles] Error during batch append to {idxType}.idx/pak");
+
                 // 發生錯誤，從備份還原
                 try
                 {
@@ -482,14 +524,19 @@ namespace L1MapViewer.Reader
                     {
                         File.Copy(pakBackup, pakFilePath, true);
                         File.Delete(pakBackup);
+                        _logger.Info("[AppendFiles] Restored pak from backup");
                     }
                     if (File.Exists(idxBackup))
                     {
                         File.Copy(idxBackup, idxFilePath, true);
                         File.Delete(idxBackup);
+                        _logger.Info("[AppendFiles] Restored idx from backup");
                     }
                 }
-                catch { }
+                catch (Exception restoreEx)
+                {
+                    _logger.Error(restoreEx, "[AppendFiles] Failed to restore from backup");
+                }
 
                 return 0;
             }
