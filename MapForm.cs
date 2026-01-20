@@ -20886,7 +20886,7 @@ namespace L1FlyMapViewer
                 // 單選模式 - 顯示原有選項
                 var info = selectedInfos[0];
 
-                ToolStripMenuItem copyItem = new ToolStripMenuItem($"複製群組 {info.GroupId}");
+                ToolStripMenuItem copyItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("GroupThumbnail_CopyGroup"), info.GroupId));
                 copyItem.Click += (s, ev) => CopyGroupToClipboard(info);
 
                 ToolStripMenuItem gotoItem = new ToolStripMenuItem(LocalizationManager.L("GroupThumbnail_GotoLocation"));
@@ -20895,10 +20895,10 @@ namespace L1FlyMapViewer
                 ToolStripMenuItem showCellsItem = new ToolStripMenuItem(LocalizationManager.L("GroupThumbnail_ShowCells"));
                 showCellsItem.Click += (s, ev) => ShowLayer4GroupCells(info);
 
-                ToolStripMenuItem detailItem = new ToolStripMenuItem($"列出 L4 明細 ({info.Objects.Count} 個物件)");
+                ToolStripMenuItem detailItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("GroupThumbnail_DetailL4"), info.Objects.Count));
                 detailItem.Click += (s, ev) => ShowLayer4Details(info);
 
-                ToolStripMenuItem deleteItem = new ToolStripMenuItem($"刪除群組 {info.GroupId} ({info.Objects.Count} 個物件)");
+                ToolStripMenuItem deleteItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("GroupThumbnail_DeleteGroup"), info.GroupId, info.Objects.Count));
                 deleteItem.Click += (s, ev) => DeleteGroupFromMap(info);
 
                 menu.Items.Add(copyItem);
@@ -20907,7 +20907,7 @@ namespace L1FlyMapViewer
                 menu.Items.Add(detailItem);
                 menu.Items.Add(new ToolStripSeparator());
 
-                ToolStripMenuItem saveMaterialItem = new ToolStripMenuItem($"儲存群組 {info.GroupId} 為素材...");
+                ToolStripMenuItem saveMaterialItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("GroupThumbnail_SaveAsMaterial"), info.GroupId));
                 saveMaterialItem.Click += (s, ev) => SaveGroupsAsMaterial(new List<GroupThumbnailInfo> { info });
                 menu.Items.Add(saveMaterialItem);
 
@@ -20917,10 +20917,10 @@ namespace L1FlyMapViewer
                 // 變更群組 ID 選項
                 menu.Items.Add(new ToolStripSeparator());
 
-                ToolStripMenuItem changeIdItem = new ToolStripMenuItem($"變更群組 {info.GroupId} 的 ID...");
+                ToolStripMenuItem changeIdItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("GroupThumbnail_ChangeId"), info.GroupId));
                 changeIdItem.Click += (s, ev) => ChangeGroupId(selectedInfos, false);
 
-                ToolStripMenuItem autoNewIdItem = new ToolStripMenuItem($"自動指定新群組 ID");
+                ToolStripMenuItem autoNewIdItem = new ToolStripMenuItem(LocalizationManager.L("GroupThumbnail_AutoNewId"));
                 autoNewIdItem.Click += (s, ev) => ChangeGroupId(selectedInfos, true);
 
                 menu.Items.Add(changeIdItem);
@@ -20931,13 +20931,13 @@ namespace L1FlyMapViewer
                 {
                     menu.Items.Add(new ToolStripSeparator());
 
-                    ToolStripMenuItem setTransparentItem = new ToolStripMenuItem($"設定群組 {info.GroupId} 為透明 (Type=0)");
+                    ToolStripMenuItem setTransparentItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("GroupThumbnail_SetTransparent"), info.GroupId));
                     setTransparentItem.Click += (s, ev) => SetGroupLayer5Setting(new List<GroupThumbnailInfo> { info }, 0);
 
-                    ToolStripMenuItem setDisappearItem = new ToolStripMenuItem($"設定群組 {info.GroupId} 為消失 (Type=1)");
+                    ToolStripMenuItem setDisappearItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("GroupThumbnail_SetOpaque"), info.GroupId));
                     setDisappearItem.Click += (s, ev) => SetGroupLayer5Setting(new List<GroupThumbnailInfo> { info }, 1);
 
-                    ToolStripMenuItem removeLayer5Item = new ToolStripMenuItem($"移除群組 {info.GroupId} 的 Layer5 設定");
+                    ToolStripMenuItem removeLayer5Item = new ToolStripMenuItem(string.Format(LocalizationManager.L("GroupThumbnail_ClearLayer5"), info.GroupId));
                     removeLayer5Item.Click += (s, ev) => RemoveGroupLayer5Setting(new List<GroupThumbnailInfo> { info });
 
                     menu.Items.Add(setTransparentItem);
@@ -20950,16 +20950,16 @@ namespace L1FlyMapViewer
                 // 多選模式 - 顯示批次操作選項
                 string groupIds = string.Join(", ", selectedInfos.Select(i => i.GroupId));
 
-                ToolStripMenuItem copyItem = new ToolStripMenuItem($"複製 {selectedInfos.Count} 個群組 ({totalObjects} 個物件)");
+                ToolStripMenuItem copyItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("GroupThumbnail_CopyMultiple"), selectedInfos.Count, totalObjects));
                 copyItem.Click += (s, ev) => CopyMultipleGroupsToClipboard(selectedInfos);
 
-                ToolStripMenuItem deleteItem = new ToolStripMenuItem($"刪除 {selectedInfos.Count} 個群組 ({totalObjects} 個物件)");
+                ToolStripMenuItem deleteItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("GroupThumbnail_DeleteMultiple"), selectedInfos.Count, totalObjects));
                 deleteItem.Click += (s, ev) => DeleteMultipleGroupsFromMap(selectedInfos);
 
                 menu.Items.Add(copyItem);
                 menu.Items.Add(new ToolStripSeparator());
 
-                ToolStripMenuItem saveMaterialItem = new ToolStripMenuItem($"儲存 {selectedInfos.Count} 個群組為素材...");
+                ToolStripMenuItem saveMaterialItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("GroupThumbnail_SaveMultipleAsMaterial"), selectedInfos.Count));
                 saveMaterialItem.Click += (s, ev) => SaveGroupsAsMaterial(selectedInfos);
                 menu.Items.Add(saveMaterialItem);
 
@@ -20969,10 +20969,10 @@ namespace L1FlyMapViewer
                 // 變更群組 ID 選項
                 menu.Items.Add(new ToolStripSeparator());
 
-                ToolStripMenuItem changeIdItem = new ToolStripMenuItem($"變更 {selectedInfos.Count} 個群組的 ID...");
+                ToolStripMenuItem changeIdItem = new ToolStripMenuItem(string.Format(LocalizationManager.L("GroupThumbnail_ChangeIdMultiple"), selectedInfos.Count));
                 changeIdItem.Click += (s, ev) => ChangeGroupId(selectedInfos, false);
 
-                ToolStripMenuItem autoNewIdItem = new ToolStripMenuItem($"自動指定新群組 ID（各自獨立）");
+                ToolStripMenuItem autoNewIdItem = new ToolStripMenuItem(LocalizationManager.L("GroupThumbnail_AutoNewIdSeparate"));
                 autoNewIdItem.Click += (s, ev) => ChangeGroupId(selectedInfos, true);
 
                 menu.Items.Add(changeIdItem);

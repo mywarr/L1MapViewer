@@ -604,6 +604,22 @@ namespace L1MapViewer.Localization
             // === Group Thumbnail Context Menu ===
             { "GroupThumbnail_GotoLocation", "Go to location" },
             { "GroupThumbnail_ShowCells", "Show group cells" },
+            { "GroupThumbnail_CopyGroup", "Copy group {0}" },
+            { "GroupThumbnail_DetailL4", "List L4 details ({0} objects)" },
+            { "GroupThumbnail_DeleteGroup", "Delete group {0} ({1} objects)" },
+            { "GroupThumbnail_SaveAsMaterial", "Save group {0} as material..." },
+            { "GroupThumbnail_ChangeId", "Change group {0} ID..." },
+            { "GroupThumbnail_AutoNewId", "Auto assign new group ID" },
+            { "GroupThumbnail_AutoNewIdSeparate", "Auto assign new group ID (separate)" },
+            { "GroupThumbnail_CopyMultiple", "Copy {0} groups ({1} objects)" },
+            { "GroupThumbnail_DeleteMultiple", "Delete {0} groups ({1} objects)" },
+            { "GroupThumbnail_SaveMultipleAsMaterial", "Save {0} groups as material..." },
+            { "GroupThumbnail_ChangeIdMultiple", "Change {0} groups ID..." },
+            { "GroupThumbnail_ConfirmDelete", "Confirm Delete Group" },
+            { "GroupThumbnail_ConfirmDeleteMessage", "Are you sure you want to delete group {0}?\n{1} objects will be removed." },
+            { "GroupThumbnail_SetTransparent", "Set group {0} as transparent (Type=0)" },
+            { "GroupThumbnail_SetOpaque", "Set group {0} as opaque (Type=1)" },
+            { "GroupThumbnail_ClearLayer5", "Clear group {0} Layer5 setting" },
 
             // === Tile Cleanup Dialog ===
             { "Menu_Tools_CleanupTiles", "Cleanup Unused Tiles..." },

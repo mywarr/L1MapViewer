@@ -604,6 +604,22 @@ namespace L1MapViewer.Localization
             // === Group Thumbnail Context Menu ===
             { "GroupThumbnail_GotoLocation", "위치로 이동" },
             { "GroupThumbnail_ShowCells", "그룹 셀 표시" },
+            { "GroupThumbnail_CopyGroup", "그룹 {0} 복사" },
+            { "GroupThumbnail_DetailL4", "L4 세부정보 ({0}개 객체)" },
+            { "GroupThumbnail_DeleteGroup", "그룹 {0} 삭제 ({1}개 객체)" },
+            { "GroupThumbnail_SaveAsMaterial", "그룹 {0}을(를) 소재로 저장..." },
+            { "GroupThumbnail_ChangeId", "그룹 {0} ID 변경..." },
+            { "GroupThumbnail_AutoNewId", "새 그룹 ID 자동 할당" },
+            { "GroupThumbnail_AutoNewIdSeparate", "새 그룹 ID 자동 할당 (개별)" },
+            { "GroupThumbnail_CopyMultiple", "{0}개 그룹 복사 ({1}개 객체)" },
+            { "GroupThumbnail_DeleteMultiple", "{0}개 그룹 삭제 ({1}개 객체)" },
+            { "GroupThumbnail_SaveMultipleAsMaterial", "{0}개 그룹을 소재로 저장..." },
+            { "GroupThumbnail_ChangeIdMultiple", "{0}개 그룹 ID 변경..." },
+            { "GroupThumbnail_ConfirmDelete", "그룹 삭제 확인" },
+            { "GroupThumbnail_ConfirmDeleteMessage", "그룹 {0}을(를) 삭제하시겠습니까?\n{1}개 객체가 제거됩니다." },
+            { "GroupThumbnail_SetTransparent", "그룹 {0}을(를) 투명으로 설정 (Type=0)" },
+            { "GroupThumbnail_SetOpaque", "그룹 {0}을(를) 불투명으로 설정 (Type=1)" },
+            { "GroupThumbnail_ClearLayer5", "그룹 {0} Layer5 설정 지우기" },
 
             // === Tile Cleanup Dialog ===
             { "Menu_Tools_CleanupTiles", "미사용 타일 정리..." },

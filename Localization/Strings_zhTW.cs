@@ -606,6 +606,22 @@ namespace L1MapViewer.Localization
             // === Group Thumbnail Context Menu ===
             { "GroupThumbnail_GotoLocation", "跳轉到位置" },
             { "GroupThumbnail_ShowCells", "顯示群組所在格子" },
+            { "GroupThumbnail_CopyGroup", "複製群組 {0}" },
+            { "GroupThumbnail_DetailL4", "列出 L4 明細 ({0} 個物件)" },
+            { "GroupThumbnail_DeleteGroup", "刪除群組 {0} ({1} 個物件)" },
+            { "GroupThumbnail_SaveAsMaterial", "儲存群組 {0} 為素材..." },
+            { "GroupThumbnail_ChangeId", "變更群組 {0} 的 ID..." },
+            { "GroupThumbnail_AutoNewId", "自動指定新群組 ID" },
+            { "GroupThumbnail_AutoNewIdSeparate", "自動指定新群組 ID（各自獨立）" },
+            { "GroupThumbnail_CopyMultiple", "複製 {0} 個群組 ({1} 個物件)" },
+            { "GroupThumbnail_DeleteMultiple", "刪除 {0} 個群組 ({1} 個物件)" },
+            { "GroupThumbnail_SaveMultipleAsMaterial", "儲存 {0} 個群組為素材..." },
+            { "GroupThumbnail_ChangeIdMultiple", "變更 {0} 個群組的 ID..." },
+            { "GroupThumbnail_ConfirmDelete", "確認刪除群組" },
+            { "GroupThumbnail_ConfirmDeleteMessage", "確定要刪除群組 {0} 嗎？\n將移除 {1} 個物件。" },
+            { "GroupThumbnail_SetTransparent", "設定群組 {0} 為透明 (Type=0)" },
+            { "GroupThumbnail_SetOpaque", "設定群組 {0} 為不透明 (Type=1)" },
+            { "GroupThumbnail_ClearLayer5", "清除群組 {0} 的 Layer5 設定" },
 
             // === Tile Cleanup Dialog ===
             { "Menu_Tools_CleanupTiles", "清理未使用的 Tiles..." },

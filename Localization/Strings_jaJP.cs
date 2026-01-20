@@ -604,6 +604,22 @@ namespace L1MapViewer.Localization
             // === Group Thumbnail Context Menu ===
             { "GroupThumbnail_GotoLocation", "位置へ移動" },
             { "GroupThumbnail_ShowCells", "グループのセルを表示" },
+            { "GroupThumbnail_CopyGroup", "グループ {0} をコピー" },
+            { "GroupThumbnail_DetailL4", "L4 詳細を表示 ({0} オブジェクト)" },
+            { "GroupThumbnail_DeleteGroup", "グループ {0} を削除 ({1} オブジェクト)" },
+            { "GroupThumbnail_SaveAsMaterial", "グループ {0} を素材として保存..." },
+            { "GroupThumbnail_ChangeId", "グループ {0} の ID を変更..." },
+            { "GroupThumbnail_AutoNewId", "新しいグループ ID を自動割り当て" },
+            { "GroupThumbnail_AutoNewIdSeparate", "新しいグループ ID を自動割り当て（個別）" },
+            { "GroupThumbnail_CopyMultiple", "{0} グループをコピー ({1} オブジェクト)" },
+            { "GroupThumbnail_DeleteMultiple", "{0} グループを削除 ({1} オブジェクト)" },
+            { "GroupThumbnail_SaveMultipleAsMaterial", "{0} グループを素材として保存..." },
+            { "GroupThumbnail_ChangeIdMultiple", "{0} グループの ID を変更..." },
+            { "GroupThumbnail_ConfirmDelete", "グループ削除の確認" },
+            { "GroupThumbnail_ConfirmDeleteMessage", "グループ {0} を削除しますか？\n{1} オブジェクトが削除されます。" },
+            { "GroupThumbnail_SetTransparent", "グループ {0} を透明に設定 (Type=0)" },
+            { "GroupThumbnail_SetOpaque", "グループ {0} を不透明に設定 (Type=1)" },
+            { "GroupThumbnail_ClearLayer5", "グループ {0} の Layer5 設定をクリア" },
 
             // === Tile Cleanup Dialog ===
             { "Menu_Tools_CleanupTiles", "未使用タイルをクリーンアップ..." },

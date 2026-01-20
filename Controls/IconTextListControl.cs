@@ -346,10 +346,24 @@ namespace L1MapViewer.Controls
                     Invalidate();
                     SelectionChanged?.Invoke(this, EventArgs.Empty);
                 }
+                else if (MultiSelect && e.Buttons == Eto.Forms.MouseButtons.Alternate && _items[index].Selected)
+                {
+                    // 右鍵點擊已選取的項目時，不改變選取狀態（允許多選右鍵選單）
+                }
                 else
                 {
-                    // 單選
-                    SelectedIndex = index;
+                    // 單選：清除其他選取，只選取當前項目
+                    for (int i = 0; i < _items.Count; i++)
+                    {
+                        if (i != index && _items[i].Selected)
+                        {
+                            _items[i].Selected = false;
+                        }
+                    }
+                    _items[index].Selected = true;
+                    _selectedIndex = index;
+                    Invalidate();
+                    SelectionChanged?.Invoke(this, EventArgs.Empty);
                 }
             }
         }
