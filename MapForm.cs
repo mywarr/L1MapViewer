@@ -26681,6 +26681,53 @@ namespace L1FlyMapViewer
             return (overLimitIds, tileLimit, maxId);
         }
 
+        // 取得地圖中使用到的所有 TileId
+        private HashSet<int> GetUsedTileIds()
+        {
+            var usedTileIds = new HashSet<int>();
+
+            foreach (var kvp in _document.S32Files)
+            {
+                S32Data s32Data = kvp.Value;
+
+                // Layer1
+                for (int y = 0; y < 64; y++)
+                {
+                    for (int x = 0; x < 128; x++)
+                    {
+                        var cell = s32Data.Layer1[y, x];
+                        if (cell != null && cell.TileId > 0)
+                        {
+                            usedTileIds.Add(cell.TileId);
+                        }
+                    }
+                }
+
+                // Layer2
+                foreach (var item in s32Data.Layer2)
+                {
+                    if (item.TileId > 0)
+                        usedTileIds.Add(item.TileId);
+                }
+
+                // Layer4
+                foreach (var obj in s32Data.Layer4)
+                {
+                    if (obj.TileId > 0)
+                        usedTileIds.Add(obj.TileId);
+                }
+            }
+
+            return usedTileIds;
+        }
+
+        // 檢查使用到的 Tile 檔案完整性
+        private List<TileIntegrityChecker.TileCheckResult> GetCorruptedTiles()
+        {
+            var usedTileIds = GetUsedTileIds();
+            return TileIntegrityChecker.CheckMultipleTiles(usedTileIds);
+        }
+
         // 檢查 Layer5 異常和無效 TileId
         private void btnMapValidate_Click(object sender, EventArgs e)
         {
@@ -26689,8 +26736,10 @@ namespace L1FlyMapViewer
             var layer8ExtendedS32 = GetLayer8ExtendedS32Files();
             var (overLimitTileIds, tileLimit, maxTileId) = GetAllOverLimitTileIds();
             var invalidL5TypeItems = GetInvalidLayer5TypeItems();
+            var corruptedTiles = GetCorruptedTiles();
 
-            if (invalidL5Items.Count == 0 && invalidTileItems.Count == 0 && layer8ExtendedS32.Count == 0 && overLimitTileIds.Count == 0 && invalidL5TypeItems.Count == 0)
+            if (invalidL5Items.Count == 0 && invalidTileItems.Count == 0 && layer8ExtendedS32.Count == 0 &&
+                overLimitTileIds.Count == 0 && invalidL5TypeItems.Count == 0 && corruptedTiles.Count == 0)
             {
                 WinFormsMessageBox.Show("檢查完成，沒有發現任何異常。",
                     "檢查完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -26708,6 +26757,10 @@ namespace L1FlyMapViewer
                 if (noGroupCount > 0) l5Parts.Add($"GroupId不存在:{noGroupCount}");
                 if (noObjCount > 0) l5Parts.Add($"周圍無物件:{noObjCount}");
                 msgParts.Add($"• {invalidL5Items.Count} 個 Layer5 異常 ({string.Join(", ", l5Parts)})");
+            }
+            if (corruptedTiles.Count > 0)
+            {
+                msgParts.Add($"• {corruptedTiles.Count} 個 Tile 檔案損壞（偏移表異常）");
             }
             if (invalidTileItems.Count > 0)
             {
@@ -27289,6 +27342,60 @@ namespace L1FlyMapViewer
                     UpdateMapValidateButton();
                 };
                 pnlL5TypeButtons.GetControls().Add(btnL5TypeClearAll);
+            }
+
+            // ===== Tab 6: 損壞的 Tile 檔案 =====
+            if (corruptedTiles.Count > 0)
+            {
+                TabPage tabCorruptedTile = new TabPage($"損壞Tile ({corruptedTiles.Count})");
+                tabControl.GetTabPages().Add(tabCorruptedTile);
+
+                Label lblCorruptedTileSummary = new Label();
+                lblCorruptedTileSummary.Text = $"發現 {corruptedTiles.Count} 個 Tile 檔案的偏移表異常，可能會導致程式閃退。\n這些檔案可能在匯出過程中被截斷或損壞。";
+                lblCorruptedTileSummary.SetLocation(new Point(5, 5));
+                lblCorruptedTileSummary.Size = new Size(tabContentWidth - 10, 40);
+                lblCorruptedTileSummary.SetAnchor(AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right);
+                tabCorruptedTile.GetControls().Add(lblCorruptedTileSummary);
+
+                ListBox lbCorruptedTiles = new ListBox();
+                lbCorruptedTiles.SetLocation(new Point(5, 50));
+                lbCorruptedTiles.Size = new Size(tabContentWidth - 10, tabContentHeight - 130);
+                lbCorruptedTiles.Font = new Font("Consolas", 9);
+                lbCorruptedTiles.SetAnchor(AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right);
+
+                foreach (var tile in corruptedTiles)
+                {
+                    string frameInfo = tile.CorruptedFromFrame >= 0
+                        ? $", 從Frame {tile.CorruptedFromFrame} 開始異常"
+                        : "";
+                    string displayText = $"Tile {tile.TileId}.til - {tile.ErrorMessage} (Frames: {tile.FrameCount}, 損壞: {tile.CorruptedFrames.Count}{frameInfo})";
+                    lbCorruptedTiles.Items.Add(displayText);
+                }
+                tabCorruptedTile.GetControls().Add(lbCorruptedTiles);
+
+                // 提示面板
+                Panel pnlCorruptedTileInfo = new Panel();
+                pnlCorruptedTileInfo.SetLocation(new Point(5, tabContentHeight - 75));
+                pnlCorruptedTileInfo.Size = new Size(tabContentWidth - 10, 70);
+                pnlCorruptedTileInfo.SetAnchor(AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right);
+                tabCorruptedTile.GetControls().Add(pnlCorruptedTileInfo);
+
+                Label lblCorruptedTileHint = new Label();
+                lblCorruptedTileHint.Text = "修復方式：重新匯出這些 Tile 檔案，或從備份還原。\n損壞的 Tile 可能導致地圖載入時閃退。";
+                lblCorruptedTileHint.SetLocation(new Point(0, 0));
+                lblCorruptedTileHint.Size = new Size(tabContentWidth - 20, 40);
+                lblCorruptedTileHint.TextColor = Colors.Red;
+                pnlCorruptedTileInfo.GetControls().Add(lblCorruptedTileHint);
+
+                // 複製列表按鈕
+                Button btnCopyList = new Button { Text = "複製TileId列表", Location = new Point(0, 45), Size = new Size(120, 25) };
+                btnCopyList.Click += (s, args) =>
+                {
+                    string tileIdList = string.Join(", ", corruptedTiles.Select(t => t.TileId));
+                    Eto.Forms.Clipboard.Instance.Text = tileIdList;
+                    WinFormsMessageBox.Show($"已複製 {corruptedTiles.Count} 個 Tile ID 到剪貼簿。", "已複製");
+                };
+                pnlCorruptedTileInfo.GetControls().Add(btnCopyList);
             }
 
             // 關閉按鈕
