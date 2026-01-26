@@ -4286,6 +4286,89 @@ namespace L1FlyMapViewer
             ExportCurrentMapAsFs32();
         }
 
+        // 匯出地圖圖片（選單項目）
+        private void ExportMapImageMenuItem_Click(object sender, EventArgs e)
+        {
+            ExportMapAsImage();
+        }
+
+        // 匯出地圖為圖片
+        private void ExportMapAsImage()
+        {
+            if (string.IsNullOrEmpty(_document.MapId) || _document.S32Files.Count == 0)
+            {
+                WinFormsMessageBox.Show(LocalizationManager.L("Message_PleaseLoadMap"), LocalizationManager.L("Title_Info"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            int mapWidth = _document.MapPixelWidth;
+            int mapHeight = _document.MapPixelHeight;
+
+            using (var dialog = new ExportImageDialog(mapWidth, mapHeight))
+            {
+                if (dialog.ShowDialog(this) != DialogResult.Ok)
+                    return;
+
+                float scale = dialog.Scale;
+                string format = dialog.ImageFormat;
+                string ext = format == "bmp" ? ".bmp" : ".png";
+
+                using (var saveDialog = new SaveFileDialog())
+                {
+                    if (format == "bmp")
+                    {
+                        saveDialog.Filters.Add(new FileFilter("BMP", ".bmp"));
+                    }
+                    else
+                    {
+                        saveDialog.Filters.Add(new FileFilter("PNG", ".png"));
+                    }
+                    saveDialog.FileName = $"{_document.MapId}{ext}";
+
+                    if (saveDialog.ShowDialog(this) != DialogResult.Ok)
+                        return;
+
+                    try
+                    {
+                        toolStripStatusLabel1.Text = LocalizationManager.L("ExportImage_Exporting");
+                        ApplicationHelper.DoEvents();
+
+                        // 計算目標大小
+                        int targetSize = (int)(Math.Max(mapWidth, mapHeight) * scale);
+
+                        // 使用 MiniMapRenderer 渲染
+                        var renderer = new MiniMapRenderer();
+                        var checkedFiles = new HashSet<string>(_document.S32Files.Keys);
+
+                        using (var bitmap = renderer.RenderMiniMap(
+                            mapWidth,
+                            mapHeight,
+                            targetSize,
+                            _document.S32Files,
+                            checkedFiles,
+                            out _,
+                            out _))
+                        {
+                            // 儲存圖片
+                            var imageFormat = format == "bmp" ? ImageFormat.Bmp : ImageFormat.Png;
+                            bitmap.Save(saveDialog.FileName, imageFormat);
+                        }
+
+                        int outputWidth = (int)(mapWidth * scale);
+                        int outputHeight = (int)(mapHeight * scale);
+                        string resultMsg = LocalizationManager.L("ExportImage_ExportedTo", saveDialog.FileName, outputWidth, outputHeight);
+                        toolStripStatusLabel1.Text = resultMsg.Replace("\n", " ");
+                        ShowAutoCloseMessage(resultMsg, LocalizationManager.L("ExportImage_ExportComplete"));
+                    }
+                    catch (System.Exception ex)
+                    {
+                        _logger.Error(ex, "匯出地圖圖片失敗");
+                        WinFormsMessageBox.Show(LocalizationManager.L("Message_ExportFailed", ex.Message), LocalizationManager.L("Title_Error"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                }
+            }
+        }
+
         // 顯示單點座標
         private void ShowSinglePoint(int x, int y)
         {
