@@ -647,6 +647,7 @@ namespace L1MapViewer.Localization
             { "ExportImage_Pixels", "{0} x {1} 픽셀" },
             { "ExportImage_Export", "내보내기" },
             { "ExportImage_Exporting", "맵 이미지 내보내는 중..." },
+            { "ExportImage_Cancelling", "취소 중..." },
             { "ExportImage_ExportComplete", "내보내기 완료" },
             { "ExportImage_ExportedTo", "{0}에 내보냈습니다\n({1} x {2} 픽셀)" },
             { "Menu_File_ExportMapImage", "맵 이미지 내보내기..." },

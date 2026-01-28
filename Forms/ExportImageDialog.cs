@@ -137,22 +137,15 @@ namespace L1MapViewer.Forms
             int height = (int)(_mapHeight * scale);
             lblEstimatedSize.Text = LocalizationManager.L("ExportImage_Pixels", width, height);
 
-            // 計算預估 Runtime 記憶體使用量
-            // 基於實測：MiniMapRenderer 渲染過程中會使用大量記憶體
-            // - 輸出 bitmap、繪製緩衝區
-            // - Tile 資料結構、排序
-            // - .NET GC 開銷、SkiaSharp 內部緩衝區
-            // 實測約為：輸出像素數 × 24 bytes
-            long totalBytes = (long)width * height * 24;
+            // 使用分塊渲染後，記憶體使用量固定為約 50-100 MB
+            // - 單一區塊 (2048×2048): 8 MB
+            // - Tile 資料與排序: ~10 MB
+            // - PNG/BMP 編碼緩衝: ~10 MB
+            // - 其他開銷: ~20 MB
+            // 總計峰值約 50 MB，不隨輸出大小線性增長
+            const double fixedMemoryMB = 50.0;
 
-            double memoryMB = totalBytes / (1024.0 * 1024.0);
-            double memoryGB = memoryMB / 1024.0;
-
-            // 顯示預估記憶體使用量
-            string memoryValue = memoryGB >= 1.0
-                ? $"{memoryGB:F1} GB"
-                : $"{memoryMB:F0} MB";
-            lblMemoryWarning.Text = LocalizationManager.L("ExportImage_EstimatedMemory", memoryValue);
+            lblMemoryWarning.Text = LocalizationManager.L("ExportImage_EstimatedMemory", $"~{fixedMemoryMB:F0} MB");
         }
 
         private float GetSelectedScale()

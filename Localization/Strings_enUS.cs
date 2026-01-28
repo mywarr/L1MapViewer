@@ -647,6 +647,7 @@ namespace L1MapViewer.Localization
             { "ExportImage_Pixels", "{0} x {1} pixels" },
             { "ExportImage_Export", "Export" },
             { "ExportImage_Exporting", "Exporting map image..." },
+            { "ExportImage_Cancelling", "Cancelling..." },
             { "ExportImage_ExportComplete", "Export Complete" },
             { "ExportImage_ExportedTo", "Exported to {0}\n({1} x {2} pixels)" },
             { "Menu_File_ExportMapImage", "Export Map Image..." },

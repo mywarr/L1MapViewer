@@ -649,6 +649,7 @@ namespace L1MapViewer.Localization
             { "ExportImage_Pixels", "{0} x {1} 像素" },
             { "ExportImage_Export", "匯出" },
             { "ExportImage_Exporting", "正在匯出地圖圖片..." },
+            { "ExportImage_Cancelling", "正在取消..." },
             { "ExportImage_ExportComplete", "匯出完成" },
             { "ExportImage_ExportedTo", "已匯出至 {0}\n({1} x {2} 像素)" },
             { "Menu_File_ExportMapImage", "匯出地圖圖片..." },
