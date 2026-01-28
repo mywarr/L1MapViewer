@@ -257,9 +257,9 @@ namespace L1MapViewer.Models
                 {
                     s32Data.MarketRegion = Lin.Helper.Core.Map.L1MapMarketRegion.Load(marketRegionPath);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // 忽略載入失敗的 MarketRegion
+                    _logger.Error(ex, $"[LoadMarketRegion] Failed to load: {marketRegionPath}");
                 }
             }
             else

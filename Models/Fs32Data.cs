@@ -49,6 +49,11 @@ namespace L1MapViewer.Models
         /// </summary>
         public Dictionary<int, SprPackageData> Sprs { get; set; } = new Dictionary<int, SprPackageData>();
 
+        /// <summary>
+        /// MarketRegion 資料 (BlockName -> raw data)
+        /// </summary>
+        public Dictionary<string, byte[]> MarketRegions { get; set; } = new Dictionary<string, byte[]>();
+
         // Layer Flag 常數
         public const ushort FLAG_LAYER1 = 0x01;
         public const ushort FLAG_LAYER2 = 0x02;

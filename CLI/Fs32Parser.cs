@@ -87,7 +87,31 @@ namespace L1MapViewer.CLI
                 });
             }
 
-            // 3. 讀取 Tile 索引
+            // 3. 讀取 MarketRegion (在 blocks/ 資料夾中)
+            foreach (var entry in zipArchive.Entries)
+            {
+                if (entry.FullName.StartsWith("blocks/", StringComparison.OrdinalIgnoreCase) &&
+                    entry.Name.EndsWith(".MarketRegion", StringComparison.OrdinalIgnoreCase))
+                {
+                    // 從檔名取得 block name (如 7fff8000)
+                    string blockName = Path.GetFileNameWithoutExtension(entry.Name);
+
+                    byte[] mrData;
+                    using (var stream = entry.Open())
+                    using (var ms = new MemoryStream())
+                    {
+                        stream.CopyTo(ms);
+                        mrData = ms.ToArray();
+                    }
+
+                    if (mrData.Length > 0)
+                    {
+                        fs32.MarketRegions[blockName] = mrData;
+                    }
+                }
+            }
+
+            // 4. 讀取 Tile 索引
             var tileIndexEntry = zipArchive.GetEntry("tiles/index.json");
             if (tileIndexEntry != null)
             {
@@ -126,7 +150,7 @@ namespace L1MapViewer.CLI
                 }
             }
 
-            // 4. 讀取 SPR 檔案
+            // 5. 讀取 SPR 檔案
             // 收集所有 spr/file/ 和 spr/code/ 下的檔案
             var sprFileEntries = new Dictionary<int, Dictionary<string, ZipArchiveEntry>>();
             var sprCodeEntries = new Dictionary<int, ZipArchiveEntry>();

@@ -76,7 +76,20 @@ namespace L1MapViewer.CLI
                     writer.Write(json);
                 }
 
-                // 3. 寫入 Tiles
+                // 3. 寫入 MarketRegion (放在 blocks/ 資料夾)
+                if (fs32.MarketRegions.Count > 0)
+                {
+                    foreach (var kvp in fs32.MarketRegions)
+                    {
+                        var mrEntry = zipArchive.CreateEntry($"blocks/{kvp.Key}.MarketRegion", CompressionLevel.Optimal);
+                        using (var stream = mrEntry.Open())
+                        {
+                            stream.Write(kvp.Value, 0, kvp.Value.Length);
+                        }
+                    }
+                }
+
+                // 4. 寫入 Tiles
                 if (fs32.Tiles.Count > 0)
                 {
                     var tileIndex = new TileIndex();
@@ -104,7 +117,7 @@ namespace L1MapViewer.CLI
                     }
                 }
 
-                // 4. 寫入 SPR 檔案
+                // 5. 寫入 SPR 檔案
                 if (fs32.Sprs.Count > 0)
                 {
                     foreach (var spr in fs32.Sprs.Values)
@@ -161,6 +174,9 @@ namespace L1MapViewer.CLI
                 CollectTiles(fs32, s32Data);
             }
 
+            // 加入 MarketRegion
+            CollectMarketRegion(fs32, s32Data);
+
             return fs32;
         }
 
@@ -190,6 +206,9 @@ namespace L1MapViewer.CLI
                 {
                     CollectTiles(fs32, s32Data);
                 }
+
+                // 加入 MarketRegion
+                CollectMarketRegion(fs32, s32Data);
             }
 
             return fs32;
@@ -221,6 +240,9 @@ namespace L1MapViewer.CLI
                 {
                     CollectTiles(fs32, s32Data);
                 }
+
+                // 加入 MarketRegion
+                CollectMarketRegion(fs32, s32Data);
             }
 
             return fs32;
@@ -470,6 +492,26 @@ namespace L1MapViewer.CLI
                         TilData = tilData
                     };
                 }
+            }
+        }
+
+        /// <summary>
+        /// 收集 S32 對應的 MarketRegion
+        /// </summary>
+        private static void CollectMarketRegion(Fs32Data fs32, S32Data s32Data)
+        {
+            string blockName = $"{s32Data.SegInfo.nBlockX:x4}{s32Data.SegInfo.nBlockY:x4}";
+
+            if (s32Data.MarketRegion == null)
+                return;
+
+            if (fs32.MarketRegions.ContainsKey(blockName))
+                return;
+
+            byte[] mrData = s32Data.MarketRegion.ToBytes();
+            if (mrData != null && mrData.Length > 0)
+            {
+                fs32.MarketRegions[blockName] = mrData;
             }
         }
     }

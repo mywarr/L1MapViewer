@@ -3831,6 +3831,10 @@ namespace L1FlyMapViewer
                             {
                                 s32Data.SegInfo = segInfo;
                                 s32Data.FilePath = filePath;
+
+                                // 載入對應的 MarketRegion 檔案
+                                MapDocument.LoadMarketRegion(s32Data, filePath);
+
                                 tempDocument.S32Files[filePath] = s32Data;
                                 loadedCount++;
                                 if (loadedCount % 10 == 0)
@@ -5524,6 +5528,15 @@ namespace L1FlyMapViewer
 
                             Console.WriteLine($"[ImportFs32] Writing to {s32FilePath}");
                             S32Writer.Write(s32Data, s32FilePath);
+
+                            // 寫入對應的 MarketRegion（如果有）
+                            string blockName = $"{block.BlockX:x4}{block.BlockY:x4}";
+                            if (fs32.MarketRegions.TryGetValue(blockName, out byte[] mrData))
+                            {
+                                string mrFilePath = Path.Combine(mapPath, $"{blockName}.MarketRegion");
+                                File.WriteAllBytes(mrFilePath, mrData);
+                            }
+
                             importedCount++;
                             Console.WriteLine($"[ImportFs32] Block {block.BlockX:X4}{block.BlockY:X4} done");
                         }
@@ -5810,6 +5823,22 @@ namespace L1FlyMapViewer
                             // 寫入 S32
                             Console.WriteLine($"[ImportFs32AtPosition] Writing to {s32FilePath}");
                             S32Writer.Write(s32Data, s32FilePath);
+
+                            // 寫入對應的 MarketRegion（如果有）- 使用原始座標查詢，新座標寫入
+                            string origBlockName = $"{block.BlockX:x4}{block.BlockY:x4}";
+                            if (fs32.MarketRegions.TryGetValue(origBlockName, out byte[] mrData))
+                            {
+                                // MarketRegion 需要使用新座標的檔名
+                                string newBlockName = $"{newBlockX:x4}{newBlockY:x4}";
+                                string mrFilePath = Path.Combine(mapPath, $"{newBlockName}.MarketRegion");
+
+                                // 載入、修改 BlockX/BlockY、再寫入
+                                var mr = new Lin.Helper.Core.Map.L1MapMarketRegion(newBlockX, newBlockY, "MarketRegion");
+                                mr.LoadFromBytes(mrData);
+                                mr.Save(mrFilePath);
+                                Console.WriteLine($"[ImportFs32AtPosition] MarketRegion written to {mrFilePath}");
+                            }
+
                             importedCount++;
                         }
                         catch (Exception ex)
@@ -18659,6 +18688,15 @@ namespace L1FlyMapViewer
                         string s32FileName = $"{block.BlockX:X4}{block.BlockY:X4}.s32";
                         string s32FilePath = Path.Combine(mapPath, s32FileName);
                         S32Writer.Write(s32Data, s32FilePath);
+
+                        // 寫入對應的 MarketRegion（如果有）
+                        string blockName = $"{block.BlockX:x4}{block.BlockY:x4}";
+                        if (fs32.MarketRegions.TryGetValue(blockName, out byte[] mrData))
+                        {
+                            string mrFilePath = Path.Combine(mapPath, $"{blockName}.MarketRegion");
+                            File.WriteAllBytes(mrFilePath, mrData);
+                        }
+
                         importedCount++;
                     }
                     catch (Exception ex)
