@@ -2677,45 +2677,18 @@ namespace L1FlyMapViewer
                                                  worldBottom - worldTop + 6144);
             var candidateFiles = GetS32FilesInRect(queryRect);
 
-            _logger.Debug($"[GetCellsInIsometricRange] gameRange=({minGameX},{minGameY})-({maxGameX},{maxGameY}), queryRect=({queryRect.X},{queryRect.Y},{queryRect.Width},{queryRect.Height}), candidateFiles.Count={candidateFiles.Count}");
-            foreach (var f in candidateFiles)
-            {
-                _logger.Debug($"[GetCellsInIsometricRange] candidateFile: {Path.GetFileName(f)}");
-            }
-
             // 收集候選 S32 資料
             var candidateS32s = new List<S32Data>();
             foreach (var filePath in candidateFiles)
             {
                 if (_document.S32Files.TryGetValue(filePath, out var s32Data))
-                {
                     candidateS32s.Add(s32Data);
-                    _logger.Debug($"[GetCellsInIsometricRange] candidateS32: {Path.GetFileName(s32Data.FilePath)}, nLinBeginX={s32Data.SegInfo.nLinBeginX}, nLinBeginY={s32Data.SegInfo.nLinBeginY}");
-                }
             }
 
             // 使用 CoordinateHelper 的優化版本收集格子（支援擴展區域）
-            var result = CoordinateHelper.GetCellsInGameCoordRange(
+            return CoordinateHelper.GetCellsInGameCoordRange(
                 minGameX, maxGameX, minGameY, maxGameY,
                 candidateS32s, currentS32Data);
-
-            _logger.Debug($"[GetCellsInIsometricRange] result.Count={result.Count}");
-
-            // 統計每個 S32 有多少格子被選中
-            var s32CellCounts = new Dictionary<string, int>();
-            foreach (var cell in result)
-            {
-                var fname = Path.GetFileName(cell.S32Data.FilePath);
-                if (!s32CellCounts.ContainsKey(fname))
-                    s32CellCounts[fname] = 0;
-                s32CellCounts[fname]++;
-            }
-            foreach (var kvp in s32CellCounts)
-            {
-                _logger.Debug($"[GetCellsInIsometricRange] S32 {kvp.Key} has {kvp.Value} cells selected");
-            }
-
-            return result;
         }
 
         // 重新載入當前地圖
@@ -9690,11 +9663,16 @@ namespace L1FlyMapViewer
         // 查找點擊位置的 Layer8 標記
         private (string s32Path, int index)? FindLayer8MarkerAtPosition(int worldX, int worldY)
         {
-            const int hitRadius = 20;  // 標記點擊範圍（加大）
-            Console.WriteLine($"[Layer8-Click] Finding marker at world ({worldX}, {worldY})");
+            const int hitRadius = 20;  // 標記點擊範圍
 
-            foreach (var s32Data in _document.S32Files.Values)
+            // 用空間索引快速篩選點擊位置附近的 S32
+            var queryRect = new Rectangle(worldX - hitRadius, worldY - hitRadius, hitRadius * 2, hitRadius * 2);
+            var candidateFiles = GetS32FilesInRect(queryRect);
+
+            foreach (var filePath in candidateFiles)
             {
+                if (!_document.S32Files.TryGetValue(filePath, out var s32Data))
+                    continue;
                 if (s32Data.Layer8.Count == 0) continue;
 
                 int[] loc = s32Data.SegInfo.GetLoc(1.0);
@@ -9722,20 +9700,22 @@ namespace L1FlyMapViewer
                     int markerWorldX = mx + baseX + layer1X * 24 + layer1Y * 24 + 12;
                     int markerWorldY = my + baseY + layer1Y * 12 + 12;
 
-                    // 檢查是否在點擊範圍內
-                    int dx = worldX - markerWorldX;
-                    int dy = worldY - markerWorldY;
-                    int distSq = dx * dx + dy * dy;
+                    // 檢查是否在點擊範圍內（使用 long 避免整數溢位）
+                    long dx = worldX - markerWorldX;
+                    long dy = worldY - markerWorldY;
+                    long distSq = dx * dx + dy * dy;
+
+                    // 安全檢查：確保 distSq 是有效的正數
+                    if (distSq < 0 || distSq > int.MaxValue)
+                        continue;
 
                     if (distSq <= hitRadius * hitRadius)
                     {
-                        Console.WriteLine($"[Layer8-Click] HIT! marker at ({markerWorldX},{markerWorldY}), dist={Math.Sqrt(distSq):F1}");
                         return (s32Data.FilePath, i);
                     }
                 }
             }
 
-            Console.WriteLine($"[Layer8-Click] No marker found");
             return null;
         }
 
