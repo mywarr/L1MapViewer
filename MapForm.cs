@@ -4540,21 +4540,8 @@ namespace L1FlyMapViewer
                             s32Data.SegInfo = fileData.item.SegInfo;
                             s32Data.IsModified = false;
 
-                            // 載入對應的 MarketRegion 檔案
-                            string fileName = Path.GetFileNameWithoutExtension(fileData.item.FilePath);
-                            string marketRegionPath = Path.Combine(Path.GetDirectoryName(fileData.item.FilePath)!, $"{fileName}.MarketRegion");
-                            if (File.Exists(marketRegionPath))
-                            {
-                                try
-                                {
-                                    s32Data.MarketRegion = Lin.Helper.Core.Map.L1MapMarketRegion.Load(marketRegionPath);
-                                    _logger.Info($"[MARKET-LOAD] Loaded: {marketRegionPath}, CountInRegion={s32Data.MarketRegion.CountInRegion()}");
-                                }
-                                catch (Exception ex)
-                                {
-                                    _logger.Error(ex, $"[MARKET-LOAD] Failed to load: {marketRegionPath}");
-                                }
-                            }
+                            // 載入對應的 MarketRegion 檔案（使用共用方法）
+                            MapDocument.LoadMarketRegion(s32Data, fileData.item.FilePath);
 
                             parsedResults.Add((fileData.item.FilePath, s32Data));
                         }

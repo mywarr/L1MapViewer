@@ -150,83 +150,80 @@ namespace L1MapViewer.Models
         }
 
         /// <summary>
-        /// 載入 S32 檔案（平行解析）
+        /// 載入 S32 檔案（平行解析）- 使用 MapInfo.FullFileNameList
         /// </summary>
         private void LoadS32Files()
         {
-            string s32Folder = Path.Combine(Share.LineagePath, "Map", MapId);
-            if (!Directory.Exists(s32Folder))
+            if (MapInfo?.FullFileNameList == null || MapInfo.FullFileNameList.Count == 0)
                 return;
 
             var totalSw = Stopwatch.StartNew();
-            string[] s32FilePaths = Directory.GetFiles(s32Folder, "*.s32");
-            var enumSw = totalSw.ElapsedMilliseconds;
 
-            // 平行解析 S32 檔案
-            var parsedFiles = new System.Collections.Concurrent.ConcurrentBag<(string filePath, S32Data s32Data)>();
+            // 從 MapInfo.FullFileNameList 取得檔案清單（已包含 SegInfo）
+            var fileList = MapInfo.FullFileNameList.ToList();
+            _logger.Debug($"[LoadS32Files] Loading {fileList.Count} files from MapInfo.FullFileNameList");
+
+            // 平行解析 S32/SEG 檔案
+            var parsedFiles = new System.Collections.Concurrent.ConcurrentBag<(string filePath, S32Data s32Data, Struct.L1MapSeg segInfo)>();
             var parseSw = Stopwatch.StartNew();
 
-            System.Threading.Tasks.Parallel.ForEach(s32FilePaths, filePath =>
+            System.Threading.Tasks.Parallel.ForEach(fileList, kvp =>
             {
+                string filePath = kvp.Key;
+                Struct.L1MapSeg segInfo = kvp.Value;
+
                 try
                 {
-                    S32Data s32Data = CLI.S32Parser.ParseFile(filePath);
+                    if (!File.Exists(filePath))
+                        return;
 
-                    // 設置 SegInfo
-                    string fileName = Path.GetFileNameWithoutExtension(filePath);
-                    if (fileName.Length >= 8)
+                    S32Data s32Data;
+                    if (segInfo.isS32)
                     {
-                        string blockXStr = fileName.Substring(0, 4);
-                        string blockYStr = fileName.Substring(4, 4);
-                        if (int.TryParse(blockXStr, System.Globalization.NumberStyles.HexNumber, null, out int blockX) &&
-                            int.TryParse(blockYStr, System.Globalization.NumberStyles.HexNumber, null, out int blockY))
-                        {
-                            var segInfo = new Struct.L1MapSeg(blockX, blockY, true);
-                            segInfo.nMapMinBlockX = MapInfo.nMinBlockX;
-                            segInfo.nMapMinBlockY = MapInfo.nMinBlockY;
-                            segInfo.nMapBlockCountX = MapInfo.nBlockCountX;
-                            s32Data.SegInfo = segInfo;
-
-                            // 載入對應的 MarketRegion 檔案
-                            string marketRegionPath = Path.Combine(Path.GetDirectoryName(filePath)!, $"{fileName}.MarketRegion");
-                            bool marketExists = File.Exists(marketRegionPath);
-                            _logger.Info($"[MARKET-LOAD] Check: {marketRegionPath}, Exists={marketExists}");
-                            if (marketExists)
-                            {
-                                try
-                                {
-                                    s32Data.MarketRegion = Lin.Helper.Core.Map.L1MapMarketRegion.Load(marketRegionPath);
-                                    _logger.Info($"[MARKET-LOAD] Loaded: {marketRegionPath}, CountInRegion={s32Data.MarketRegion.CountInRegion()}");
-                                }
-                                catch (Exception ex)
-                                {
-                                    _logger.Error(ex, $"[MARKET-LOAD] Failed to load: {marketRegionPath}");
-                                }
-                            }
-                        }
+                        // 解析 .s32 檔案
+                        s32Data = CLI.S32Parser.ParseFile(filePath);
+                    }
+                    else
+                    {
+                        // 解析 .seg 檔案
+                        s32Data = CLI.SegParser.ParseFile(filePath);
                     }
 
-                    parsedFiles.Add((filePath, s32Data));
+                    if (s32Data != null)
+                    {
+                        s32Data.FilePath = filePath;
+                        s32Data.SegInfo = segInfo;
+                        s32Data.IsModified = false;
+
+                        // 載入對應的 MarketRegion 檔案
+                        LoadMarketRegion(s32Data, filePath);
+
+                        parsedFiles.Add((filePath, s32Data, segInfo));
+                    }
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
-                    // 忽略無法載入的檔案
+                    _logger.Error(ex, $"[LoadS32Files] Failed to parse: {filePath}");
                 }
             });
             parseSw.Stop();
 
             // 順序加入集合（確保執行緒安全）
             var collectSw = Stopwatch.StartNew();
-            foreach (var (filePath, s32Data) in parsedFiles)
+            foreach (var (filePath, s32Data, segInfo) in parsedFiles)
             {
                 S32Files[filePath] = s32Data;
 
                 // 建立顯示項目
+                string fileName = Path.GetFileName(filePath);
+                string fileType = segInfo.isS32 ? "" : " [SEG]";
+                string displayName = $"{fileName}{fileType} ({segInfo.nBlockX:X4},{segInfo.nBlockY:X4}) [{segInfo.nLinBeginX},{segInfo.nLinBeginY}~{segInfo.nLinEndX},{segInfo.nLinEndY}]";
+
                 var fileItem = new S32FileItem
                 {
                     FilePath = filePath,
-                    DisplayName = Path.GetFileName(filePath),
-                    SegInfo = s32Data.SegInfo,
+                    DisplayName = displayName,
+                    SegInfo = segInfo,
                     IsChecked = true
                 };
                 S32FileItems.Add(fileItem);
@@ -239,8 +236,31 @@ namespace L1MapViewer.Models
 
             totalSw.Stop();
 
-            Console.WriteLine($"[LoadS32Files] files={s32FilePaths.Length}, enum={enumSw}ms, parse={parseSw.ElapsedMilliseconds}ms, collect={collectSw.ElapsedMilliseconds}ms, total={totalSw.ElapsedMilliseconds}ms");
-            Console.WriteLine($"[MapBounds] GameX: {MapMinGameX}~{MapMaxGameX}, GameY: {MapMinGameY}~{MapMaxGameY}");
+            _logger.Info($"[LoadS32Files] files={fileList.Count}, parse={parseSw.ElapsedMilliseconds}ms, collect={collectSw.ElapsedMilliseconds}ms, total={totalSw.ElapsedMilliseconds}ms");
+            _logger.Debug($"[MapBounds] GameX: {MapMinGameX}~{MapMaxGameX}, GameY: {MapMinGameY}~{MapMaxGameY}");
+        }
+
+        /// <summary>
+        /// 載入對應的 MarketRegion 檔案
+        /// </summary>
+        /// <param name="s32Data">S32 資料</param>
+        /// <param name="filePath">S32 檔案路徑</param>
+        public static void LoadMarketRegion(S32Data s32Data, string filePath)
+        {
+            string fileName = Path.GetFileNameWithoutExtension(filePath);
+            string marketRegionPath = Path.Combine(Path.GetDirectoryName(filePath)!, $"{fileName}.MarketRegion");
+
+            if (File.Exists(marketRegionPath))
+            {
+                try
+                {
+                    s32Data.MarketRegion = Lin.Helper.Core.Map.L1MapMarketRegion.Load(marketRegionPath);
+                }
+                catch
+                {
+                    // 忽略載入失敗的 MarketRegion
+                }
+            }
         }
 
         /// <summary>
