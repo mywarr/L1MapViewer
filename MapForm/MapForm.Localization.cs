@@ -93,6 +93,8 @@ namespace L1FlyMapViewer
 
             // 說明選單項目
             discordToolStripMenuItem.Text = LocalizationManager.L("Menu_Help_Discord");
+            sourceCodeToolStripMenuItem.Text = LocalizationManager.L("Menu_Help_SourceCode");
+            pakViewerToolStripMenuItem.Text = LocalizationManager.L("Menu_Help_PakViewer");
             languageToolStripMenuItem.Text = LocalizationManager.L("Menu_Language");
             menuAbout.Text = LocalizationManager.L("Menu_Help_About");
 

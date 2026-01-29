@@ -28475,6 +28475,24 @@ namespace L1FlyMapViewer
             });
         }
 
+        private void sourceCodeToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "https://github.com/L1Rern/L1MapViewer",
+                UseShellExecute = true
+            });
+        }
+
+        private void pakViewerToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "https://github.com/L1Rern/PakViewer",
+                UseShellExecute = true
+            });
+        }
+
         #region 批次刪除 Tile
 
         private void batchDeleteTileToolStripMenuItem_Click(object sender, EventArgs e)

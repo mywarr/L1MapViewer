@@ -53,6 +53,8 @@ namespace L1MapViewer.Localization
             { "Menu_MapEditor", "マップエディタ" },
             { "Menu_Help", "ヘルプ(&H)" },
             { "Menu_Help_Discord", "Discordで議論する" },
+            { "Menu_Help_SourceCode", "ソースコード (GitHub)" },
+            { "Menu_Help_PakViewer", "PakViewer (PAKエディタ)" },
             { "Menu_Help_About", "バージョン情報..." },
             { "Menu_Language", "言語" },
             { "Menu_Export_ServerPassability", "サーバー通行データ出力" },

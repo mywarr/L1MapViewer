@@ -70,6 +70,8 @@ namespace L1FlyMapViewer
 
         // 說明選單項目
         private ToolStripMenuItem discordToolStripMenuItem;
+        private ToolStripMenuItem sourceCodeToolStripMenuItem;
+        private ToolStripMenuItem pakViewerToolStripMenuItem;
         private ToolStripMenuItem languageToolStripMenuItem;
         private ToolStripMenuItem langZhTWToolStripMenuItem;
         private ToolStripMenuItem langJaJPToolStripMenuItem;
@@ -274,6 +276,8 @@ namespace L1FlyMapViewer
 
             // 說明選單項目
             this.discordToolStripMenuItem = new ToolStripMenuItem();
+            this.sourceCodeToolStripMenuItem = new ToolStripMenuItem();
+            this.pakViewerToolStripMenuItem = new ToolStripMenuItem();
             this.languageToolStripMenuItem = new ToolStripMenuItem();
             this.langZhTWToolStripMenuItem = new ToolStripMenuItem();
             this.langJaJPToolStripMenuItem = new ToolStripMenuItem();
@@ -694,6 +698,8 @@ namespace L1FlyMapViewer
             this.menuHelp.Text = "說明(&H)";
             this.menuHelp.DropDownItems.AddRange(new ToolStripItem[] {
                 this.discordToolStripMenuItem,
+                this.sourceCodeToolStripMenuItem,
+                this.pakViewerToolStripMenuItem,
                 new ToolStripSeparator(),
                 this.languageToolStripMenuItem,
                 new ToolStripSeparator(),
@@ -703,6 +709,14 @@ namespace L1FlyMapViewer
             this.discordToolStripMenuItem.SetName("discordToolStripMenuItem");
             this.discordToolStripMenuItem.Text = "到 Discord 討論";
             this.discordToolStripMenuItem.Click += new System.EventHandler(this.discordToolStripMenuItem_Click);
+
+            this.sourceCodeToolStripMenuItem.SetName("sourceCodeToolStripMenuItem");
+            this.sourceCodeToolStripMenuItem.Text = "原始碼 (GitHub)";
+            this.sourceCodeToolStripMenuItem.Click += new System.EventHandler(this.sourceCodeToolStripMenuItem_Click);
+
+            this.pakViewerToolStripMenuItem.SetName("pakViewerToolStripMenuItem");
+            this.pakViewerToolStripMenuItem.Text = "PakViewer (PAK 編輯器)";
+            this.pakViewerToolStripMenuItem.Click += new System.EventHandler(this.pakViewerToolStripMenuItem_Click);
 
             this.languageToolStripMenuItem.SetName("languageToolStripMenuItem");
             this.languageToolStripMenuItem.Text = "Language";
