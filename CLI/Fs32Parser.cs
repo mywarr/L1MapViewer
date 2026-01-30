@@ -115,6 +115,7 @@ namespace L1MapViewer.CLI
             var tileIndexEntry = zipArchive.GetEntry("tiles/index.json");
             if (tileIndexEntry != null)
             {
+                // 有 index.json：使用索引讀取 tiles
                 TileIndex tileIndex;
                 using (var stream = tileIndexEntry.Open())
                 using (var reader = new StreamReader(stream, Encoding.UTF8))
@@ -145,6 +146,40 @@ namespace L1MapViewer.CLI
                     {
                         OriginalTileId = tileId,
                         Md5Hash = TileHashManager.HexToMd5(kvp.Value),
+                        TilData = tilData
+                    };
+                }
+            }
+            else
+            {
+                // 沒有 index.json：掃描 tiles/ 目錄並自動計算 MD5
+                foreach (var entry in zipArchive.Entries)
+                {
+                    if (!entry.FullName.StartsWith("tiles/", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    if (!entry.Name.EndsWith(".til", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    // 從檔名解析 tileId (例如 "12345.til")
+                    string baseName = Path.GetFileNameWithoutExtension(entry.Name);
+                    if (!int.TryParse(baseName, out int tileId))
+                        continue;
+
+                    byte[] tilData;
+                    using (var stream = entry.Open())
+                    using (var ms = new MemoryStream())
+                    {
+                        stream.CopyTo(ms);
+                        tilData = ms.ToArray();
+                    }
+
+                    // 自動計算 MD5
+                    byte[] md5Hash = TileHashManager.CalculateMd5(tilData);
+
+                    fs32.Tiles[tileId] = new TilePackageData
+                    {
+                        OriginalTileId = tileId,
+                        Md5Hash = md5Hash,
                         TilData = tilData
                     };
                 }
@@ -305,6 +340,7 @@ namespace L1MapViewer.CLI
                     var tileIndexEntry = zipArchive.GetEntry("tiles/index.json");
                     if (tileIndexEntry != null)
                     {
+                        // 有 index.json：從索引讀取數量
                         using (var stream = tileIndexEntry.Open())
                         using (var reader = new StreamReader(stream, Encoding.UTF8))
                         {
@@ -312,6 +348,20 @@ namespace L1MapViewer.CLI
                             var tileIndex = JsonSerializer.Deserialize<TileIndex>(json);
                             info.TileCount = tileIndex?.Tiles?.Count ?? 0;
                         }
+                    }
+                    else
+                    {
+                        // 沒有 index.json：掃描 tiles/*.til 檔案數量
+                        int tileCount = 0;
+                        foreach (var entry in zipArchive.Entries)
+                        {
+                            if (entry.FullName.StartsWith("tiles/", StringComparison.OrdinalIgnoreCase) &&
+                                entry.Name.EndsWith(".til", StringComparison.OrdinalIgnoreCase))
+                            {
+                                tileCount++;
+                            }
+                        }
+                        info.TileCount = tileCount;
                     }
 
                     return info;
