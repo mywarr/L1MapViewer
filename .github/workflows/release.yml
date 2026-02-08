@@ -61,11 +61,16 @@ jobs:
       run: |
         dotnet publish ${{ env.CSPROJ_NAME }} -f net10.0-windows --configuration Release --self-contained false -o publish-fd /p:Version=${{ steps.get_version.outputs.DOTNET_VERSION }}
 
+    - name: Build Win7 (SkiaSharp 2.88)
+      run: |
+        dotnet publish ${{ env.CSPROJ_NAME }} -f net10.0-windows --configuration Release --self-contained false -o publish-win7 /p:Version=${{ steps.get_version.outputs.DOTNET_VERSION }} /p:SkiaLegacy=true
+
     - name: Create ZIP archives
       shell: pwsh
       run: |
         Compress-Archive -Path "publish-sc/*" -DestinationPath "${{ env.PROJECT_NAME }}-${{ steps.get_version.outputs.TAG }}-win-x64-self-contained.zip"
         Compress-Archive -Path "publish-fd/*" -DestinationPath "${{ env.PROJECT_NAME }}-${{ steps.get_version.outputs.TAG }}-win-x64.zip"
+        Compress-Archive -Path "publish-win7/*" -DestinationPath "${{ env.PROJECT_NAME }}-${{ steps.get_version.outputs.TAG }}-win7-x64.zip"
 
     - name: Upload self-contained artifact
       uses: actions/upload-artifact@v4
@@ -78,6 +83,12 @@ jobs:
       with:
         name: ${{ env.PROJECT_NAME }}-win-x64
         path: ${{ env.PROJECT_NAME }}-${{ steps.get_version.outputs.TAG }}-win-x64.zip
+
+    - name: Upload Win7 artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.PROJECT_NAME }}-win7-x64
+        path: ${{ env.PROJECT_NAME }}-${{ steps.get_version.outputs.TAG }}-win7-x64.zip
 
   build-linux:
     runs-on: ubuntu-latest
@@ -342,8 +353,9 @@ jobs:
 
           | Platform | File | Note |
           |----------|------|------|
-          | Windows x64 | `*-win-x64.zip` | 需安裝 [.NET 10 Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |
-          | Windows x64 | `*-win-x64-self-contained.zip` | 包含 .NET Runtime，可直接執行 |
+          | Windows x64 (Win10+) | `*-win-x64.zip` | 需安裝 [.NET 10 Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |
+          | Windows x64 (Win10+) | `*-win-x64-self-contained.zip` | 包含 .NET Runtime，可直接執行 |
+          | Windows x64 (Win7+) | `*-win7-x64.zip` | Win7 相容版，需安裝 .NET 10 Runtime |
           | Linux x64 | `*-linux-x64.zip` | Self-contained |
           | macOS Universal | `*-osx-universal.dmg` | Self-contained, 支援 Intel & Apple Silicon |
 
@@ -389,7 +401,7 @@ jobs:
           📦 [下載連結](https://github.com/${{ github.repository }}/releases/tag/${{ steps.get_version.outputs.TAG }})
           📝 [變更紀錄](https://github.com/${{ github.repository }}/commits/${{ steps.get_version.outputs.TAG }})
 
-          支援平台: Windows x64, Linux x64, macOS (Intel & Apple Silicon)
+          支援平台: Windows x64 (Win7+/Win10+), Linux x64, macOS (Intel & Apple Silicon)
         color: 0x00ff00
 
     - name: Discord Release Notification (Dev Channel)
@@ -405,5 +417,5 @@ jobs:
           📦 [下載連結](https://github.com/${{ github.repository }}/releases/tag/${{ steps.get_version.outputs.TAG }})
           📝 [變更紀錄](https://github.com/${{ github.repository }}/commits/${{ steps.get_version.outputs.TAG }})
 
-          支援平台: Windows x64, Linux x64, macOS (Intel & Apple Silicon)
+          支援平台: Windows x64 (Win7+/Win10+), Linux x64, macOS (Intel & Apple Silicon)
         color: 0x00ff00

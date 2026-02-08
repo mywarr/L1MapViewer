@@ -8,6 +8,8 @@
         <UseWPF Condition="$([MSBuild]::IsOSPlatform('Windows'))">true</UseWPF>
         <!-- Define WINDOWS for conditional compilation -->
         <DefineConstants Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(DefineConstants);WINDOWS</DefineConstants>
+        <!-- Define SKIA_LEGACY for Win7 build with SkiaSharp 2.88 -->
+        <DefineConstants Condition="'$(SkiaLegacy)' == 'true'">$(DefineConstants);SKIA_LEGACY</DefineConstants>
         <!-- Allow running on newer .NET versions if net8.0 runtime isn't available -->
         <RollForward>Major</RollForward>
         <!-- RuntimeIdentifiers required by Eto.Platform.macOS -->
@@ -48,13 +50,17 @@
       <!-- On macOS, reference the platform package for NuGet restore but assets come from manual copy -->
       <PackageReference Include="Eto.Platform.macOS" Version="2.10.2" Condition="$([MSBuild]::IsOSPlatform('OSX'))" GeneratePathProperty="true" />
       <PackageReference Include="Eto.Platform.Wpf" Version="2.10.2" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
-      <PackageReference Include="Eto.SkiaDraw" Version="0.2.0" />
       <PackageReference Include="NLog" Version="6.0.7" />
 
-      <!-- Cross-platform graphics -->
-      <PackageReference Include="SkiaSharp" Version="3.119.1" />
-      <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.1" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
-      <PackageReference Include="SkiaSharp.NativeAssets.macOS" Version="3.119.1" Condition="$([MSBuild]::IsOSPlatform('OSX'))" />
+      <!-- SkiaSharp: 預設使用 3.x (Win10+)，傳入 /p:SkiaLegacy=true 使用 2.88 (Win7) -->
+      <PackageReference Include="SkiaSharp" Version="3.119.1" Condition="'$(SkiaLegacy)' != 'true'" />
+      <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.1" Condition="'$(SkiaLegacy)' != 'true' AND $([MSBuild]::IsOSPlatform('Linux'))" />
+      <PackageReference Include="SkiaSharp.NativeAssets.macOS" Version="3.119.1" Condition="'$(SkiaLegacy)' != 'true' AND $([MSBuild]::IsOSPlatform('OSX'))" />
+      <PackageReference Include="Eto.SkiaDraw" Version="0.2.0" Condition="'$(SkiaLegacy)' != 'true'" />
+
+      <PackageReference Include="SkiaSharp" Version="2.88.9" Condition="'$(SkiaLegacy)' == 'true'" />
+      <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="2.88.9" Condition="'$(SkiaLegacy)' == 'true' AND $([MSBuild]::IsOSPlatform('Linux'))" />
+      <PackageReference Include="SkiaSharp.NativeAssets.macOS" Version="2.88.9" Condition="'$(SkiaLegacy)' == 'true' AND $([MSBuild]::IsOSPlatform('OSX'))" />
 
       <!-- Existing dependencies -->
       <PackageReference Include="Lin.Helper.Core" Version="1.4.2" />

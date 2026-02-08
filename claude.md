@@ -46,6 +46,30 @@ Console.WriteLine($"Error: {ex.Message}");
 
 ## 建置設定
 
+### **[重要] Windows 7 相容性 — 雙版本建置**
+
+SkiaSharp 3.x 的 native DLL 需要 Windows 10+ API，在 Windows 7 上會 crash (`DllNotFoundException`)。
+專案透過條件編譯 `SKIA_LEGACY` 支援兩種建置模式：
+
+```bash
+# 預設建置 (Win10+, SkiaSharp 3.x + Eto.SkiaDraw)
+dotnet build -o bin/Debug/cli
+
+# Windows 7 相容建置 (SkiaSharp 2.88.9, 無 Eto.SkiaDraw)
+dotnet build -o bin/Debug/cli "-p:SkiaLegacy=true"
+```
+
+**架構說明：**
+- SkiaSharp 2.88 和 3.x 的 C# API 幾乎相同（`SKBitmap`, `SKCanvas`, `SKPaint` 等）
+- 唯一差異在顯示控制項：SkiaSharp 3.x 使用 `Eto.SkiaDraw` 的 `SkiaDrawable`，2.88 無此套件
+- Legacy 建置使用 `Eto.Forms.Drawable` + 像素複製（`SKBitmap` → `Eto.Drawing.Bitmap`）作為替代
+- 受影響的檔案僅有 `Controls/MapViewerControl.cs` 和 `Controls/MiniMapControl.cs`（`#if SKIA_LEGACY` 區段）
+- 所有渲染邏輯（tile 渲染、overlay 繪製）不受影響，兩版本共用相同程式碼
+
+**發行時需要產出兩個版本：**
+1. 標準版 (Win10+) — 預設建置
+2. 相容版 (Win7+) — 加上 `/p:SkiaLegacy=true`
+
 ### 避免 IDE 與 CLI 建置衝突
 
 為了避免 Rider/IDE 與 CLI 建置互相干擾，請使用不同的輸出目錄：

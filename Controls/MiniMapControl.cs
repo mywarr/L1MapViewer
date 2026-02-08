@@ -4,7 +4,9 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using Eto.Forms;
 using Eto.Drawing;
+#if !SKIA_LEGACY
 using Eto.SkiaDraw;
+#endif
 using SkiaSharp;
 using L1MapViewer.Compatibility;
 using L1MapViewer.Helper;
@@ -23,7 +25,11 @@ namespace L1MapViewer.Controls
 
         private static readonly Logger _logger = LogManager.GetCurrentClassLogger();
 
+#if SKIA_LEGACY
+        private MiniMapLegacyDrawable _skiaDrawable;
+#else
         private MiniMapSkiaDrawable _skiaDrawable;
+#endif
         private readonly MapRenderingCore _renderingCore;
         private SKBitmap _skMiniMapBitmap;
         private MiniMapRenderer.MiniMapBounds _bounds;
@@ -149,8 +155,11 @@ namespace L1MapViewer.Controls
             this.BackgroundColor = Colors.Black;
             this.SetTabStop(false); // 不搶奪鍵盤焦點
 
-            // 使用 SkiaDrawable 取代 PictureBox
+#if SKIA_LEGACY
+            _skiaDrawable = new MiniMapLegacyDrawable(this);
+#else
             _skiaDrawable = new MiniMapSkiaDrawable(this);
+#endif
 
             _skiaDrawable.MouseDown += SkiaDrawable_MouseDown;
             _skiaDrawable.MouseMove += SkiaDrawable_MouseMove;
@@ -394,8 +403,9 @@ namespace L1MapViewer.Controls
 
         #endregion
 
-        #region 內部 SkiaDrawable 類
+        #region 內部 Drawable 類
 
+#if !SKIA_LEGACY
         /// <summary>
         /// 小地圖繪製控件 - 使用 SkiaSharp 直接繪製
         /// </summary>
@@ -417,7 +427,6 @@ namespace L1MapViewer.Controls
                 var skBitmap = _parent._skMiniMapBitmap;
                 if (skBitmap != null)
                 {
-                    // 計算置中繪製位置
                     float scaleX = (float)Width / skBitmap.Width;
                     float scaleY = (float)Height / skBitmap.Height;
                     float scale = Math.Min(scaleX, scaleY);
@@ -427,7 +436,6 @@ namespace L1MapViewer.Controls
                     float drawX = (Width - drawWidth) / 2;
                     float drawY = (Height - drawHeight) / 2;
 
-                    // 使用 NearestNeighbor 保持像素清晰
                     var destRect = new SKRect(drawX, drawY, drawX + drawWidth, drawY + drawHeight);
                     using (var paint = new SKPaint { FilterQuality = SKFilterQuality.Low })
                     {
@@ -435,7 +443,6 @@ namespace L1MapViewer.Controls
                     }
                 }
 
-                // 繪製視窗位置紅框（渲染中不顯示紅框）
                 if (!_parent._isRendering && _parent.ViewState != null && _parent.ViewState.MapWidth > 0)
                 {
                     DrawViewportRectSK(canvas);
@@ -449,7 +456,6 @@ namespace L1MapViewer.Controls
                 if (skBitmap == null || bounds == null) return;
                 if (bounds.ContentWidth <= 0 || bounds.ContentHeight <= 0) return;
 
-                // 計算 minimap bitmap 在控制項上的顯示區域
                 float scaleX = (float)Width / skBitmap.Width;
                 float scaleY = (float)Height / skBitmap.Height;
                 float displayScale = Math.Min(scaleX, scaleY);
@@ -459,24 +465,20 @@ namespace L1MapViewer.Controls
                 float offsetX = (Width - drawWidth) / 2;
                 float offsetY = (Height - drawHeight) / 2;
 
-                // 計算 viewport 在世界座標中的位置和大小
                 int viewportWorldX = _parent.ViewState.ScrollX;
                 int viewportWorldY = _parent.ViewState.ScrollY;
                 int viewportWorldW = (int)(_parent.ViewState.ViewportWidth / _parent.ViewState.ZoomLevel);
                 int viewportWorldH = (int)(_parent.ViewState.ViewportHeight / _parent.ViewState.ZoomLevel);
 
-                // 使用 MiniMapBounds 的座標轉換公式
                 var (miniX, miniY) = bounds.WorldToMiniMap(viewportWorldX, viewportWorldY);
                 float ratioW = (float)viewportWorldW / bounds.ContentWidth;
                 float ratioH = (float)viewportWorldH / bounds.ContentHeight;
 
-                // 映射到顯示區域
                 float rectX = offsetX + miniX * displayScale;
                 float rectY = offsetY + miniY * displayScale;
                 float rectW = ratioW * drawWidth;
                 float rectH = ratioH * drawHeight;
 
-                // 畫矩形
                 using (var paint = new SKPaint
                 {
                     IsAntialias = true,
@@ -493,6 +495,130 @@ namespace L1MapViewer.Controls
                 }
             }
         }
+#else
+        /// <summary>
+        /// 小地圖繪製控件 - Legacy 版本，將 SKBitmap 轉為 Eto.Bitmap（用於 SkiaSharp 2.88 / Win7）
+        /// </summary>
+        private class MiniMapLegacyDrawable : Drawable
+        {
+            private static readonly Logger _logger = LogManager.GetCurrentClassLogger();
+            private readonly MiniMapControl _parent;
+
+            public MiniMapLegacyDrawable(MiniMapControl parent)
+            {
+                _parent = parent;
+                BackgroundColor = Eto.Drawing.Colors.Black;
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                base.OnPaint(e);
+                var graphics = e.Graphics;
+                graphics.Clear(new SolidBrush(Eto.Drawing.Colors.Black));
+
+                var skBitmap = _parent._skMiniMapBitmap;
+                if (skBitmap != null)
+                {
+                    float scaleX = (float)Width / skBitmap.Width;
+                    float scaleY = (float)Height / skBitmap.Height;
+                    float scale = Math.Min(scaleX, scaleY);
+
+                    float drawWidth = skBitmap.Width * scale;
+                    float drawHeight = skBitmap.Height * scale;
+                    float drawX = (Width - drawWidth) / 2;
+                    float drawY = (Height - drawHeight) / 2;
+
+                    using (var etoBitmap = SkBitmapToEtoBitmap(skBitmap))
+                    {
+                        if (etoBitmap != null)
+                        {
+                            graphics.ImageInterpolation = ImageInterpolation.Low;
+                            graphics.DrawImage(etoBitmap, drawX, drawY, drawWidth, drawHeight);
+                        }
+                    }
+                }
+
+                if (!_parent._isRendering && _parent.ViewState != null && _parent.ViewState.MapWidth > 0)
+                {
+                    DrawViewportRect(graphics);
+                }
+            }
+
+            private void DrawViewportRect(Graphics graphics)
+            {
+                var skBitmap = _parent._skMiniMapBitmap;
+                var bounds = _parent._bounds;
+                if (skBitmap == null || bounds == null) return;
+                if (bounds.ContentWidth <= 0 || bounds.ContentHeight <= 0) return;
+
+                float scaleX = (float)Width / skBitmap.Width;
+                float scaleY = (float)Height / skBitmap.Height;
+                float displayScale = Math.Min(scaleX, scaleY);
+
+                float drawWidth = skBitmap.Width * displayScale;
+                float drawHeight = skBitmap.Height * displayScale;
+                float offsetX = (Width - drawWidth) / 2;
+                float offsetY = (Height - drawHeight) / 2;
+
+                int viewportWorldX = _parent.ViewState.ScrollX;
+                int viewportWorldY = _parent.ViewState.ScrollY;
+                int viewportWorldW = (int)(_parent.ViewState.ViewportWidth / _parent.ViewState.ZoomLevel);
+                int viewportWorldH = (int)(_parent.ViewState.ViewportHeight / _parent.ViewState.ZoomLevel);
+
+                var (miniX, miniY) = bounds.WorldToMiniMap(viewportWorldX, viewportWorldY);
+                float ratioW = (float)viewportWorldW / bounds.ContentWidth;
+                float ratioH = (float)viewportWorldH / bounds.ContentHeight;
+
+                float rectX = offsetX + miniX * displayScale;
+                float rectY = offsetY + miniY * displayScale;
+                float rectW = ratioW * drawWidth;
+                float rectH = ratioH * drawHeight;
+
+                var pen = new Pen(_parent.ViewportRectColor, _parent.ViewportRectWidth);
+                graphics.AntiAlias = true;
+                graphics.DrawRectangle(pen, rectX, rectY, rectW, rectH);
+            }
+
+            private static Eto.Drawing.Bitmap SkBitmapToEtoBitmap(SKBitmap skBitmap)
+            {
+                if (skBitmap == null) return null;
+                try
+                {
+                    int w = skBitmap.Width;
+                    int h = skBitmap.Height;
+
+                    using var converted = skBitmap.ColorType == SKColorType.Bgra8888
+                        ? skBitmap
+                        : skBitmap.Copy(SKColorType.Bgra8888);
+                    if (converted == null) return null;
+
+                    var etoBitmap = new Eto.Drawing.Bitmap(w, h, Eto.Drawing.PixelFormat.Format32bppRgba);
+                    using (var bd = etoBitmap.Lock())
+                    {
+                        var srcPtr = converted.GetPixels();
+                        int srcStride = converted.RowBytes;
+                        int dstStride = bd.ScanWidth;
+                        unsafe
+                        {
+                            byte* src = (byte*)srcPtr.ToPointer();
+                            byte* dst = (byte*)bd.Data;
+                            int copyBytes = Math.Min(srcStride, dstStride);
+                            for (int y = 0; y < h; y++)
+                            {
+                                Buffer.MemoryCopy(src + y * srcStride, dst + y * dstStride, copyBytes, copyBytes);
+                            }
+                        }
+                    }
+                    return etoBitmap;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "[Legacy] SkBitmapToEtoBitmap failed");
+                    return null;
+                }
+            }
+        }
+#endif
 
         #endregion
 

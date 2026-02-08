@@ -5,7 +5,9 @@ using System.Diagnostics;
 using System.Threading;
 using Eto.Forms;
 using Eto.Drawing;
+#if !SKIA_LEGACY
 using Eto.SkiaDraw;
+#endif
 using L1MapViewer.Compatibility;
 using L1MapViewer.Models;
 using L1MapViewer.Rendering;
@@ -25,7 +27,11 @@ namespace L1MapViewer.Controls
         private static readonly Logger _logger = LogManager.GetCurrentClassLogger();
 
         private Panel _mapPanel;
+#if SKIA_LEGACY
+        private MapLegacyDrawable _mapDrawable;
+#else
         private MapSkiaDrawable _mapDrawable;
+#endif
         private readonly MapRenderingCore _renderingCore;
 
         // ViewState（可由外部注入或內部建立）
@@ -447,8 +453,11 @@ namespace L1MapViewer.Controls
                 BackColor = Eto.Drawing.Colors.Black
             };
 
-            // 建立 SkiaDrawable（直接用 SKCanvas 繪製，不需轉換）
+#if SKIA_LEGACY
+            _mapDrawable = new MapLegacyDrawable(this);
+#else
             _mapDrawable = new MapSkiaDrawable(this);
+#endif
 
             // 註冊事件
             _mapDrawable.MouseDown += MapDrawable_MouseDown;
@@ -957,8 +966,9 @@ namespace L1MapViewer.Controls
 
         #endregion
 
-        #region 內部 SkiaDrawable 類
+        #region 內部 Drawable 類
 
+#if !SKIA_LEGACY
         /// <summary>
         /// 地圖繪製控件 - 使用 SkiaSharp 直接繪製，無需轉換
         /// </summary>
@@ -1065,6 +1075,129 @@ namespace L1MapViewer.Controls
                 _logger.Debug($"[UI] MapSkiaDrawable.OnPaint complete: total={sw.ElapsedMilliseconds}ms");
             }
         }
+#else
+        /// <summary>
+        /// 地圖繪製控件 - Legacy 版本，將 SKBitmap 轉為 Eto.Bitmap 後繪製（用於 SkiaSharp 2.88 / Win7）
+        /// </summary>
+        private class MapLegacyDrawable : Drawable
+        {
+            private static readonly Logger _logger = LogManager.GetCurrentClassLogger();
+            private readonly MapViewerControl _parent;
+
+            public MapLegacyDrawable(MapViewerControl parent)
+            {
+                _parent = parent;
+                BackgroundColor = Eto.Drawing.Colors.Black;
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                base.OnPaint(e);
+                var sw = Stopwatch.StartNew();
+                var graphics = e.Graphics;
+                graphics.Clear(new SolidBrush(Eto.Drawing.Colors.Black));
+
+                // DEBUG: 繪製邊框確認 Paint 被呼叫
+                graphics.DrawRectangle(Eto.Drawing.Colors.Yellow, 1, 1, Width - 3, Height - 3);
+
+                lock (_parent._viewportBitmapLock)
+                {
+                    if (_parent._skViewportBitmap != null && _parent._viewState.RenderWidth > 0)
+                    {
+                        float drawX = (float)((_parent._viewState.RenderOriginX - _parent._viewState.ScrollX) * _parent._viewState.ZoomLevel);
+                        float drawY = (float)((_parent._viewState.RenderOriginY - _parent._viewState.ScrollY) * _parent._viewState.ZoomLevel);
+                        float drawW = (float)(_parent._viewState.RenderWidth * _parent._viewState.ZoomLevel);
+                        float drawH = (float)(_parent._viewState.RenderHeight * _parent._viewState.ZoomLevel);
+
+                        var drawSw = Stopwatch.StartNew();
+
+                        // 將 SKBitmap 轉為 Eto.Bitmap 再繪製
+                        using (var etoBitmap = SkBitmapToEtoBitmap(_parent._skViewportBitmap))
+                        {
+                            if (etoBitmap != null)
+                            {
+                                graphics.ImageInterpolation = ImageInterpolation.None;
+                                graphics.DrawImage(etoBitmap, drawX, drawY, drawW, drawH);
+                            }
+                        }
+
+                        drawSw.Stop();
+                        _logger.Debug($"[UI] DrawImage took {drawSw.ElapsedMilliseconds}ms for {drawW}x{drawH}");
+                    }
+                }
+
+                // 讓外部繪製覆蓋層 — 建立臨時 SKCanvas 繪製到 bitmap 再轉換
+                // 簡化：overlay 仍使用 SKCanvas 繪製
+                var overlaySw = Stopwatch.StartNew();
+                int overlayW = Math.Max(1, (int)Width);
+                int overlayH = Math.Max(1, (int)Height);
+                using (var overlayBitmap = new SKBitmap(overlayW, overlayH, SKColorType.Bgra8888, SKAlphaType.Premul))
+                {
+                    using (var canvas = new SKCanvas(overlayBitmap))
+                    {
+                        canvas.Clear(SKColors.Transparent);
+                        _parent.PaintOverlaySK?.Invoke(canvas, (float)_parent._viewState.ZoomLevel, _parent._viewState.ScrollX, _parent._viewState.ScrollY);
+                    }
+                    using (var overlayEto = SkBitmapToEtoBitmap(overlayBitmap))
+                    {
+                        if (overlayEto != null)
+                        {
+                            graphics.DrawImage(overlayEto, 0, 0);
+                        }
+                    }
+                }
+                overlaySw.Stop();
+                if (overlaySw.ElapsedMilliseconds > 0)
+                    _logger.Debug($"[UI] PaintOverlay (legacy) took {overlaySw.ElapsedMilliseconds}ms");
+
+                sw.Stop();
+                _logger.Debug($"[UI] MapLegacyDrawable.OnPaint complete: total={sw.ElapsedMilliseconds}ms");
+            }
+
+            /// <summary>
+            /// 將 SKBitmap 像素複製到 Eto.Drawing.Bitmap
+            /// </summary>
+            private static Eto.Drawing.Bitmap SkBitmapToEtoBitmap(SKBitmap skBitmap)
+            {
+                if (skBitmap == null) return null;
+                try
+                {
+                    int w = skBitmap.Width;
+                    int h = skBitmap.Height;
+
+                    // 轉為 BGRA8888 以便複製
+                    using var converted = skBitmap.ColorType == SKColorType.Bgra8888
+                        ? skBitmap
+                        : skBitmap.Copy(SKColorType.Bgra8888);
+                    if (converted == null) return null;
+
+                    var etoBitmap = new Eto.Drawing.Bitmap(w, h, Eto.Drawing.PixelFormat.Format32bppRgba);
+                    using (var bd = etoBitmap.Lock())
+                    {
+                        var srcPtr = converted.GetPixels();
+                        int srcStride = converted.RowBytes;
+                        int dstStride = bd.ScanWidth;
+                        unsafe
+                        {
+                            byte* src = (byte*)srcPtr.ToPointer();
+                            byte* dst = (byte*)bd.Data;
+                            int copyBytes = Math.Min(srcStride, dstStride);
+                            for (int y = 0; y < h; y++)
+                            {
+                                Buffer.MemoryCopy(src + y * srcStride, dst + y * dstStride, copyBytes, copyBytes);
+                            }
+                        }
+                    }
+                    return etoBitmap;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex, "[Legacy] SkBitmapToEtoBitmap failed");
+                    return null;
+                }
+            }
+        }
+#endif
 
         #endregion
     }
