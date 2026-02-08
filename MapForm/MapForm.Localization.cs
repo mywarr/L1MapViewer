@@ -34,6 +34,7 @@ namespace L1FlyMapViewer
             string currentLang = LocalizationManager.CurrentLanguage;
             langZhTWToolStripMenuItem.Checked = currentLang == "zh-TW";
             langJaJPToolStripMenuItem.Checked = currentLang == "ja-JP";
+            langKoKRToolStripMenuItem.Checked = currentLang == "ko-KR";
             langEnUSToolStripMenuItem.Checked = currentLang == "en-US";
         }
 
@@ -202,7 +203,7 @@ namespace L1FlyMapViewer
             // 會自動使用 LocalizationManager.L("Hint_MouseControls")
 
             // 狀態列
-            if (toolStripStatusLabel1.Text == "就緒" || toolStripStatusLabel1.Text == "Ready" || toolStripStatusLabel1.Text == "準備完了")
+            if (toolStripStatusLabel1.Text == "就緒" || toolStripStatusLabel1.Text == "Ready" || toolStripStatusLabel1.Text == "準備完了" || toolStripStatusLabel1.Text == "준비")
                 toolStripStatusLabel1.Text = LocalizationManager.L("Status_Ready");
         }
     }

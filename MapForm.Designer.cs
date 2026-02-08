@@ -77,6 +77,7 @@ namespace L1FlyMapViewer
         private ToolStripMenuItem langZhTWToolStripMenuItem;
         private ToolStripMenuItem langJaJPToolStripMenuItem;
         private ToolStripMenuItem langEnUSToolStripMenuItem;
+        private ToolStripMenuItem langKoKRToolStripMenuItem;
         private ToolStripMenuItem menuAbout;
         private StatusStrip statusStrip1;
         public ToolStripStatusLabel toolStripStatusLabel1;
@@ -284,6 +285,7 @@ namespace L1FlyMapViewer
             this.langZhTWToolStripMenuItem = new ToolStripMenuItem();
             this.langJaJPToolStripMenuItem = new ToolStripMenuItem();
             this.langEnUSToolStripMenuItem = new ToolStripMenuItem();
+            this.langKoKRToolStripMenuItem = new ToolStripMenuItem();
             this.menuAbout = new ToolStripMenuItem();
 
             // StatusStrip
@@ -730,6 +732,7 @@ namespace L1FlyMapViewer
             this.languageToolStripMenuItem.DropDownItems.AddRange(new ToolStripItem[] {
                 this.langZhTWToolStripMenuItem,
                 this.langJaJPToolStripMenuItem,
+                this.langKoKRToolStripMenuItem,
                 this.langEnUSToolStripMenuItem
             });
 
@@ -742,6 +745,11 @@ namespace L1FlyMapViewer
             this.langJaJPToolStripMenuItem.Text = "日本語";
             this.langJaJPToolStripMenuItem.Tag = "ja-JP";
             this.langJaJPToolStripMenuItem.Click += new System.EventHandler(this.LanguageMenuItem_Click);
+
+            this.langKoKRToolStripMenuItem.SetName("langKoKRToolStripMenuItem");
+            this.langKoKRToolStripMenuItem.Text = "한국어";
+            this.langKoKRToolStripMenuItem.Tag = "ko-KR";
+            this.langKoKRToolStripMenuItem.Click += new System.EventHandler(this.LanguageMenuItem_Click);
 
             this.langEnUSToolStripMenuItem.SetName("langEnUSToolStripMenuItem");
             this.langEnUSToolStripMenuItem.Text = "English";
