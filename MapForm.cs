@@ -27152,7 +27152,14 @@ namespace L1FlyMapViewer
             }
             if (corruptedTiles.Count > 0)
             {
-                msgParts.Add($"• {corruptedTiles.Count} 個 Tile 檔案損壞（偏移表異常）");
+                int offsetIssues = corruptedTiles.Count(t => t.ErrorMessage.Contains("偏移表"));
+                int blockIssues = corruptedTiles.Count(t => t.ErrorMessage.Contains("Block"));
+                var tileParts = new List<string>();
+                if (offsetIssues > 0) tileParts.Add($"偏移表異常:{offsetIssues}");
+                if (blockIssues > 0) tileParts.Add($"Block截斷:{blockIssues}");
+                int otherIssues = corruptedTiles.Count - offsetIssues - blockIssues;
+                if (otherIssues > 0) tileParts.Add($"其他:{otherIssues}");
+                msgParts.Add($"• {corruptedTiles.Count} 個 Tile 檔案損壞 ({string.Join(", ", tileParts)})");
             }
             if (invalidTileItems.Count > 0)
             {
@@ -27748,7 +27755,7 @@ namespace L1FlyMapViewer
                 tabControl.GetTabPages().Add(tabCorruptedTile);
 
                 Label lblCorruptedTileSummary = new Label();
-                lblCorruptedTileSummary.Text = $"發現 {corruptedTiles.Count} 個 Tile 檔案的偏移表異常，可能會導致程式閃退。\n這些檔案可能在匯出過程中被截斷或損壞。";
+                lblCorruptedTileSummary.Text = $"發現 {corruptedTiles.Count} 個 Tile 檔案異常，可能會導致程式閃退。\n這些檔案可能存在偏移表損壞或 Block 資料被截斷的問題。";
                 lblCorruptedTileSummary.SetLocation(new Point(5, 5));
                 lblCorruptedTileSummary.Size = new Size(tabContentWidth - 10, 40);
                 lblCorruptedTileSummary.SetAnchor(AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right);

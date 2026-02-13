@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Lin.Helper.Core.Tile;
 using NLog;
 
 namespace L1MapViewer.Helper
@@ -129,6 +130,21 @@ namespace L1MapViewer.Helper
                 {
                     result.IsValid = true;
                 }
+
+                // Block 層級驗證：檢查壓縮 block 的 scan data 完整性
+                if (result.IsValid)
+                {
+                    try
+                    {
+                        L1Til.ParseToTileBlocks(data);
+                    }
+                    catch (InvalidDataException ex)
+                    {
+                        result.IsValid = false;
+                        // 從英文訊息中提取數字，轉為中文說明
+                        result.ErrorMessage = TranslateTilParseError(ex.Message);
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -223,6 +239,21 @@ namespace L1MapViewer.Helper
             }
 
             return corruptedTiles;
+        }
+
+        /// <summary>
+        /// 將 ParseToTileBlocks 的英文錯誤訊息翻譯為中文
+        /// </summary>
+        private static string TranslateTilParseError(string englishMessage)
+        {
+            // "TIL format error: 255/256 blocks have truncated scan data. This may be caused by..."
+            var match = System.Text.RegularExpressions.Regex.Match(
+                englishMessage, @"(\d+)/(\d+) blocks have truncated scan data");
+            if (match.Success)
+            {
+                return $"Block 資料不完整：{match.Groups[1].Value}/{match.Groups[2].Value} 個 block 的掃描資料被截斷";
+            }
+            return englishMessage;
         }
     }
 }
