@@ -104,6 +104,8 @@ namespace L1FlyMapViewer
 
         // 拖曳結束後延遲渲染 Timer
         private Timer dragRenderTimer;
+        private Timer _validateFlashTimer;
+        private int _validateFlashCount;
 
         // 素材貼上預覽狀態
         private Fs3pData _pendingMaterial = null;
@@ -26494,9 +26496,30 @@ namespace L1FlyMapViewer
                         if (validationResult.DiscontinuousGroupIds.Count > 0)
                             tooltipParts.Add(string.Format(LocalizationManager.L("AbnormalCheck_GroupIdTooltip"), validationResult.DiscontinuousGroupIds.Count));
                         toolTip1.SetToolTip(btnMapValidate, $"發現異常: {string.Join(", ", tooltipParts)}");
+
+                        // 閃爍提示
+                        StartValidateFlash();
                     }
                 });
             });
+        }
+
+        private void StartValidateFlash()
+        {
+            _validateFlashTimer?.Stop();
+            _validateFlashCount = 0;
+            _validateFlashTimer = new Timer { Interval = 500 };
+            _validateFlashTimer.Tick += (s, e) =>
+            {
+                _validateFlashCount++;
+                btnMapValidate.Visible = _validateFlashCount % 2 == 0;
+                if (_validateFlashCount >= 30) // 閃爍 15 次
+                {
+                    _validateFlashTimer.Stop();
+                    btnMapValidate.Visible = true;
+                }
+            };
+            _validateFlashTimer.Start();
         }
 
         // 取得使用 Layer8 擴展格式的 S32 檔案
