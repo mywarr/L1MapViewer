@@ -670,7 +670,7 @@ namespace L1MapViewer.Localization
             { "GroupThumbnail_ConfirmDelete", "確認刪除群組" },
             { "GroupThumbnail_ConfirmDeleteMessage", "確定要刪除群組 {0} 嗎？\n將移除 {1} 個物件。" },
             { "GroupThumbnail_SetTransparent", "設定群組 {0} 為透明 (Type=0)" },
-            { "GroupThumbnail_SetOpaque", "設定群組 {0} 為不透明 (Type=1)" },
+            { "GroupThumbnail_SetOpaque", "設定群組 {0} 為消失 (Type=1)" },
             { "GroupThumbnail_ClearLayer5", "清除群組 {0} 的 Layer5 設定" },
 
             // === Map Export Dialog ===

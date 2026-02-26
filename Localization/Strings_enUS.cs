@@ -670,7 +670,7 @@ namespace L1MapViewer.Localization
             { "GroupThumbnail_ConfirmDelete", "Confirm Delete Group" },
             { "GroupThumbnail_ConfirmDeleteMessage", "Are you sure you want to delete group {0}?\n{1} objects will be removed." },
             { "GroupThumbnail_SetTransparent", "Set group {0} as transparent (Type=0)" },
-            { "GroupThumbnail_SetOpaque", "Set group {0} as opaque (Type=1)" },
+            { "GroupThumbnail_SetOpaque", "Set group {0} as hidden (Type=1)" },
             { "GroupThumbnail_ClearLayer5", "Clear group {0} Layer5 setting" },
 
             // === Map Export Dialog ===

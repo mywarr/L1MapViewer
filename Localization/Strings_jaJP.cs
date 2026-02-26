@@ -670,7 +670,7 @@ namespace L1MapViewer.Localization
             { "GroupThumbnail_ConfirmDelete", "グループ削除の確認" },
             { "GroupThumbnail_ConfirmDeleteMessage", "グループ {0} を削除しますか？\n{1} オブジェクトが削除されます。" },
             { "GroupThumbnail_SetTransparent", "グループ {0} を透明に設定 (Type=0)" },
-            { "GroupThumbnail_SetOpaque", "グループ {0} を不透明に設定 (Type=1)" },
+            { "GroupThumbnail_SetOpaque", "グループ {0} を消去に設定 (Type=1)" },
             { "GroupThumbnail_ClearLayer5", "グループ {0} の Layer5 設定をクリア" },
 
             // === Map Export Dialog ===
